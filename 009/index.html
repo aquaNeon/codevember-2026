@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Membrane · Codevember 009</title>
+    <meta
+      name="description"
+      content="A thin skin over a soft clay form. Press it and it gives. Codevember day 9."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#08080b" />
+    <style>
+      /* DARK ROOM */
+      /* doubled selector so it wins over the shared sheet that loads after it */
+      :root:root {
+        --bone: #060609;
+        --bone-hi: #15141b;
+        --ink: #ece6df;
+        --muted: #9a9198;
+        --rule: rgb(236 230 223 / 0.14);
+        --accent: #b9a7ff;
+        color-scheme: dark;
+      }
+      :root:root[data-cv-paper] {
+        --bone: #ebe5da;
+        --bone-hi: #f5f1ea;
+        --ink: #1c1a17;
+        --muted: #6b645a;
+        --rule: rgb(28 26 23 / 0.16);
+        --accent: #7a5fc4;
+        color-scheme: light;
+      }
+      body {
+        background: radial-gradient(60% 55% at 50% 48%, var(--bone-hi), var(--bone) 75%) fixed;
+      }
+      :root:not([data-cv-paper]) body::after {
+        mix-blend-mode: screen;
+        opacity: 0.1;
+      }
+      .cv-figure canvas {
+        touch-action: none;
+        opacity: 0;
+        transition: opacity 1.2s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        color: var(--muted);
+        text-align: right;
+      }
+      .still,
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] .cv-figure canvas {
+        display: none;
+      }
+      [data-cv-still] .still {
+        visibility: visible;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        height: min(56vh, 480px);
+        aspect-ratio: 0.8;
+        translate: -50% -50%;
+        border-radius: 50%;
+        background:
+          radial-gradient(
+            closest-side,
+            transparent 72%,
+            rgb(185 167 255 / 0.35) 92%,
+            rgb(255 210 230 / 0.5)
+          ),
+          radial-gradient(circle at 50% 50%, #efe3d2 0 12%, transparent 13%);
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 009 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A soft rounded cube wrapped in a thin iridescent skin. Press to push the skin into it, drag to lift the skin into a tent; it springs back. Enter pokes it."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A pale rounded form in a thin iridescent skin"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 9<br />Form in its skin</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 009</span>
+        <h1>Membrane<em>.</em></h1>
+        <p>
+          <em>Thin enough to see through.</em> Press the skin and feel it give, then let it find its
+          shape again.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Pokes</dt>
+          <dd data-cv-pokes aria-live="polite">0</dd>
+        </dl>
+        <span>Press the skin</span>
+        <button type="button" class="cv-btn" data-cv-poke>Poke</button>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

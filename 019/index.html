@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Erosion · Codevember 019</title>
+    <meta
+      name="description"
+      content="A meteor burning through a dusk sky over a mountain town, worn away by the air until it bursts above the clouds. Codevember day 19."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/stills/019-dusk.webp"
+      as="image"
+      fetchpriority="high"
+      media="(min-aspect-ratio: 1/1)"
+    />
+    <link
+      rel="preload"
+      href="/stills/019-dusk-tall.webp"
+      as="image"
+      fetchpriority="high"
+      media="(max-aspect-ratio: 1/1)"
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#0c1233" />
+    <style>
+      /* DUSK */
+      /* this day only: a night sky, so the type goes light.
+         doubled selector so it wins over the shared sheet that loads after it */
+      :root:root {
+        --bone: #0c1233;
+        --bone-hi: #141b45;
+        --ink: #f1ebe4;
+        --muted: #b9b2c8;
+        --rule: rgb(241 235 228 / 0.16);
+        --accent: #ff3fb4;
+        color-scheme: dark;
+      }
+      body {
+        background: var(--bone);
+      }
+      body::after {
+        mix-blend-mode: screen;
+        opacity: 0.08;
+      }
+      /* FIRST PAINT */
+      /* the opening frame of the live sky, rendered; the canvas fades in over it */
+      .still {
+        position: absolute;
+        inset: 0;
+        background: var(--bone) url("/stills/019-dusk.webp") center / cover no-repeat;
+      }
+      @media (max-aspect-ratio: 1/1) {
+        .still {
+          background-image: url("/stills/019-dusk-tall.webp");
+        }
+      }
+      [data-cv-still] .still {
+        background-image: url("/stills/019-meteor.webp");
+      }
+      .cv-figure canvas {
+        position: relative;
+        z-index: 1;
+        touch-action: none;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.9s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      /* SCRIM */
+      /* a little dark under the type, so every shot keeps it legible */
+      .cv-figure::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+        background:
+          linear-gradient(to top, rgb(6 8 26 / 0.62), rgb(6 8 26 / 0) 34%),
+          linear-gradient(to bottom, rgb(6 8 26 / 0.45), rgb(6 8 26 / 0) 14%);
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] .live-only,
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      .cv-hud dd {
+        font-variant-numeric: tabular-nums;
+        min-width: 11ch;
+      }
+      /* MASS BAR */
+      /* what is left of the stone, shrinking toward the right edge */
+      .mass-bar {
+        display: block;
+        width: 132px;
+        height: 1px;
+        background: var(--rule);
+      }
+      .mass-bar i {
+        display: block;
+        height: 100%;
+        background: var(--accent);
+        transform-origin: right;
+        transform: scaleX(var(--cv-m, 1));
+        transition: transform 0.12s linear;
+      }
+      .cv-title,
+      .cv-hud,
+      .fig {
+        text-shadow: 0 1px 12px rgb(6 8 26 / 0.6);
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+        .cv-hud dl {
+          grid-template-columns: auto auto auto auto;
+          gap: 4px 12px;
+        }
+        .cv-hud dd {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 019 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A meteor streaks across a dusk sky over a mountain town, its trail splitting into glowing strands as it wears away and sheds fragments, until it bursts in a fireball above the clouds. Tap or press Enter to send another."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A dusk sky over mountains and a small town, a crescent moon and pink clouds"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 19<br /><span class="live-only" data-cv-shot>Establishing</span></p>
+
+      <section class="cv-title">
+        <span class="mono">No. 019</span>
+        <h1>Erosion<em>.</em></h1>
+        <p>
+          <em>Worn away by the air.</em> A falling stone burns and bursts above the clouds. Tap to
+          send another.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Entry</dt>
+          <dd data-cv-entry>29°</dd>
+          <dt>Altitude</dt>
+          <dd data-cv-alt>–</dd>
+          <dt>Speed</dt>
+          <dd data-cv-speed>–</dd>
+          <dt>Mass</dt>
+          <dd data-cv-mass>1.8 t → 1.80 t</dd>
+        </dl>
+        <span class="mass-bar" aria-hidden="true"><i data-cv-bar></i></span>
+        <span><span data-cv-phase>Incoming</span> · <span>Tap for another</span></span>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

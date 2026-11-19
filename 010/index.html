@@ -160,10 +160,19 @@
         display: grid;
         gap: 7px;
         padding: 12px 14px 14px;
-        background: rgb(245 241 234 / 0.82);
-        border: 1px solid var(--rule);
-        -webkit-backdrop-filter: blur(6px);
-        backdrop-filter: blur(6px);
+        border-radius: 16px;
+      }
+      /* GLASS */
+      /* frosted panels: the room shows through, blurred and a little brighter */
+      .mat-body,
+      [data-cv-live] .cv-hud {
+        background: rgb(250 248 244 / 0.32);
+        border: 1px solid rgb(255 255 255 / 0.5);
+        box-shadow:
+          0 10px 30px rgb(28 26 23 / 0.08),
+          inset 0 1px 0 rgb(255 255 255 / 0.55);
+        -webkit-backdrop-filter: blur(20px) saturate(1.5);
+        backdrop-filter: blur(20px) saturate(1.5);
       }
       .mat-head {
         display: flex;
@@ -270,9 +279,9 @@
 
       /* HUD */
       [data-cv-live] .cv-hud {
-        padding: 10px 14px;
-        margin: -10px -14px;
-        background: rgb(245 241 234 / 0.82);
+        padding: 12px 16px;
+        margin: -12px -16px;
+        border-radius: 14px;
       }
 
       @media (max-width: 640px) {
@@ -311,8 +320,8 @@
           bottom: var(--gutter);
           grid-template-columns: 1fr 1fr;
           gap: 6px 18px;
-          padding: 10px 12px 12px;
-          background: rgb(245 241 234 / 0.72);
+          padding: 12px 14px 14px;
+          background: rgb(250 248 244 / 0.42);
         }
         .mat-head,
         .presets,
@@ -337,6 +346,10 @@
           margin: 0;
           padding: 0;
           background: none;
+          border: 0;
+          box-shadow: none;
+          -webkit-backdrop-filter: none;
+          backdrop-filter: none;
           justify-items: start;
           text-align: left;
         }

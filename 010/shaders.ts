@@ -346,7 +346,7 @@ uniform float uGain;
 out vec4 outColor;
 
 const vec3 PLASTER = vec3(0.93, 0.915, 0.89);
-const float GAP_M = 0.022; // the shadow gap at the foot of both walls
+const float GAP_M = 0.01; // the shadow gap at the foot of both walls
 const float GAP_DARK = 0.6;
 const vec3 CONCRETE = vec3(0.86, 0.82, 0.76);
 const vec3 STONE = vec3(0.93, 0.925, 0.91);

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Feather · Codevember 012</title>
+    <meta
+      name="description"
+      content="One feather falling in front of a sheet of paper. Breathe on it with the cursor. Codevember day 12."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#ebe5da" />
+    <style>
+      :root {
+        --accent: #8a6a4e;
+      }
+      .cv-figure canvas {
+        touch-action: none;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        color: var(--muted);
+        text-align: right;
+      }
+      .still,
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      [data-cv-still] .still {
+        visibility: visible;
+        position: absolute;
+        left: 50%;
+        top: 44%;
+        translate: -50% -50%;
+        rotate: 62deg;
+      }
+      .cv-figure .still canvas {
+        display: block;
+        height: min(46vh, 380px);
+        width: auto;
+        filter: drop-shadow(-22px 30px 12px rgb(40 28 18 / 0.16));
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 012 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          aria-label="A single barred brown feather drifting down in front of a sheet of paper, gliding side to side. Move the cursor near it to blow it about."
+        ></canvas>
+        <div class="still" role="img" aria-label="A single barred brown feather"></div>
+      </div>
+
+      <p class="fig mono">Fig. 12<br />Covert feather, 11 cm</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 012</span>
+        <h1>Feather<em>.</em></h1>
+        <p><em>Lighter than the air around it.</em> Move the cursor near it to blow.</p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Fallen</dt>
+          <dd data-cv-fallen>0 cm</dd>
+          <dt>Wind</dt>
+          <dd data-cv-wind>calm</dd>
+        </dl>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

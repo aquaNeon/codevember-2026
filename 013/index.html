@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Labyrinth · Codevember 013</title>
+    <meta
+      name="description"
+      content="A seven-circuit labyrinth raked into sand. Draw the rake along the one path. Codevember day 13."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#ebe5da" />
+    <style>
+      :root {
+        --accent: #5e6b35;
+      }
+      [data-cv-canvas] {
+        touch-action: none;
+        opacity: 0;
+        transition: opacity 0.8s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      [data-cv-canvas][data-cv-shown] {
+        opacity: 1;
+      }
+      [data-cv-canvas]:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .still,
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      [data-cv-still] .still {
+        visibility: visible;
+        position: absolute;
+        left: 50%;
+        top: 52%;
+        width: min(80vw, 70vh, 620px);
+        aspect-ratio: 1;
+        translate: -50% -50%;
+      }
+      .still canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      @media (min-width: 900px) {
+        [data-cv-still] .still {
+          left: 58%;
+        }
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 013 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A seven-circuit labyrinth raked into a sand garden, a rake resting at its gate. Press on the path and drag to rake along it. Arrow keys move the rake, Enter walks in to the centre and back out."
+        ></canvas>
+        <div class="still" role="img" aria-label="A seven-circuit labyrinth, drawn flat"></div>
+      </div>
+
+      <p class="fig mono">Fig. 13<br />Raked sand, seven circuits</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 013</span>
+        <h1>Labyrinth<em>.</em></h1>
+        <p>
+          <em>One path, no wrong turns.</em> Draw the rake along it. The sand settles behind you.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Way</dt>
+          <dd data-cv-way>In</dd>
+          <dt>Circuit</dt>
+          <dd data-cv-circuit>Gate</dd>
+          <dt>Raked</dt>
+          <dd data-cv-raked>0.0 m</dd>
+        </dl>
+        <span data-cv-hint aria-live="polite">Press on the path, draw the rake along it</span>
+        <button type="button" class="cv-btn" data-cv-walk>Walk it</button>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

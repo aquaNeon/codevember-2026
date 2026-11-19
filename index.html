@@ -148,14 +148,24 @@
         opacity: 1;
         transform: translate3d(var(--x, 0), var(--y, 0), 0) scale(1);
       }
-      .peek img {
+      .peek-frame {
+        display: block;
+        aspect-ratio: 280 / 187;
+        overflow: hidden;
+      }
+      .peek-reel {
+        display: block;
+        transform: translate3d(0, calc(var(--i, 0) * -100% / var(--n, 1)), 0);
+        transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.1, 1); /* change reel speed here */
+      }
+      .peek-reel[data-cv-snap] {
+        transition: none;
+      }
+      .peek-reel img {
         display: block;
         width: 100%;
         height: auto;
-        transition: opacity 0.18s ease;
-      }
-      .peek img[data-cv-wait] {
-        opacity: 0;
+        aspect-ratio: 280 / 187;
       }
       @media (hover: none), (pointer: coarse) {
         .peek {
@@ -165,7 +175,8 @@
       @media (prefers-reduced-motion: reduce) {
         .row *,
         .row::after,
-        .peek {
+        .peek,
+        .peek-reel {
           transition-duration: 0.01s !important;
         }
       }
@@ -192,7 +203,7 @@
       </div>
       <ol data-cv-days></ol>
       <figure class="peek" data-cv-peek aria-hidden="true">
-        <img alt="" width="280" height="187" decoding="async" />
+        <span class="peek-frame"><span class="peek-reel" data-cv-reel></span></span>
       </figure>
     </main>
     <script type="module" src="./shared/gallery.ts"></script>

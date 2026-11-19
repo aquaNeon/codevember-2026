@@ -40,8 +40,8 @@ if (list && !list.hasAttribute("data-cv-mounted")) {
 
   // PEEK
   // follows the mouse over shipped rows; one rAF per batch of moves, nothing runs when idle
-  const img = peek?.querySelector("img");
-  if (peek && img && matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  const reel = peek?.querySelector<HTMLElement>("[data-cv-reel]");
+  if (peek && reel && matchMedia("(hover: hover) and (pointer: fine)").matches) {
     let raf = 0;
     let px = 0;
     let py = 0;
@@ -69,57 +69,55 @@ if (list && !list.hasAttribute("data-cv-mounted")) {
       },
       { passive: true },
     );
-    // PRELOAD
-    // every thumb is fetched and decoded once the page is idle, so hovering never waits
-    const ready = new Set<string>();
-    const urls = Array.from(
-      list.querySelectorAll<HTMLAnchorElement>("a.row"),
-      (a) => a.dataset.cvThumb ?? "",
-    );
-    const preload = () => {
-      for (const url of urls) {
-        if (!url) continue;
-        const pre = new Image();
-        pre.decoding = "async";
-        pre.src = url;
-        pre
-          .decode()
-          .then(() => ready.add(url))
-          .catch(() => {});
-      }
-    };
-    if ("requestIdleCallback" in window) requestIdleCallback(preload, { timeout: IDLE_MS });
-    else setTimeout(preload, IDLE_MS);
 
-    // the image shown is always the hovered row's; one still loading waits blank, then fades in,
-    // and a late arrival never replaces a newer hover
-    let want = "";
-    const show = () => {
-      if (img.getAttribute("src") !== want) img.src = want;
-      img.removeAttribute("data-cv-wait");
-    };
-    img.addEventListener("load", () => {
-      if (img.getAttribute("src") === want) img.removeAttribute("data-cv-wait");
+    // REEL
+    // every thumb sits in one column that slides to the hovered row, so a fast sweep
+    // rolls through them and turns mid-way instead of cutting
+    const rows = Array.from(list.querySelectorAll<HTMLAnchorElement>("a.row"));
+    const imgs = rows.map(() => {
+      const img = document.createElement("img");
+      img.alt = "";
+      img.decoding = "async";
+      img.width = 280;
+      img.height = 187;
+      reel.append(img);
+      return img;
     });
+    reel.style.setProperty("--n", String(rows.length));
+    let loaded = false;
+    const load = () => {
+      if (loaded) return;
+      loaded = true;
+      rows.forEach((a, i) => {
+        imgs[i].src = a.dataset.cvThumb ?? "";
+      });
+    };
+    if ("requestIdleCallback" in window) requestIdleCallback(load, { timeout: IDLE_MS });
+    else setTimeout(load, IDLE_MS);
 
+    let at = -1;
+    let on = false;
     list.addEventListener(
       "pointerover",
       (e) => {
         const row = (e.target as Element).closest<HTMLAnchorElement>("a.row");
-        const url = row?.dataset.cvThumb;
-        if (!url) return;
-        if (url !== want) {
-          want = url;
-          if (ready.has(url)) show();
-          else {
-            img.setAttribute("data-cv-wait", "");
-            img.src = url;
-          }
+        if (!row) return;
+        load();
+        const i = rows.indexOf(row);
+        if (i !== at) {
+          // arriving from outside the list jumps straight to the row, only moves between rows roll
+          if (!on) reel.setAttribute("data-cv-snap", "");
+          reel.style.setProperty("--i", String(i));
+          at = i;
+          if (!on) requestAnimationFrame(() => reel.removeAttribute("data-cv-snap"));
         }
-        const r = peek.getBoundingClientRect();
-        w = r.width || w;
-        h = r.height || h;
-        peek.setAttribute("data-cv-on", "");
+        if (!on) {
+          const r = peek.getBoundingClientRect();
+          w = r.width || w;
+          h = r.height || h;
+          on = true;
+          peek.setAttribute("data-cv-on", "");
+        }
       },
       { passive: true },
     );
@@ -127,7 +125,9 @@ if (list && !list.hasAttribute("data-cv-mounted")) {
       "pointerout",
       (e) => {
         const to = (e.relatedTarget as Element | null)?.closest("a.row");
-        if (!to) peek.removeAttribute("data-cv-on");
+        if (to) return;
+        on = false;
+        peek.removeAttribute("data-cv-on");
       },
       { passive: true },
     );

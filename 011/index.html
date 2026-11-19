@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rust · Codevember 011</title>
+    <meta
+      name="description"
+      content="A bolted steel block that rusts over forty years on a timeline you can scrub. Codevember day 11."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="preload" href="/stills/011-steel.webp" as="image" fetchpriority="high" />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#16191c" />
+    <style>
+      /* STEEL ROOM */
+      /* this day only: a dark studio, so the type goes light.
+         doubled selector so it wins over the shared sheet that loads after it */
+      :root:root {
+        --bone: #16191c;
+        --bone-hi: #1d2125;
+        --ink: #ece6dc;
+        --muted: #a39d93;
+        --rule: rgb(236 230 220 / 0.14);
+        --accent: #d2611c;
+        color-scheme: dark;
+      }
+      body {
+        background: var(--bone);
+      }
+      body::after {
+        mix-blend-mode: screen;
+        opacity: 0.1;
+      }
+      /* FIRST PAINT */
+      /* a render of the fresh block, placed by the same framing as the shader (FRAME in
+         specimen.ts); the live canvas fades in over it */
+      .still {
+        --focal: 1;
+        --centre: 0.53;
+        position: absolute;
+        inset: 0;
+        background: var(--bone);
+      }
+      .still::before {
+        content: "";
+        position: absolute;
+        left: 50%;
+        top: calc((1 - var(--centre)) * 100%);
+        width: calc(var(--focal) * 90vmin);
+        aspect-ratio: 1;
+        translate: -50% -50%;
+        background: url("/stills/011-steel.webp") center / cover no-repeat;
+        mask-image: radial-gradient(closest-side, #000 72%, transparent);
+      }
+      @media (max-aspect-ratio: 4/5) {
+        .still {
+          --focal: 1.398;
+          --centre: 0.47;
+        }
+      }
+      .cv-figure canvas {
+        position: relative;
+        z-index: 1;
+        touch-action: none;
+        cursor: grab;
+        opacity: 0;
+        transition: opacity 0.8s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas:active {
+        cursor: grabbing;
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] .live-only,
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      /* STILL */
+      /* no webgl: the same block, forty years on */
+      [data-cv-still] .still::before {
+        background-image: url("/stills/011-rust.webp");
+      }
+
+      /* SLIDERS */
+      /* a hairline track and a dot, as on day 002 */
+      input[type="range"] {
+        -webkit-appearance: none;
+        appearance: none;
+        display: block;
+        width: 100%;
+        height: 24px;
+        margin: 0;
+        background: none;
+        cursor: pointer;
+        touch-action: none;
+      }
+      input[type="range"]::-webkit-slider-runnable-track {
+        height: 1px;
+        background: var(--ink);
+      }
+      input[type="range"]::-moz-range-track {
+        height: 1px;
+        background: var(--ink);
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        margin-top: -5.5px;
+        border-radius: 50%;
+        background: var(--ink);
+      }
+      input[type="range"]::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        border: 0;
+        border-radius: 50%;
+        background: var(--ink);
+      }
+      input[type="range"]:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: 4px;
+      }
+
+      /* KNOBS */
+      .knobs {
+        position: fixed;
+        top: 108px;
+        right: var(--gutter);
+        z-index: 6;
+        width: 196px;
+      }
+      .knobs-toggle {
+        display: none;
+      }
+      .knobs-body {
+        display: grid;
+        gap: 6px;
+      }
+      .knob {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: end;
+      }
+      .knob span {
+        color: var(--muted);
+      }
+      .knob output {
+        font-variant-numeric: tabular-nums;
+      }
+      .knob input {
+        grid-column: 1 / -1;
+      }
+      .tones {
+        display: flex;
+        gap: 14px;
+        margin: 6px 0 0;
+        padding: 0;
+        border: 0;
+      }
+      .tones legend {
+        float: left;
+        margin-right: auto;
+        padding: 0;
+        color: var(--muted);
+        line-height: 22px;
+      }
+      .tones label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+      }
+      .tones input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .sw {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--a) 30%, var(--b) 75%);
+        box-shadow:
+          0 0 0 1px var(--bone),
+          0 0 0 1px var(--rule);
+      }
+      .tones input:checked + .sw {
+        box-shadow:
+          0 0 0 2px var(--bone),
+          0 0 0 3px var(--ink);
+      }
+      .tones input:focus-visible + .sw {
+        outline: 1px solid var(--ink);
+        outline-offset: 5px;
+      }
+
+      /* TIMELINE */
+      .cv-hud {
+        width: min(360px, calc(100vw - 2 * var(--gutter)));
+        justify-items: stretch;
+      }
+      .cv-hud dl {
+        justify-content: end;
+      }
+      .timeline {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: center;
+        gap: 16px;
+      }
+      .timeline .cv-btn {
+        min-width: 76px;
+      }
+      .ticks {
+        display: flex;
+        justify-content: space-between;
+        margin: -2px -2px 0;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+        .knobs {
+          top: 60px;
+          width: auto;
+          display: grid;
+          justify-items: end;
+        }
+        .knobs-toggle {
+          display: block;
+          font: inherit;
+          letter-spacing: inherit;
+          text-transform: inherit;
+          color: var(--ink);
+          background: none;
+          border: 0;
+          padding: 10px 0 10px 16px;
+          cursor: pointer;
+        }
+        .knobs-toggle::after {
+          content: " +";
+        }
+        .knobs-toggle[aria-expanded="true"]::after {
+          content: " \2212";
+        }
+        .knobs-body {
+          width: min(220px, calc(100vw - 2 * var(--gutter)));
+          padding: 10px 14px 14px;
+          background: rgb(22 25 28 / 0.88);
+          border: 1px solid var(--rule);
+        }
+        .knobs-toggle[aria-expanded="false"] + .knobs-body {
+          display: none;
+        }
+        .cv-hud {
+          left: var(--gutter);
+          width: auto;
+          gap: 10px;
+        }
+        .cv-hud dl {
+          justify-content: start;
+          grid-template-columns: auto auto auto auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 011 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A machined steel block with a hex bolt in each corner of its faces, on a turned steel pedestal. Drag to turn it, or use the arrow keys. Enter plays the years."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A machined steel block with hex bolts set into its faces, on a turned steel pedestal"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 11<br />Mild steel, bolted</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 011</span>
+        <h1>Rust<em>.</em></h1>
+        <p>
+          <em>Forty years, in salt air.</em> Play or scrub the years. Drag the block to turn it; the
+          knobs set the weather.
+        </p>
+      </section>
+
+      <aside class="knobs mono live-only" aria-label="Weather">
+        <button
+          type="button"
+          class="knobs-toggle"
+          aria-expanded="false"
+          aria-controls="cv-knobs"
+          data-cv-toggle
+        >
+          Knobs
+        </button>
+        <div class="knobs-body" id="cv-knobs">
+          <label class="knob"
+            ><span>Humidity</span><output data-cv-out="humidity">55</output
+            ><input type="range" min="0" max="100" value="55" data-cv-knob="humidity"
+          /></label>
+          <label class="knob"
+            ><span>Salt</span><output data-cv-out="salt">35</output
+            ><input type="range" min="0" max="100" value="35" data-cv-knob="salt"
+          /></label>
+          <label class="knob"
+            ><span>Flake</span><output data-cv-out="flake">50</output
+            ><input type="range" min="0" max="100" value="50" data-cv-knob="flake"
+          /></label>
+          <fieldset class="tones">
+            <legend>Oxide</legend>
+            <label
+              ><input type="radio" name="cv-tone" value="0" checked data-cv-tone /><span
+                class="sw"
+                style="--a: #a85e34; --b: #6b402b"
+              ></span
+              >Red</label
+            >
+            <label
+              ><input type="radio" name="cv-tone" value="1" data-cv-tone /><span
+                class="sw"
+                style="--a: #b38547; --b: #73543a"
+              ></span
+              >Ochre</label
+            >
+          </fieldset>
+        </div>
+      </aside>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Age</dt>
+          <dd data-cv-age>0 yrs</dd>
+          <dt>Surface</dt>
+          <dd data-cv-surface>Bright</dd>
+        </dl>
+        <div class="timeline">
+          <button type="button" class="cv-btn" data-cv-play aria-pressed="false">Play</button>
+          <div>
+            <input
+              type="range"
+              data-cv-scrub
+              min="0"
+              max="40"
+              step="0.1"
+              value="0"
+              aria-label="Age in years"
+              aria-valuetext="0 years"
+            />
+            <div class="ticks" aria-hidden="true">
+              <span>0</span><span>10</span><span>20</span><span>30</span><span>40 yrs</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spore · Codevember 016</title>
+    <meta
+      name="description"
+      content="A puffball that sighs out a cloud of spores when you press it. Codevember day 16."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#ebe5da" />
+    <style>
+      :root {
+        --accent: #8a6d3b;
+      }
+      .cv-figure canvas {
+        touch-action: none;
+        opacity: 0;
+        transition: opacity 0.8s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      /* the descender of the p would sit on the line below; doubled class wins over the shared sheet */
+      .cv-title.cv-title h1 {
+        margin-bottom: 0.2em;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        color: var(--muted);
+        text-align: right;
+      }
+      .still,
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] .cv-figure canvas {
+        display: none;
+      }
+      [data-cv-still] .still {
+        visibility: visible;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: min(36vw, 300px);
+        aspect-ratio: 1.15;
+        translate: -50% -50%;
+        border-radius: 50% 50% 46% 46% / 58% 58% 42% 42%;
+        background: radial-gradient(70% 60% at 40% 28%, #f6f0e3, #e6d8bd 60%, #b9a07a);
+        box-shadow: 0 34px 40px -26px rgb(40 28 16 / 0.45);
+      }
+      /* PLATE */
+      /* ?v=b: a hand-coloured botanical plate, ruled frame and figure numbers */
+      .plate-only,
+      .plate-labels {
+        display: none;
+      }
+      [data-cv-plate] .plate-only {
+        display: inline;
+      }
+      [data-cv-plate] .gouache-only {
+        display: none;
+      }
+      [data-cv-plate] [data-cv-live] .plate-labels {
+        display: block;
+      }
+      .plate-labels {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+      }
+      .plate-labels span {
+        position: absolute;
+        left: 0;
+        top: 0;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      /* the plate is its own panel between the title and the hud, so no rule ever crosses text */
+      .panel {
+        display: none;
+        position: absolute;
+        top: 72px;
+        bottom: var(--gutter);
+        left: clamp(300px, 31vw, 480px);
+        right: calc(var(--gutter) + 170px);
+        border: 1px solid var(--rule);
+        outline: 1px solid var(--rule);
+        outline-offset: -6px;
+        pointer-events: none;
+      }
+      [data-cv-plate] .panel {
+        display: block;
+      }
+      [data-cv-plate] .fig {
+        display: none;
+      }
+      .panel-cap {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        color: var(--muted);
+        text-align: right;
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+        .panel {
+          top: 184px;
+          bottom: 128px;
+          left: var(--gutter);
+          right: var(--gutter);
+        }
+        .panel-cap {
+          top: 14px;
+          right: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 016 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="Three puffball mushrooms on a pale ground. Press one and it puffs out a cloud of spores, then slowly fills back up. Enter pokes the big one."
+        ></canvas>
+        <div class="still" role="img" aria-label="A round puffball mushroom"></div>
+        <div class="panel" data-cv-panel aria-hidden="true">
+          <span class="panel-cap mono"
+            >Pl. XVI<br />Lycoperdon perlatum Pers.<br />2. in section</span
+          >
+        </div>
+      </div>
+
+      <div class="plate-labels mono" aria-hidden="true">
+        <span data-cv-label>Fig. 1</span>
+        <span data-cv-label>Fig. 2</span>
+        <span data-cv-label>Fig. 3</span>
+      </div>
+
+      <p class="fig mono">
+        <span class="gouache-only">Fig. 16<br />Lycoperdon, ripe</span>
+      </p>
+
+      <section class="cv-title">
+        <span class="mono">No. 016</span>
+        <h1>Spore<em>.</em></h1>
+        <p>
+          <em>Ripe, and waiting for a nudge.</em> Press a puffball and it sighs out its spores, then
+          slowly fills again.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Puffs</dt>
+          <dd data-cv-puffs aria-live="polite">0</dd>
+        </dl>
+        <span>Press a puffball</span>
+        <button type="button" class="cv-btn" data-cv-poke>Poke</button>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

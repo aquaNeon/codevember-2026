@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Caustic · Codevember 010</title>
+    <meta
+      name="description"
+      content="A liquid sculpture on a plinth in a white gallery, throwing caustic light across the wall in the late sun. Codevember day 10."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#d8d2c8" />
+    <style>
+      :root {
+        --accent: #3f8fa6;
+      }
+      .cv-figure canvas {
+        position: relative;
+        z-index: 1;
+        touch-action: none;
+        opacity: 0;
+        transition: opacity 1.8s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      [data-cv-live] .cv-figure canvas {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] .live-only,
+      [data-cv-still] .cv-figure canvas {
+        display: none;
+      }
+
+      /* FIRST PAINT */
+      /* the room as lines that draw themselves in, see sketch.ts; the live canvas fades
+         in over it */
+      .still {
+        position: absolute;
+        inset: 0;
+      }
+      .sketch {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .sketch path,
+      .sketch ellipse {
+        fill: none;
+        stroke: var(--ink);
+        stroke-opacity: 0.5;
+        stroke-width: 1;
+        stroke-dasharray: 1;
+        stroke-dashoffset: 1;
+        vector-effect: non-scaling-stroke;
+        animation: cv-draw 1.2s cubic-bezier(0.6, 0, 0.2, 1) forwards;
+        animation-delay: calc(var(--i) * 110ms);
+      }
+      .sketch .faint {
+        stroke-opacity: 0.22;
+      }
+      @keyframes cv-draw {
+        to {
+          stroke-dashoffset: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .sketch path,
+        .sketch ellipse {
+          animation: none;
+          stroke-dashoffset: 0;
+        }
+      }
+
+      /* SLIDERS */
+      /* a hairline track and a dot, as on day 002 */
+      input[type="range"] {
+        -webkit-appearance: none;
+        appearance: none;
+        display: block;
+        width: 100%;
+        height: 22px;
+        margin: 0;
+        background: none;
+        cursor: pointer;
+        touch-action: none;
+      }
+      input[type="range"]::-webkit-slider-runnable-track {
+        height: 1px;
+        background: var(--ink);
+      }
+      input[type="range"]::-moz-range-track {
+        height: 1px;
+        background: var(--ink);
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        margin-top: -5.5px;
+        border-radius: 50%;
+        background: var(--ink);
+      }
+      input[type="range"]::-moz-range-thumb {
+        width: 12px;
+        height: 12px;
+        border: 0;
+        border-radius: 50%;
+        background: var(--ink);
+      }
+      input[type="range"]:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: 4px;
+      }
+
+      /* MATERIAL */
+      /* a small material sheet: colour, shape, then the knobs */
+      .mat {
+        position: fixed;
+        top: 108px;
+        right: var(--gutter);
+        z-index: 6;
+        width: 212px;
+      }
+      .mat-toggle {
+        display: none;
+      }
+      .mat-body {
+        display: grid;
+        gap: 7px;
+        padding: 12px 14px 14px;
+        background: rgb(245 241 234 / 0.82);
+        border: 1px solid var(--rule);
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+      }
+      .mat-head {
+        display: flex;
+        justify-content: space-between;
+        padding-bottom: 8px;
+        margin-bottom: 2px;
+        border-bottom: 1px solid var(--rule);
+      }
+      .mat-head span,
+      .knob span,
+      .row legend {
+        color: var(--muted);
+      }
+      .knob {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: end;
+      }
+      .knob output {
+        font-variant-numeric: tabular-nums;
+      }
+      .knob input {
+        grid-column: 1 / -1;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0;
+        padding: 2px 0;
+        border: 0;
+      }
+      .row legend {
+        float: left;
+        margin-right: auto;
+        padding: 0;
+        line-height: 22px;
+      }
+      .row label {
+        display: flex;
+        cursor: pointer;
+      }
+      .row input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .sw {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 32%, #fff 0 8%, var(--a) 40%, var(--b));
+        box-shadow:
+          0 0 0 1px var(--bone-hi),
+          0 0 0 1px var(--rule);
+      }
+      .presets .sw {
+        width: 26px;
+        height: 26px;
+      }
+      .row input:checked + .sw {
+        box-shadow:
+          0 0 0 2px var(--bone-hi),
+          0 0 0 3px var(--ink);
+      }
+      .row input:focus-visible + .sw {
+        outline: 1px solid var(--ink);
+        outline-offset: 5px;
+      }
+      .presets {
+        justify-content: space-between;
+        padding: 2px 2px 6px;
+      }
+      .shapes {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 4px;
+        margin: 2px 0 4px;
+      }
+      .shapes .cv-btn {
+        min-height: 28px;
+        padding: 0;
+        font-size: 10px;
+      }
+      .shuffle {
+        width: 100%;
+        min-height: 28px;
+        margin-top: 6px;
+        padding: 0;
+        font-size: 10px;
+      }
+      .shapes .cv-btn[aria-pressed="true"] {
+        background: var(--ink);
+        color: var(--bone-hi);
+      }
+
+      .sr {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
+
+      /* HUD */
+      [data-cv-live] .cv-hud {
+        padding: 10px 14px;
+        margin: -10px -14px;
+        background: rgb(245 241 234 / 0.82);
+      }
+
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+        .mat {
+          top: 60px;
+          width: auto;
+          display: grid;
+          justify-items: end;
+        }
+        .mat-toggle {
+          display: block;
+          font: inherit;
+          letter-spacing: inherit;
+          text-transform: inherit;
+          color: var(--ink);
+          background: none;
+          border: 0;
+          padding: 10px 0 10px 16px;
+          cursor: pointer;
+        }
+        .mat-toggle::after {
+          content: " +";
+        }
+        .mat-toggle[aria-expanded="true"]::after {
+          content: " \2212";
+        }
+        /* open, the sheet docks at the bottom: compact, see-through, the knobs in two
+           columns, so the sculpture and its light stay in view above it */
+        .mat-body {
+          position: fixed;
+          left: var(--gutter);
+          right: var(--gutter);
+          bottom: var(--gutter);
+          grid-template-columns: 1fr 1fr;
+          gap: 6px 18px;
+          padding: 10px 12px 12px;
+          background: rgb(245 241 234 / 0.72);
+        }
+        .mat-head,
+        .presets,
+        .shapes,
+        .shuffle {
+          grid-column: 1 / -1;
+        }
+        .presets {
+          justify-content: space-around;
+        }
+        main:has(.mat-toggle[aria-expanded="true"]) .cv-hud {
+          visibility: hidden;
+        }
+        .mat-toggle[aria-expanded="false"] + .mat-body {
+          display: none;
+        }
+        .cv-hud {
+          left: var(--gutter);
+          gap: 8px;
+        }
+        [data-cv-live] .cv-hud {
+          margin: 0;
+          padding: 0;
+          background: none;
+          justify-items: start;
+          text-align: left;
+        }
+        main .cv-hud dl {
+          grid-template-columns: repeat(6, auto);
+          gap: 4px 10px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 010 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A sphere of water resting on a white plinth in a pale gallery, late sun from a window throwing its caustic light, bright ribbons and a focused core, across the wall and floor. Drag the sculpture to set it wobbling; Enter nudges it."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A sphere of water on a white plinth in a sunlit gallery corner"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 10<br />Study in light</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 010</span>
+        <h1>Caustic<em>.</em></h1>
+        <p>
+          <em>Sun through water.</em> Drag the sculpture to make it wobble, or change what it is
+          made of.
+        </p>
+      </section>
+
+      <aside class="mat mono live-only" aria-label="Material">
+        <button
+          type="button"
+          class="mat-toggle"
+          aria-expanded="false"
+          aria-controls="cv-mat"
+          data-cv-toggle
+        >
+          Material
+        </button>
+        <div class="mat-body" id="cv-mat">
+          <div class="mat-head"><span>Material</span><span data-cv-name>M_Water</span></div>
+          <fieldset class="row presets">
+            <legend class="sr">Colour</legend>
+            <label title="Clear"
+              ><input
+                type="radio"
+                name="cv-tint"
+                value="clear"
+                aria-label="Clear"
+                checked
+                data-cv-tint /><span class="sw" style="--a: #e4eef0; --b: #b3c4c8"></span
+            ></label>
+            <label title="Emerald"
+              ><input
+                type="radio"
+                name="cv-tint"
+                value="emerald"
+                aria-label="Emerald"
+                data-cv-tint /><span class="sw" style="--a: #52b48a; --b: #0f4d3a"></span
+            ></label>
+            <label title="Amber"
+              ><input
+                type="radio"
+                name="cv-tint"
+                value="amber"
+                aria-label="Amber"
+                data-cv-tint /><span class="sw" style="--a: #f0b04a; --b: #84420f"></span
+            ></label>
+            <label title="Pink"
+              ><input
+                type="radio"
+                name="cv-tint"
+                value="pink"
+                aria-label="Pink"
+                data-cv-tint /><span class="sw" style="--a: #f0a3bd; --b: #9c3d5f"></span
+            ></label>
+            <label title="Ink"
+              ><input type="radio" name="cv-tint" value="ink" aria-label="Ink" data-cv-tint /><span
+                class="sw"
+                style="--a: #4a5db0; --b: #121842"
+              ></span
+            ></label>
+          </fieldset>
+          <div class="shapes" role="group" aria-label="Shape">
+            <button type="button" class="cv-btn" value="0" aria-pressed="true" data-cv-shape>
+              Sphere
+            </button>
+            <button type="button" class="cv-btn" value="1" aria-pressed="false" data-cv-shape>
+              Drop
+            </button>
+            <button type="button" class="cv-btn" value="2" aria-pressed="false" data-cv-shape>
+              Cube
+            </button>
+          </div>
+          <label class="knob"
+            ><span>Index</span><output data-cv-out="ior">1.33</output
+            ><input type="range" min="1" max="1.8" step="0.01" value="1.33" data-cv-knob="ior"
+          /></label>
+          <label class="knob"
+            ><span>Wave</span><output data-cv-out="wave">45</output
+            ><input type="range" min="0" max="100" value="45" data-cv-knob="wave"
+          /></label>
+          <label class="knob"
+            ><span>Flow</span><output data-cv-out="flow">45</output
+            ><input type="range" min="0" max="100" value="45" data-cv-knob="flow"
+          /></label>
+          <label class="knob"
+            ><span>Sun</span><output data-cv-out="sun">42°</output
+            ><input type="range" min="0" max="100" value="40" data-cv-knob="sun"
+          /></label>
+          <button type="button" class="cv-btn shuffle" data-cv-shuffle>Randomize</button>
+        </div>
+      </aside>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Index</dt>
+          <dd data-cv-ior>1.33</dd>
+          <dt>Sun</dt>
+          <dd data-cv-sun>42°</dd>
+          <dt>Form</dt>
+          <dd data-cv-shape-out>Sphere</dd>
+        </dl>
+        <span>Drag the sculpture</span>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

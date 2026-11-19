@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tangle · Codevember 004</title>
+    <meta
+      name="description"
+      content="Seven inked threads on paper. Stir to tangle them, comb to work them loose. Codevember day 4."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#ebe5da" />
+    <style>
+      :root {
+        --accent: #2d3a78;
+      }
+      .cv-figure canvas {
+        touch-action: none;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        color: var(--muted);
+        text-align: right;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 004 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="Seven long threads in black, indigo, red and sepia ink lying across the page. Stir the pointer in loops to wind them into a snarl; drag slowly and straight through it to comb the threads loose, or pull an end. S stirs, C combs."
+        ></canvas>
+      </div>
+
+      <p class="fig mono">Fig. 4<br />Seven threads, four inks</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 004</span>
+        <h1>Tangle<em>.</em></h1>
+        <p>
+          <em>Stir it in, comb it out.</em> Loop the cursor to wind the threads round each other.
+          Drag slow and straight through the snarl to work it loose.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only" aria-live="polite">
+        <dl>
+          <dt>Crossings</dt>
+          <dd data-cv-crossings>0</dd>
+        </dl>
+        <span data-cv-hint>Stir to tangle</span>
+        <div class="row">
+          <button type="button" class="cv-btn" data-cv-stir>Stir</button>
+          <button type="button" class="cv-btn" data-cv-comb>Comb</button>
+        </div>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

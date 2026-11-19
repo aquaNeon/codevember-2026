@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mirage · Codevember 015</title>
+    <meta
+      name="description"
+      content="A desert road in the heat, and a pool of sky on it that you never reach. Codevember day 15."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/stills/015-wide.webp"
+      as="image"
+      type="image/webp"
+      media="(min-aspect-ratio: 4 / 5)"
+      fetchpriority="high"
+    />
+    <link
+      rel="preload"
+      href="/stills/015-tall.webp"
+      as="image"
+      type="image/webp"
+      media="(max-aspect-ratio: 4 / 5)"
+      fetchpriority="high"
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#86a9c0" />
+    <style>
+      /* doubled selectors so these win over the shared sheet, which loads after */
+      :root:root {
+        --accent: #4f8fa6;
+        --muted: #4f463f;
+        --rule: rgb(28 26 23 / 0.12);
+      }
+      html body {
+        background: #efcfae;
+      }
+      .cv-figure canvas {
+        position: relative;
+        z-index: 1;
+        touch-action: none;
+        cursor: grab;
+      }
+      .cv-figure canvas:active {
+        cursor: grabbing;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        color: var(--muted);
+        text-align: right;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+
+      /* REVEAL */
+      /* the still is the first paint, so the page does not fade in under it; only the text
+         waits for the serif, as on every other day */
+      html body > main {
+        animation: none;
+      }
+      .cv-hud,
+      .fig {
+        animation: cv-fade 0.6s cubic-bezier(0.2, 0.7, 0.1, 1) 1s backwards;
+      }
+      [data-cv-fonts] .cv-hud,
+      [data-cv-fonts] .fig {
+        animation-name: cv-fade-in;
+        animation-delay: 0s;
+      }
+
+      /* STILL */
+      /* a frame of the scene itself, for no webgl or ?still; it also holds the place while
+         the gpu warms up, and the live scene fades in over its own picture. plate.ts lays it
+         through the live camera; these values are the fallback without script */
+      .cv-figure canvas {
+        opacity: 0;
+        transition: opacity 0.8s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      [data-cv-live] .cv-figure canvas {
+        opacity: 1;
+      }
+      [data-cv-still] .cv-figure canvas {
+        display: none;
+      }
+      .still {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        background: linear-gradient(180deg, #a3b1b6, #efcfae 78%, #e0a36c);
+      }
+      /* shown once plate.ts has laid it, so it never shifts in view */
+      .still img:not([data-cv-placed]) {
+        visibility: hidden;
+      }
+      .still img {
+        position: absolute;
+        max-width: none;
+        width: 275.5vh;
+        height: 144.44vh;
+        left: calc(53vw - 142.56vh);
+        top: -22.22vh;
+      }
+      @media (max-aspect-ratio: 4 / 5) {
+        .still img {
+          width: 88.85vh;
+          height: 137.9vh;
+          left: calc(50vw - 44.43vh);
+          top: -18.95vh;
+        }
+      }
+      @media (max-width: 640px), (max-aspect-ratio: 1 / 1) {
+        .fig {
+          display: none;
+        }
+        /* the road fills the bottom of a tall screen, so the text sits up in the sky */
+        .cv-hud.cv-hud,
+        .cv-title.cv-title {
+          bottom: auto;
+          top: 64px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 015 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A desert road running to the horizon under heat haze, telegraph poles along it. A pool of reflected sky lies on the road ahead. Scroll, drag up or press the up arrow to drive toward it; it keeps its distance."
+        ></canvas>
+        <picture class="still" aria-hidden="true">
+          <source media="(max-aspect-ratio: 4 / 5)" srcset="/stills/015-tall.webp" />
+          <img src="/stills/015-wide.webp" alt="" fetchpriority="high" data-cv-plate />
+        </picture>
+        <noscript
+          ><style>
+            .still img {
+              visibility: visible;
+            }
+          </style></noscript
+        >
+      </div>
+
+      <p class="fig mono">Fig. 15<br />Inferior mirage, 46 °C</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 015</span>
+        <h1>Mirage<em>.</em></h1>
+        <p><em>Water on the road, always just ahead.</em> Scroll or drag up to drive toward it.</p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Driven</dt>
+          <dd data-cv-driven>0 m</dd>
+          <dt>Water</dt>
+          <dd data-cv-ahead>62 m ahead</dd>
+        </dl>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

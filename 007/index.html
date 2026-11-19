@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hollow · Codevember 007</title>
+    <meta
+      name="description"
+      content="A fall through the rings of a hollow trunk. Codevember day 7."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#080605" />
+    <style>
+      /* DARK ROOM */
+      /* doubled selector so it wins over the shared sheet that loads after it */
+      :root:root {
+        --bone: #050403;
+        --bone-hi: #0c0907;
+        --ink: #efe4d4;
+        --muted: #9c8f7e;
+        --rule: rgb(239 228 212 / 0.14);
+        --accent: #c8874a;
+        color-scheme: dark;
+      }
+      :root:root[data-cv-paper] {
+        --bone: #ebe5da;
+        --bone-hi: #f5f1ea;
+        --ink: #1c1a17;
+        --muted: #6b645a;
+        --rule: rgb(28 26 23 / 0.16);
+        --accent: #1c1a17;
+        color-scheme: light;
+      }
+      body::after {
+        mix-blend-mode: screen;
+        opacity: 0.1;
+      }
+      [data-cv-paper] body::after {
+        mix-blend-mode: multiply;
+        opacity: 0.35;
+      }
+      .cv-figure canvas {
+        touch-action: none;
+        cursor: ns-resize;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        color: var(--muted);
+        text-align: right;
+      }
+      .still,
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] .cv-figure canvas {
+        display: none;
+      }
+      /* STILL */
+      /* nested rings in css, darker toward the middle */
+      [data-cv-still] .still {
+        visibility: visible;
+        position: absolute;
+        inset: 0;
+        background:
+          repeating-radial-gradient(
+            circle at 52% 46%,
+            transparent 0 22px,
+            rgb(0 0 0 / 0.35) 22px 26px
+          ),
+          radial-gradient(circle at 52% 46%, #000 0 6%, #2a170b 22%, #6b4426 60%, #8a5c36);
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 007 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="Looking down a hollow tree trunk cut into slices, each a ring of end grain around a dark hole. Scroll, drag or use the arrow keys to fall through roots, soil and stone to a geode far below."
+        ></canvas>
+        <div class="still" aria-hidden="true"></div>
+      </div>
+
+      <p class="fig mono">Fig. 7<br />Oak, hollow, cut in slices</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 007</span>
+        <h1>Hollow<em>.</em></h1>
+        <p><em>A long way down.</em> Scroll or drag to fall through the rings, and keep going.</p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Depth</dt>
+          <dd data-cv-depth>0.0 m</dd>
+          <dt>Layer</dt>
+          <dd data-cv-layer>Heartwood</dd>
+        </dl>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -136,6 +136,7 @@ a {
 }
 
 .cv-title h1 em {
+  margin-left: 0.05em; /* change for more air before the dot */
   color: var(--accent);
 }
 
@@ -143,7 +144,7 @@ a {
   margin: 0;
   font-size: clamp(16px, 1.6vw, 19px);
   line-height: 1.35;
-  max-width: 26ch;
+  max-width: 42ch; /* change for wider or narrower intro lines */
 }
 
 /* HUD */

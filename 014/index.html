@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tension · Codevember 014</title>
+    <meta
+      name="description"
+      content="Seven strings on a walnut frame. Pluck them, strum them, turn a peg and hear the pitch rise with the pull. Codevember day 14."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="preload" href="/stills/014-strings.webp" as="image" fetchpriority="high" />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#ebe5da" />
+    <style>
+      :root:root {
+        --accent: #a2652a;
+      }
+      .cv-figure {
+        container-type: size;
+      }
+      .cv-figure canvas {
+        position: relative;
+        z-index: 1;
+        touch-action: none;
+        opacity: 0;
+        transition: opacity 0.3s ease-out;
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: none;
+      }
+      [data-cv-still] .cv-figure canvas {
+        display: none;
+      }
+
+      /* FIRST PAINT */
+      /* the instrument at rest, placed by the same rule as the drawing (place in layout.ts) */
+      .still {
+        --pt: 76px;
+        --pb: 60px;
+        --s: min((100cqh - var(--pt) - var(--pb)) / 800, (80cqw - 72px) / 520);
+        position: absolute;
+        left: calc(60cqw - var(--s) * 330);
+        top: calc(var(--pt) + (100cqh - var(--pt) - var(--pb)) / 2 - var(--s) * 440);
+        width: calc(var(--s) * 660);
+        height: calc(var(--s) * 950);
+      }
+      [data-cv-live] .still {
+        visibility: hidden;
+        transition: visibility 0s 0.35s;
+      }
+      @media (max-width: 640px) {
+        .still {
+          --pt: 172px;
+          --pb: 132px;
+          --s: min((100cqh - var(--pt) - var(--pb)) / 800, (100cqw - 32px) / 520);
+          left: calc(50cqw - var(--s) * 330);
+        }
+      }
+
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      .cv-hud.cv-hud dd {
+        min-width: 9ch;
+        font-variant-numeric: tabular-nums;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+      }
+      .cv-btn[aria-pressed="true"] {
+        background: var(--ink);
+        color: var(--bone-hi);
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+        .cv-hud.cv-hud {
+          gap: 12px;
+        }
+        .cv-hud.cv-hud dl {
+          grid-auto-flow: column;
+          grid-template-rows: auto auto;
+          grid-template-columns: none;
+          gap: 2px 22px;
+        }
+        .cv-hud.cv-hud dd {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 014 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="Seven strings on a walnut frame with a spruce soundboard and a brass tuning knob for each. Pluck or swipe across the strings; drag a knob up or down to tune it. Keys 1 to 7 pluck, left and right pick a string, up and down tune it."
+        ></canvas>
+        <img
+          class="still"
+          src="/stills/014-strings.webp"
+          width="660"
+          height="950"
+          alt="Seven strings on a walnut frame with a spruce soundboard and brass tuning knobs"
+          fetchpriority="high"
+        />
+      </div>
+
+      <p class="fig mono">Fig. 14<br />Walnut, spruce, steel</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 014</span>
+        <h1>Tension<em>.</em></h1>
+        <p>
+          <em>Tighter sings higher.</em> Pluck or swipe across the strings. Drag a knob up to
+          tighten it.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Note</dt>
+          <dd data-cv-note>A3</dd>
+          <dt>Tension</dt>
+          <dd data-cv-tension>62.0 N</dd>
+          <dt>Freq</dt>
+          <dd data-cv-freq>220.0 Hz</dd>
+        </dl>
+        <div class="row">
+          <button type="button" class="cv-btn" data-cv-strum>Strum</button>
+          <button type="button" class="cv-btn" data-cv-mute aria-pressed="false">Mute</button>
+        </div>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

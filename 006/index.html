@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Orrery · Codevember 006</title>
+    <meta
+      name="description"
+      content="A brass orrery drawn like a copperplate engraving. Drag a planet and the gears turn the rest. Codevember day 6."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#ebe5da" />
+    <style>
+      :root {
+        --accent: #8a5a24;
+      }
+      .cv-figure canvas {
+        touch-action: none;
+        opacity: 0;
+        transition: opacity 0.7s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      [data-cv-live] .cv-figure canvas {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        color: var(--muted);
+        text-align: right;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      /* STILL */
+      /* the plan stands in while the gpu wakes, then hands over to the engraving */
+      .still {
+        position: absolute;
+        left: 50%;
+        top: 36%;
+        width: min(80vw, 760px);
+        translate: -50% -50%;
+        color: var(--ink);
+        opacity: 0.45;
+        pointer-events: none;
+        transition: opacity 0.7s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      [data-cv-live] .still {
+        opacity: 0;
+      }
+      [data-cv-still] .cv-figure canvas {
+        display: none;
+      }
+      [data-cv-still] .still {
+        opacity: 1;
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 006 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A brass orrery engraved in ink: a sun on a column, six planets on arms over a gear train. Drag a planet and the gears turn the others at their own pace. Arrow keys spin it."
+        ></canvas>
+        <svg class="still" viewBox="-300 -120 600 240" aria-hidden="true">
+          <g fill="none" stroke="currentColor" stroke-width="1">
+            <ellipse rx="280" ry="70" />
+            <ellipse rx="270" ry="66" />
+            <ellipse rx="190" ry="47" stroke-dasharray="2 4" />
+            <ellipse rx="120" ry="30" stroke-dasharray="2 4" />
+            <ellipse rx="60" ry="15" stroke-dasharray="2 4" />
+          </g>
+          <circle r="22" fill="none" stroke="currentColor" />
+          <circle cx="190" cy="-6" r="12" fill="currentColor" />
+          <circle cx="-120" cy="20" r="6" fill="currentColor" />
+          <circle cx="40" cy="12" r="4" fill="currentColor" />
+        </svg>
+      </div>
+
+      <p class="fig mono">Fig. 6<br />Grand orrery, brass</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 006</span>
+        <h1>Orrery<em>.</em></h1>
+        <p>
+          <em>Clockwork for the heavens.</em> Take any planet by hand and the gear train turns the
+          rest, each at its own pace.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Year</dt>
+          <dd data-cv-year>0.00</dd>
+          <dt>Driving</dt>
+          <dd data-cv-driver>—</dd>
+        </dl>
+        <span>Drag a planet</span>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

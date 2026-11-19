@@ -31,10 +31,10 @@ export const DAYS = [
   "Dissolve",
 ] as const;
 
-// add a day here once it ships
-export const READY = new Set([1, 2, 3]);
+// filled at build time from the day folders and their thumbs, see vite.config.ts
+export const READY = new Set(__CV_READY__);
 
 export const pad = (n: number) => String(n).padStart(3, "0");
 
-// accent per shipped day, used by the index hover; each ready day also needs public/thumbs/<nnn>.jpg
-export const ACCENT: Record<number, string> = { 1: "#a86a32", 2: "#2f6a5e", 3: "#c9ff3d" };
+// accent per shipped day, read from the --accent its page declares; used by the index hover
+export const ACCENT: Record<number, string> = __CV_ACCENT__;

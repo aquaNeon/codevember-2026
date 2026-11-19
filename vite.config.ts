@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 
@@ -9,6 +9,18 @@ const FONT_WAIT_MS = 800; // keep under the 1s css fallback delay in shared/styl
 // one entry per day folder that has an index.html
 const days = readdirSync(ROOT).filter(
   (d) => DAY_RE.test(d) && existsSync(resolve(ROOT, d, "index.html")),
+);
+
+// SHIPPED DAYS
+// a day is ready once its folder and thumb exist; its accent is the --accent its page declares,
+// so each day ships in its own PR without touching shared files
+const ACCENT_RE = /--accent:\s*(#[0-9a-fA-F]{3,8})/;
+const ready = days.filter((d) => existsSync(resolve(ROOT, "public/thumbs", `${d}.jpg`)));
+const accents = Object.fromEntries(
+  ready.flatMap((d) => {
+    const hit = ACCENT_RE.exec(readFileSync(resolve(ROOT, d, "index.html"), "utf8"));
+    return hit ? [[Number(d), hit[1]]] : [];
+  }),
 );
 
 // REVEAL
@@ -27,6 +39,10 @@ const reveal: Plugin = {
 export default defineConfig({
   base: "./",
   plugins: [reveal],
+  define: {
+    __CV_READY__: JSON.stringify(ready.map(Number)),
+    __CV_ACCENT__: JSON.stringify(accents),
+  },
   build: {
     rollupOptions: {
       input: {

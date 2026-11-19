@@ -2,6 +2,7 @@ import "./style.css";
 import { ACCENT, DAYS, READY, pad } from "./days";
 
 const PEEK_GAP_PX = 28; // distance between cursor and preview
+const IDLE_MS = 1500; // longest wait before the thumbs start preloading anyway
 
 const list = document.querySelector<HTMLOListElement>("[data-cv-days]");
 const peek = document.querySelector<HTMLElement>("[data-cv-peek]");
@@ -68,12 +69,53 @@ if (list && !list.hasAttribute("data-cv-mounted")) {
       },
       { passive: true },
     );
+    // PRELOAD
+    // every thumb is fetched and decoded once the page is idle, so hovering never waits
+    const ready = new Set<string>();
+    const urls = Array.from(
+      list.querySelectorAll<HTMLAnchorElement>("a.row"),
+      (a) => a.dataset.cvThumb ?? "",
+    );
+    const preload = () => {
+      for (const url of urls) {
+        if (!url) continue;
+        const pre = new Image();
+        pre.decoding = "async";
+        pre.src = url;
+        pre
+          .decode()
+          .then(() => ready.add(url))
+          .catch(() => {});
+      }
+    };
+    if ("requestIdleCallback" in window) requestIdleCallback(preload, { timeout: IDLE_MS });
+    else setTimeout(preload, IDLE_MS);
+
+    // the image shown is always the hovered row's; one still loading waits blank, then fades in,
+    // and a late arrival never replaces a newer hover
+    let want = "";
+    const show = () => {
+      if (img.getAttribute("src") !== want) img.src = want;
+      img.removeAttribute("data-cv-wait");
+    };
+    img.addEventListener("load", () => {
+      if (img.getAttribute("src") === want) img.removeAttribute("data-cv-wait");
+    });
+
     list.addEventListener(
       "pointerover",
       (e) => {
         const row = (e.target as Element).closest<HTMLAnchorElement>("a.row");
-        if (!row?.dataset.cvThumb) return;
-        if (img.getAttribute("src") !== row.dataset.cvThumb) img.src = row.dataset.cvThumb;
+        const url = row?.dataset.cvThumb;
+        if (!url) return;
+        if (url !== want) {
+          want = url;
+          if (ready.has(url)) show();
+          else {
+            img.setAttribute("data-cv-wait", "");
+            img.src = url;
+          }
+        }
         const r = peek.getBoundingClientRect();
         w = r.width || w;
         h = r.height || h;

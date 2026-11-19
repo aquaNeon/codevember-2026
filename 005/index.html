@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Moss · Codevember 005</title>
+    <meta
+      name="description"
+      content="Lichen spreading over stone from wherever you touch it. Codevember day 5."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#c8c5bd" />
+    <style>
+      :root {
+        --accent: #b8611c;
+      }
+      html body {
+        background: #c8c5bd;
+      }
+      /* SLATE */
+      /* variant b: dark stone, light type */
+      :root[data-cv-slate]:root {
+        --ink: #ece6dc;
+        --muted: #a39d93;
+        --rule: rgb(236 230 220 / 0.14);
+        color-scheme: dark;
+      }
+      [data-cv-slate] body {
+        background: #2f3336;
+      }
+      [data-cv-slate] body::after {
+        mix-blend-mode: screen;
+        opacity: 0.1;
+      }
+      /* FIRST PAINT */
+      /* bare stone in css straight away; the live canvas fades in over it */
+      .still {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(60% 50% at 30% 30%, rgb(255 255 255 / 0.12), transparent),
+          radial-gradient(50% 60% at 75% 70%, rgb(0 0 0 / 0.05), transparent), #c4c1b9;
+      }
+      [data-cv-slate] .still {
+        background: #303437;
+      }
+      .cv-figure canvas {
+        position: relative;
+        z-index: 1;
+        touch-action: manipulation;
+        cursor: crosshair;
+        opacity: 0;
+        transition: opacity 0.8s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        color: var(--ink);
+        text-align: right;
+      }
+      .cv-title p,
+      .cv-hud dt {
+        color: var(--ink);
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] .cv-hud,
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      /* STILL */
+      /* no webgl: three colonies drawn in css */
+      [data-cv-still] .still {
+        background:
+          radial-gradient(circle at 62% 40%, #d98d2e 0 5vmin, #f0bf5c 5.6vmin, transparent 6.2vmin),
+          radial-gradient(circle at 38% 58%, #8f9c78 0 7vmin, #c7d0b0 7.6vmin, transparent 8.2vmin),
+          radial-gradient(circle at 74% 66%, #c4cd3a 0 4vmin, #1c1b18 4.5vmin, transparent 5vmin),
+          #c4c1b9;
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 005 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A slab of pale limestone. Click or tap anywhere to seed a lichen colony that spreads outward in lobed rosettes until it meets its neighbours. Enter seeds one at random."
+        ></canvas>
+        <div class="still" role="img" aria-label="Three lichen colonies on limestone"></div>
+      </div>
+
+      <p class="fig mono">Fig. 5<br /><span data-cv-stone>Lichen on limestone</span></p>
+
+      <section class="cv-title">
+        <span class="mono">No. 005</span>
+        <h1>Moss<em>.</em></h1>
+        <p>
+          <em>Slow, then everywhere.</em> Touch the stone to seed a colony. It spreads until it
+          meets another.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Colonies</dt>
+          <dd data-cv-count>0</dd>
+          <dt>Stone</dt>
+          <dd data-cv-status>Settled</dd>
+        </dl>
+        <button type="button" class="cv-btn" data-cv-wipe>Scrub clean</button>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

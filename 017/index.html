@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kelp · Codevember 017</title>
+    <meta
+      name="description"
+      content="One giant kelp frond, close, lit from the surface. Move through the water and it gives. Codevember day 17."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#04181b" />
+    <style>
+      /* UNDERWATER */
+      /* this day only: the page is the water. doubled selector so it wins over the shared sheet */
+      :root:root {
+        --bone: #021013;
+        --bone-hi: #0a3236;
+        --ink: #efe6d2;
+        --muted: #9fb8ae;
+        --rule: rgb(239 230 210 / 0.14);
+        --accent: #d4b25a;
+        color-scheme: dark;
+      }
+      body {
+        background: linear-gradient(180deg, #0c393b, #04181b 55%, #010a0c) fixed;
+      }
+      body::after {
+        mix-blend-mode: screen;
+        opacity: 0.1;
+      }
+      .cv-title,
+      .cv-hud,
+      .fig {
+        text-shadow: 0 1px 14px rgb(2 16 19 / 0.7);
+      }
+      [data-cv-canvas] {
+        touch-action: none;
+        opacity: 0;
+        transition: opacity 1.2s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      [data-cv-canvas][data-cv-shown] {
+        opacity: 1;
+      }
+      [data-cv-canvas]:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      /* the descender of the p would sit on the line below; doubled class wins over the shared sheet */
+      .cv-title.cv-title h1 {
+        margin-bottom: 0.2em;
+      }
+      /* SCRIM */
+      /* the frond reaches the top right; a little dark water keeps the bar and the label legible */
+      .cv-figure::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(
+            24rem 7.5rem at calc(100% - 8rem) 84px,
+            rgb(2 14 18 / 0.72),
+            rgb(2 14 18 / 0.4) 45%,
+            rgb(2 14 18 / 0) 100%
+          ),
+          radial-gradient(34rem 11rem at 100% 0, rgb(2 14 18 / 0.5), rgb(2 14 18 / 0) 72%),
+          linear-gradient(180deg, rgb(2 14 18 / 0.5), rgb(2 14 18 / 0) 90px);
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--ink);
+        text-align: right;
+        text-shadow:
+          0 0 6px rgb(2 14 18 / 0.9),
+          0 1px 18px rgb(2 14 18 / 0.8);
+      }
+      .still,
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      [data-cv-still] .still {
+        visibility: visible;
+        position: absolute;
+        inset: 0;
+      }
+      .still img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: 70% 30%;
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 017 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A giant kelp frond seen up close: a row of golden gas bulbs along a curving stipe, each tapering into a long serrated blade glowing where the sun comes through. Move the pointer through the water to push it; arrow keys send a current across it."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A giant kelp frond: golden gas bulbs along a stipe, each with a long blade, sun shafts falling from above"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 17<br />Macrocystis pyrifera, one frond</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 017</span>
+        <h1>Kelp<em>.</em></h1>
+        <p>
+          <em>One frond, close.</em> Move through the water and the blades give, then find the
+          current again.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Depth</dt>
+          <dd>8 m</dd>
+          <dt>Current</dt>
+          <dd data-cv-current>0.12 m/s</dd>
+        </dl>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

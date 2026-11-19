@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pendulum · Codevember 018</title>
+    <meta
+      name="description"
+      content="A cloudy quartz pendulum swinging in the sun over a plaster wall, scattering a little light and the odd faint rainbow. Codevember day 18."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#ebe5da" />
+    <style>
+      :root {
+        --accent: #5b4fb8;
+      }
+      .cv-figure canvas {
+        touch-action: none;
+        cursor: grab;
+        opacity: 0;
+        transition: opacity 0.8s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .still,
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] .cv-figure canvas,
+      [data-cv-still] .cv-hud {
+        display: none;
+      }
+      /* STILL */
+      /* the wall, one shaft of sun, the crystal and its shadow, for no webgl */
+      [data-cv-still] .still {
+        visibility: visible;
+      }
+      .still {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        background: linear-gradient(
+          113deg,
+          #cdcac5 8%,
+          #f3ecdf 22%,
+          #f6efe2 44%,
+          #cdcac5 56%,
+          #cdcac5 74%,
+          #e2ddd3 80%,
+          #cdcac5 86%
+        );
+      }
+      .still svg {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        height: 68%;
+        translate: -62% 0;
+      }
+      .still i {
+        position: absolute;
+        width: 26px;
+        height: 9px;
+        border-radius: 5px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          #ff5a4a 15%,
+          #ffc23a 35%,
+          #6ad46a 52%,
+          #3cc0e8 68%,
+          #6a5cf0 85%,
+          transparent
+        );
+        opacity: 0.3;
+        filter: blur(1.5px);
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 018 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A cloudy quartz point on a silver chain in front of a sunlit plaster wall, scattering a soft glow and a faint rainbow or two. Drag it and let go to swing it, throw it hard to send it over the top, tap to spin it. Arrow keys push it, Enter spins it."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A cloudy quartz pendulum on a chain and its shadow on a sunlit wall"
+        >
+          <svg viewBox="0 0 160 300" aria-hidden="true">
+            <line
+              x1="56"
+              y1="0"
+              x2="56"
+              y2="236"
+              stroke="#3a3936"
+              stroke-width="0.5"
+              opacity="0.35"
+            />
+            <path d="M48 236 L64 236 L66 246 L56 290 L46 246 Z" fill="#3a3936" opacity="0.4" />
+            <line x1="100" y1="0" x2="100" y2="186" stroke="#9a9a9c" stroke-width="0.7" />
+            <circle cx="100" cy="188.5" r="2.5" fill="none" stroke="#9a9a9c" stroke-width="0.8" />
+            <path
+              d="M94 191 L106 191 L111 196 L111 203 L100 246 L89 203 L89 196 Z"
+              fill="#eeeae4"
+              stroke="#fff"
+              stroke-width="0.6"
+            />
+            <path
+              d="M100 191 L100 246 M89 203 L111 203 M94 191 L89 196 M106 191 L111 196"
+              stroke="#fff"
+              stroke-width="0.5"
+            />
+            <path d="M89 203 L96 203 L100 246 Z" fill="#c9c5be" />
+            <path d="M104 203 L111 203 L100 246 Z" fill="#dad6cf" />
+          </svg>
+          <i style="left: 40%; top: 55%; rotate: -30deg"></i>
+          <i style="left: 61%; top: 53%; rotate: 12deg; width: 18px"></i>
+        </div>
+      </div>
+
+      <p class="fig mono">Fig. 18<br />Rock quartz, 52 mm</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 018</span>
+        <h1>Pendulum<em>.</em></h1>
+        <p>
+          <em>A stone in the sun, swinging.</em> Drag the crystal and let it go, throw it hard and
+          it loops. Tap to set it turning.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono">
+        <span data-cv-hint>Drag the crystal, let go</span>
+        <button type="button" class="cv-btn" data-cv-spin>Spin</button>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

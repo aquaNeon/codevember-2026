@@ -302,7 +302,7 @@ void main() {
   float area = clamp(q.r0 / SR * 1.3, 0.45, 1.0);
   float face = p.z / max(shellR(p.y), 0.02);
   // fade the strands that would converge in a star at either tip
-  float tip = smoothstep(SH * 0.98, SH * 0.8, abs(p.y));
+  float tip = 1.0 - smoothstep(SH * 0.8, SH * 0.98, abs(p.y));
   vW = weight * dense * area * tip * smoothstep(-0.02, 0.15, face) * mix(0.5, 1.0, rnd(s));
   vW *= 1.0 - occluded(p);
 }
@@ -363,7 +363,7 @@ void main() {
   }
   place(p, b);
 
-  float hid = smoothstep(0.006, 0.014, shellR(p.y) - abs(p.x)) * smoothstep(0.0, -0.006, p.z);
+  float hid = smoothstep(0.006, 0.014, shellR(p.y) - abs(p.x)) * (1.0 - smoothstep(-0.006, 0.0, p.z));
   ${
     fuzz
       ? `// edge on, the mat piles up in projection: thin it there so the outline is not a band
@@ -486,7 +486,7 @@ out vec4 o;
 void main() {
   // soft across, faded at the ends, thicker and thinner along its length
   float x = exp(-vAcross * vAcross * 3.0);
-  float along = smoothstep(0.0, 0.12, vT) * smoothstep(1.0, 0.85, vT);
+  float along = smoothstep(0.0, 0.12, vT) * (1.0 - smoothstep(0.85, 1.0, vT));
   along *= 0.45 + 0.55 * (0.5 + 0.5 * sin(vT * (7.0 + 9.0 * vR) + vR * 40.0));
   float c = x * along * vW * uOut;
   // silk sparkles: tiny bright points along a thread, moving as it turns
@@ -660,18 +660,27 @@ vec4 shell(vec2 w, vec4 dens) {
 // torch a smaller one, and both cast the cluster's shadow, softer the further it falls
 const float WALL_Z = -0.85;
 
-// how much of the light toward dir is blocked by a cocoon, from a wall point
-float castBy(vec3 W, vec3 dir, float soft) {
+// a shadow is soft, so a smooth egg stands in for the shell's outline: one continuous
+// distance everywhere, with no seam across the tips and no spike at them
+float shadowDist(vec2 o) {
+  float rx = SR * (1.0 - ${f(SHELL.egg)} * o.y / SH);
+  return (1.0 - length(vec2(o.x / rx, o.y / SH))) * SR;
+}
+
+// how much of the light toward dir is blocked by a cocoon, from a wall point. only a cocoon
+// between the wall and the light can shade it: one beyond a lamp held behind the cluster
+// would otherwise be projected back through the lamp onto the wall
+float castBy(vec3 W, vec3 dir, float soft, float lightZ) {
   float s = 0.0;
   for (int j = 0; j < MAXC; j++) {
     if (j >= uN) break;
     vec4 co = uCo[j];
+    if (co.z <= W.z + 0.01 || co.z >= lightZ - 0.01) continue;
     float d = (co.z - W.z) / max(dir.z, 0.05);
     vec2 P = W.xy + dir.xy * d;
     vec2 o = unrot(P - co.xy, uCr[j].xy) / co.w;
-    float ey = abs(o.y) - SH;
-    float sd = ey < 0.0 ? shellR(o.y) - abs(o.x) : -ey - abs(o.x) * 0.5;
-    float pen = (0.006 + soft * d) / co.w;
+    float sd = shadowDist(o);
+    float pen = max(0.006 + soft * d, 0.006) / co.w;
     s = max(s, smoothstep(-pen, pen * 0.6, sd));
   }
   // light nearly along the wall throws shadows so long they would cover everything: let
@@ -679,15 +688,17 @@ float castBy(vec3 W, vec3 dir, float soft) {
   return s * smoothstep(0.04, 0.35, dir.z);
 }
 
-// the fine strands' shadow: their own coverage, shifted along the light and smudged
+// the fine strands' shadow: their own coverage, looked up toward the light from the wall
+// point (where the strands that shade it hang) and smudged
 float strandShade(vec2 w, vec3 dir) {
-  vec2 off = -dir.xy * (-0.55 - WALL_Z) / max(dir.z, 0.05);
+  vec2 off = dir.xy * (-0.42 - WALL_Z) / max(dir.z, 0.05);
   vec2 px = (w + off - uView.xy) / uView.zw * 0.5 + 0.5;
   ivec2 c = ivec2(px * uRes);
   ivec2 m = ivec2(uRes) - 1;
-  float b = texelFetch(uDens, clamp(c, ivec2(0), m), 0).b + texelFetch(uDens, clamp(c + ivec2(3, 1), ivec2(0), m), 0).b
-    + texelFetch(uDens, clamp(c + ivec2(-1, 3), ivec2(0), m), 0).b + texelFetch(uDens, clamp(c + ivec2(-3, -2), ivec2(0), m), 0).b;
-  return 1.0 - exp(-b * uDensK * 0.11);
+  ivec2 r = ivec2(max(2.0, uRes.y * 0.006));
+  float b = texelFetch(uDens, clamp(c, ivec2(0), m), 0).b + texelFetch(uDens, clamp(c + ivec2(r.x, r.x / 3), ivec2(0), m), 0).b
+    + texelFetch(uDens, clamp(c + ivec2(-r.x / 3, r.x), ivec2(0), m), 0).b + texelFetch(uDens, clamp(c - r, ivec2(0), m), 0).b;
+  return 1.0 - exp(-b * uDensK * 0.07);
 }
 
 void main() {
@@ -703,11 +714,11 @@ void main() {
   vec2 pd = (w - uSweep - kd.xy * 0.35) / (uView.w * 1.3);
   float pool = exp(-dot(pd, pd));
   float plaster = (vnoise(vec3(w * 140.0, 0.0)) - 0.5) * 0.035 + (vnoise(vec3(w * 22.0, 3.0)) - 0.5) * 0.04;
-  float keyShade = castBy(W, kd, 0.09) * 0.55 + strandShade(w, kd) * 0.25;
+  float keyShade = castBy(W, kd, 0.09, 1e3) * 0.55 + strandShade(w, kd) * 0.25;
   vec3 keyWall = WALL_KEY * kn * (0.75 + 0.45 * pool) * (0.45 + 0.55 * max(kd.z, 0.0) / 0.72) * (1.0 - keyShade);
   vec3 l;
   float tw = spot(W, l) * max(l.z, 0.0);
-  float torchShade = tw > 0.001 ? castBy(W, l, 0.05) * 0.7 + strandShade(w, l) * 0.3 : 0.0;
+  float torchShade = castBy(W, l, 0.05, uTorchW.z) * 0.7;
   vec3 torchWall = TORCH_C * tw * 1.2 * (1.0 - torchShade);
   // held behind the cluster, the torch grazes the wall: a pool round it, the cocoons dark
   // against it
@@ -716,7 +727,7 @@ void main() {
   vec3 tv = uTorchW.xyz - W;
   float r2 = dot(tv.xy, tv.xy) / 0.16;
   float glowB = 1.0 / (1.0 + r2 * (1.0 + 0.4 * r2));
-  torchWall += TORCH_C * uTorchW.w * behind * 0.9 * glowB * (1.0 - castBy(W, normalize(tv), 0.06) * 0.6);
+  torchWall += TORCH_C * uTorchW.w * behind * 0.9 * glowB * (1.0 - castBy(W, normalize(tv), 0.06, uTorchW.z) * 0.6);
   vec3 col = uBg * (1.0 + plaster) * (WALL_FILL + keyWall + torchWall);
 
   float under = 0.0;
@@ -725,7 +736,7 @@ void main() {
     useCocoon(i);
     // a soft shadow from this cocoon onto the ones already drawn behind it
     vec2 so = toObj(w - kd.xy * 0.06);
-    float sr = abs(so.y) < SH ? shellR(so.y) - abs(so.x) : -SH;
+    float sr = shadowDist(so);
     float shade = smoothstep(-0.05, 0.03, sr) * under;
     col *= 1.0 - 0.22 * shade;
     vec4 s = shell(w, dens);

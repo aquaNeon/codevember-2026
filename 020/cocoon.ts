@@ -305,10 +305,13 @@ export class Cocoon {
     // the cluster turns about its middle in depth. it is shallower in space than its depth
     // values: those drive how dim each one is, Z_SPREAD of them is where it really hangs
     const mz = -0.55;
+    // where it really hangs: far enough off the wall that turning never pushes a cocoon
+    // behind it or past the lamp held behind the cluster
+    const zc = -0.42;
     for (let i = 0; i < N; i++) {
       const c = CLUSTER[i];
       const z = (c[2] - mz) * Z_SPREAD;
-      this.depth[i] = mz - c[0] * sy * cp + z * cy * cp + (c[1] - CLUSTER_C[1]) * sp;
+      this.depth[i] = zc - c[0] * sy * cp + z * cy * cp + (c[1] - CLUSTER_C[1]) * sp;
     }
     // far to near, sorted in place
     for (let i = 1; i < N; i++) {
@@ -345,7 +348,7 @@ export class Cocoon {
       this.co[o + 1] = gy + sn * dx + cs * dy;
       const depth = this.depth[i];
       this.co[o + 2] = depth;
-      const seen = mz + (depth - mz) / Z_SPREAD;
+      const seen = mz + (depth - zc) / Z_SPREAD;
       this.co[o + 3] = c[3] * (1 + 0.12 * (seen - c[2]));
       // seen from the side the lean shortens; each also turns on its own axis with the cluster
       const tilt = Math.atan(Math.tan(c[4]) * Math.abs(cy)) + sw;

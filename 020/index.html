@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cocoon · Codevember 020</title>
+    <meta
+      name="description"
+      content="A silkworm cocoon hanging by its silk in the dark: felted, pebbled, wrapped in loose floss. Your pointer is a small torch. Codevember day 20."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#958474" />
+    <style>
+      /* WALL */
+      /* this day only: the page is the plaster wall the cocoons hang in front of, matched to
+         where the canvas meets it. doubled selector wins over the shared sheet */
+      :root:root {
+        --bone: #958474;
+        --bone-hi: #958474;
+        --ink: #2a221b;
+        --muted: #5b4d40;
+        --rule: rgb(42 34 27 / 0.18);
+        --accent: #7a5a3c;
+      }
+      html,
+      body {
+        background: #958474;
+      }
+      [data-cv-canvas] {
+        /* a finger drags sideways to turn it; up and down still scroll the page */
+        touch-action: pan-y;
+        user-select: none;
+        -webkit-touch-callout: none;
+        opacity: 0;
+        transition: opacity 1.2s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      [data-cv-canvas][data-cv-shown] {
+        opacity: 1;
+      }
+      /* drag to turn */
+      @media (hover: hover) {
+        [data-cv-live] [data-cv-canvas] {
+          cursor: grab;
+        }
+        [data-cv-live] [data-cv-canvas]:active {
+          cursor: grabbing;
+        }
+      }
+      /* the descender of the p would sit on the line below; doubled class wins over the shared sheet */
+      .cv-title.cv-title h1 {
+        margin-bottom: 0.2em;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .still,
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      /* SLIDER */
+      /* the light, from in front round to behind: a thin track and a small thumb in ink */
+      .slide {
+        display: grid;
+        gap: 6px;
+        width: min(180px, 44vw);
+        font-size: 10px;
+        color: var(--muted);
+      }
+      .slide-ends {
+        display: flex;
+        justify-content: space-between;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .slide input {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 28px;
+        margin: 0;
+        background: transparent;
+        cursor: pointer;
+        touch-action: pan-y;
+      }
+      .slide input::-webkit-slider-runnable-track {
+        height: 1px;
+        background: var(--ink);
+      }
+      .slide input::-moz-range-track {
+        height: 1px;
+        background: var(--ink);
+      }
+      .slide input::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 13px;
+        height: 13px;
+        margin-top: -6px;
+        border-radius: 50%;
+        background: var(--ink);
+        border: 3px solid var(--bone);
+        box-shadow: 0 0 0 1px var(--ink);
+      }
+      .slide input::-moz-range-thumb {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--ink);
+        border: 3px solid var(--bone);
+        box-shadow: 0 0 0 1px var(--ink);
+      }
+      /* no box: mouse focus shows nothing, keyboard focus rings the thumb */
+      .slide input:focus {
+        outline: none;
+      }
+      .slide input:focus-visible::-webkit-slider-thumb {
+        box-shadow:
+          0 0 0 1px var(--ink),
+          0 0 0 5px var(--bone),
+          0 0 0 6px var(--ink);
+      }
+      .slide input:focus-visible::-moz-range-thumb {
+        box-shadow:
+          0 0 0 1px var(--ink),
+          0 0 0 5px var(--bone),
+          0 0 0 6px var(--ink);
+      }
+      /* STILL */
+      /* a capture of the cocoon, for no webgl */
+      [data-cv-still] .still {
+        visibility: visible;
+      }
+      .still {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        background: #958474;
+      }
+      .still img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 020 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          aria-label="Six white silkworm cocoons hang together in a fine web against a soft warm grey wall, the nearest large, the rest further back. Drag sideways to turn them; the light slider moves the light from in front round to behind."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="Six white silkworm cocoons hanging together in a fine silk web against a soft warm grey wall"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 20<br />Bombyx mori, cocoon</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 020</span>
+        <h1>Cocoon<em>.</em></h1>
+        <p><em>Spun shut, and hanging by a thread.</em> Drag to turn; slide the light.</p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Light</dt>
+          <dd data-cv-light aria-live="polite">Back</dd>
+        </dl>
+        <label class="slide">
+          <span class="slide-ends" aria-hidden="true"><span>Front</span><span>Back</span></span>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value="100"
+            data-cv-angle
+            aria-label="Light, from in front to behind"
+          />
+        </label>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

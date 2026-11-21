@@ -258,6 +258,7 @@ uniform vec3  uUp;
 uniform vec3  uFwd;
 uniform vec2  uTan;
 uniform vec2  uRes;
+uniform vec2  uCross; // the bulb on screen, in pixels: where the polariscope's dark cross meets
 uniform float uFront; // how far the front has run from there
 uniform float uMilk;  // the whole drop crazed, just before it goes
 uniform float uTink;  // a glint from tapping the bulb
@@ -279,6 +280,14 @@ float cracks(vec3 q, float g) {
   return 1.0 - smoothstep(0.0, 0.09, sqrt(d2) - sqrt(d1));
 }
 
+// POLARISCOPE
+// what the crossed polarisers leave of the studio: a calm warm dark, a little lighter
+// toward the drop
+vec3 polariscope() {
+  vec2 d = (gl_FragCoord.xy - uCross) / uRes.y;
+  return mix(vec3(0.016, 0.014, 0.012), vec3(0.05, 0.045, 0.04), exp(-dot(d, d) / 0.6));
+}
+
 // MICHEL-LEVY
 // white light between crossed polarisers through a retardation of r nm: each wavelength
 // passes as sin^2(pi r / lambda), summed through rough colour matching curves. black,
@@ -298,19 +307,50 @@ vec3 fringe(float r) {
   return c / w;
 }
 
+// the fringe colour softened: averaged over a spread of retardations that widens with
+// order, so neighbouring bands blend the way they do in a photograph, and a little
+// desaturated toward cream
+vec3 softFringe(float r) {
+  vec3 c = vec3(0.0);
+  for (int i = 0; i < 5 * uOne; i++) {
+    c += fringe(r * (1.0 + (float(i) - 2.0) * 0.06) + (float(i) - 2.0) * 12.0);
+  }
+  c /= 5.0;
+  // warmed a touch, the way the photographs' golds and ambers sit
+  float l = dot(c, vec3(0.3, 0.5, 0.2));
+  return pow(mix(vec3(l), c, 1.05), vec3(1.3)) * vec3(1.16, 0.97, 0.76);
+}
+
 // STRESS
 // the skin in compression, the core in tension, smooth between; integrated through the
 // glass along the first crossing it is the retardation the polariser sees
-float retard(vec3 a, vec3 b) {
-  float len = length(b - a);
+float retard(vec3 a, vec3 d) {
+  // the far side found by even steps then halving: smooth across the glass, where a
+  // sphere-traced march would run out of steps unevenly and leave rings
+  float t0 = 0.0;
+  float t1 = 0.0;
+  for (int i = 0; i < 40 * uOne; i++) {
+    t1 += 0.06;
+    if (whole(a + d * t1) > 0.0) break;
+    t0 = t1;
+  }
+  for (int i = 0; i < 6 * uOne; i++) {
+    float m = (t0 + t1) * 0.5;
+    if (whole(a + d * m) > 0.0) t1 = m;
+    else t0 = m;
+  }
+  vec3 b = a + d * t0;
+  float len = t0;
   float acc = 0.0;
   for (int i = 0; i < 28 * uOne; i++) {
     vec3 x = mix(a, b, (float(i) + 0.5) / 28.0);
     float g = girth(x);
     float rel = clamp(-whole(x) / g, 0.0, 1.0);
-    acc += mix(-1.5, 0.75, smoothstep(0.1, 0.35, rel)) / g;
+    acc += mix(-1.5, 0.75, smoothstep(0.0, 0.6, rel)) / g;
   }
-  return abs(acc) * len / 28.0;
+  // a smooth absolute value: the neutral zone is a soft dark band, not a hard black line
+  float v = acc * len / 28.0;
+  return sqrt(v * v + 0.02);
 }
 
 void main() {
@@ -323,7 +363,7 @@ void main() {
   bool hit = uHere > 0.0 && hitDrop(ro, rl, t);
   vec3 q = ro + rl * t;
   if (!hit) {
-    o = vec4(display(bg * (1.0 - 0.88 * uPol)), 1.0);
+    o = vec4(display(mix(bg, polariscope(), uPol)), 1.0);
     return;
   }
   vec3 n = normal(q);
@@ -331,15 +371,17 @@ void main() {
   float c = max(dot(-rd, nw), 0.0);
   float fr = 0.04 + 0.96 * pow(1.0 - c, 5.0);
   vec3 rr = reflect(rd, nw);
-  vec3 refl = rr.y < -0.05 ? studioSeen(uEye + rd * t, rr) : env(rr);
+  // the room and the floor in the skin, blended where they meet so no seam shows
+  float down = 1.0 - smoothstep(-0.15, 0.0, rr.y);
+  vec3 refl = mix(env(rr), studioSeen(uEye + rd * t, rr), down);
   refl += uTink * 30.0 * pow(max(dot(rr, normalize(uKey + vec3(0.15, -0.1, 0.1))), 0.0), 300.0);
 
   // THROUGH
   vec3 d = refract(rl, n, 1.0 / IOR);
+  vec3 d0 = d;
   vec3 p = q - n * 0.003;
   float path = 0.0;
-  vec3 first = q - n * 0.003; // the first crossing, for the stress
-  vec3 firstEnd = first;
+  vec3 first = q - n * 0.003; // where the light enters, for the stress
   float haze = 0.0;
   float lines = 0.0;
   float glow = 0.0;
@@ -373,7 +415,6 @@ void main() {
     }
     path += s;
     p += d * s;
-    if (bounce == 0) firstEnd = p;
     vec3 ne = normal(p);
     vec3 e = refract(d, -ne, IOR);
     if (dot(e, e) > 0.0) {
@@ -391,9 +432,16 @@ void main() {
   // FRINGES
   // the stress frozen in the glass: a faint rainbow normally, vivid under polarised light,
   // the glass's own reflections still riding on top
-  vec3 fc = fringe(retard(first, firstEnd) * 1300.0);
+  // low orders through the bulb, denser only along the thin tail and the neck
+  float thin = 1.0 - smoothstep(JOIN_X - 0.6, JOIN_X + 0.4, first.x);
+  // compressed toward a ceiling: broad first and second orders, never a stack of pale ones
+  // the bulb held in the first order and the start of the second: cream, gold, orange,
+  // magenta, a deep blue band; the tail runs a little further
+  float rmax = mix(680.0, 1500.0, thin);
+  vec3 fc = softFringe(rmax * (1.0 - exp(-retard(first, d0) * mix(3.6, 0.9, thin))));
   col *= mix(vec3(1.0), 0.6 + 0.8 * fc, 0.08);
-  vec3 polar = fc * 1.5 * (0.55 + 0.45 * dot(behindL, vec3(0.33))) + fr * refl * 0.9;
+  // lit evenly from behind: no seams from the refracted layers or the internal bounce
+  vec3 polar = fc * 1.55 + fr * refl * 0.9;
   col = mix(col, polar, uPol);
 
   // CRAZING
@@ -403,7 +451,7 @@ void main() {
   col = mix(col, vec3(1.0) * (AMB * 6.0 + KEY_E * 0.6 * lit), 1.0 - exp(-lines * 0.9));
   col += vec3(1.0, 0.95, 0.85) * glow * 9.0;
 
-  vec3 back = bg * (1.0 - 0.88 * uPol);
+  vec3 back = mix(bg, polariscope(), uPol);
   o = vec4(display(mix(back, col, uHere)), 1.0);
 }`;
 

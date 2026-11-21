@@ -77,6 +77,7 @@ export class Shatter {
   private res = new Float32Array(2);
   private viewProj = new Float32Array(16);
   private px = 1;
+  private cross = new Float32Array(2);
 
   // LIGHT
   private key = new Float32Array(KEY.dir);
@@ -417,6 +418,7 @@ export class Shatter {
     gl.uniform3fv(pr.u.uFwd, this.fwd);
     gl.uniform2fv(pr.u.uTan, this.tan);
     gl.uniform2fv(pr.u.uRes, this.res);
+    gl.uniform2fv(pr.u.uCross, this.cross);
     gl.uniform3fv(pr.u.uKey, this.key);
     gl.uniform1f(pr.u.uHere, here);
     gl.uniform1f(pr.u.uPol, this.pol);
@@ -517,6 +519,12 @@ export class Shatter {
     m[13] = py * tu;
     m[14] = a * tf + b;
     m[15] = -tf;
+    // the bulb's centre on screen, for the polariscope's cross
+    const bx = DROP.AT[0];
+    const bz = DROP.AT[2];
+    const cw = m[3] * bx + m[7] + m[11] * bz + m[15];
+    this.cross[0] = (((m[0] * bx + m[4] + m[8] * bz + m[12]) / cw) * 0.5 + 0.5) * pw;
+    this.cross[1] = (((m[1] * bx + m[5] + m[9] * bz + m[13]) / cw) * 0.5 + 0.5) * ph;
     this.sized = true;
   }
 

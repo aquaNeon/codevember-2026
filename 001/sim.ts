@@ -1,3 +1,5 @@
+import { benchY } from "./bench";
+
 // SOFT BODY
 // small-step xpbd: shell particles from an icosphere plus an interior lattice,
 // distance links that yield plastically, one volume constraint over the shell,
@@ -7,11 +9,11 @@ export const SHAPE = { rx: 1.4, ry: 0.26, rz: 1.18, drop: 0.03 }; // a slack rou
 
 const SUBSTEPS = 8;
 const GRAVITY = -16;
-const DAMP_PER_S = 2.5; // lower = more wobble
+const DAMP_PER_S = 4.2; // lower = more wobble; dough is heavy and lazy
 const SHELL_COMPLIANCE = 6e-5;
 const CORE_COMPLIANCE = 2e-4;
 const VOLUME_COMPLIANCE = 0;
-const YIELD = 0.04; // strain before the dough keeps its new shape
+const YIELD = 0.022; // strain before the dough keeps its new shape
 const PLASTIC_TAU_S = 0.05;
 const REST_MIN = 0.45;
 const REST_MAX = 1.6; // longest a link may plastically grow
@@ -36,11 +38,23 @@ const GRAB_PULL = 0.45;
 const SLEEP_SPEED = 0.06;
 const HASH_SIZE = 4096;
 const TENSION = 0.02; // surface tension per substep, irons out spikes and creases
-const SLUMP_TENSION = 0.024; // stronger while slumping, pulls thin strands back into the body
 const FUSE_TAU_S = 4; // folded layers melt into each other once things slow down
 const FUSE_SPEED = 0.6;
-const SLUMP_S = 1.2; // after a release the dough flows a little and sinks into itself
-const SLUMP_TAU_S = 2.5;
+const SLUMP_S = 6; // after a release the dough creeps lower and wider for a few seconds
+const SLUMP_TAU_S = 1.6;
+const SLUMP_SOFT = 9; // how much softer the links are while it creeps, eases back to 1
+const CREEP_SLIDE = 0.85; // share of the bench grip let go while creeping
+const CREEP_TENSION = 0.002; // surface tension once let go, low or the lump balls up
+const SLUMP_DAMP = 9; // extra drag while creeping, slow and heavy
+// VISCOSITY
+// neighbours share their velocity, so the inside moves as one mass and nothing rolls under the skin
+const VISC = 0.35; // per substep, let go
+const VISC_HELD = 0.05; // while held the strip stays quick to the hand
+const FREE_SPEED = 2.6; // cap on any particle's speed relative to the mass when nothing holds it
+const DAMP_HELD = 2.5; // drag inside the mass while a hand holds it, light so a fold starts easily
+const BULK_DAMP = 0.15;
+const FREE_S = 0.35; // how long the switch from held to let go takes // air drag on the whole lump
+const CORE_FALL = 0.9; // inner particles keep this share of vertical speed per substep when let go
 const COLLIDE_EVERY = 1; // less often is cheaper but layers jitter
 
 export type Mesh = { pos: Float32Array; faces: Uint16Array };
@@ -132,8 +146,8 @@ export class DoughSim {
   readonly x: Float32Array;
   private p: Float32Array;
   private v: Float32Array;
-  private spawn: Float32Array;
-  private stuck: Uint8Array;
+  readonly spawn: Float32Array;
+  readonly stuck: Uint8Array;
   private pin: Float32Array;
   private mem: Float32Array;
   private adjStart: Int32Array;
@@ -153,10 +167,15 @@ export class DoughSim {
   private cellItems: Int32Array;
   private cellOf: Int32Array;
 
-  private grabIdx: Int32Array;
-  private grabW: Float32Array;
+  readonly grabIdx: Int32Array;
+  readonly grabW: Float32Array;
   private grabOff: Float32Array;
-  private grabN = 0;
+  grabN = 0;
+  private shellLinks = 0;
+  private cnt: Float32Array;
+  private dv: Float32Array;
+  private mean = new Float32Array(3);
+  private vc: Float32Array;
   private gx = 0;
   private gy = 0;
   private gz = 0;
@@ -168,6 +187,9 @@ export class DoughSim {
   // true while folding: the part on the bench is pinned instead of only dragged
   pinned = false;
   private slump = 0;
+  private soft = 1;
+  private free = 1;
+  private fr = 1;
 
   constructor(shell: Mesh) {
     const { rx, ry, rz, drop } = SHAPE;
@@ -212,6 +234,9 @@ export class DoughSim {
     this.grabIdx = new Int32Array(this.n);
     this.grabW = new Float32Array(this.n);
     this.grabOff = new Float32Array(this.n * 3);
+    this.cnt = new Float32Array(sN);
+    this.dv = new Float32Array(this.n * 3);
+    this.vc = new Float32Array(this.n);
 
     // LINKS
     const a: number[] = [];
@@ -231,6 +256,7 @@ export class DoughSim {
         c.push(SHELL_COMPLIANCE);
       }
     }
+    this.shellLinks = a.length;
     const deg = new Int32Array(sN + 1);
     for (let k = 0; k < a.length; k++) {
       deg[a[k]]++;
@@ -277,7 +303,19 @@ export class DoughSim {
     const h = dt / SUBSTEPS;
     const n = this.n;
     const { x, p, v } = this;
-    const damp = Math.exp(-this.damp * h);
+    // eases out slowly, so the creep keeps going for seconds and fades instead of stopping
+    const creepK = this.slump > 0 ? Math.sqrt(this.slump / SLUMP_S) : 0;
+    // drag works on motion inside the mass only; the lump as a whole falls at full gravity
+    const held = this.grabN > 0;
+    // RELEASE RAMP
+    // everything that differs between held and let go eases over FREE_S, so nothing twitches on release
+    this.free = held ? 0 : Math.min(1, this.free + dt / FREE_S);
+    const fr = this.free * this.free * (3 - 2 * this.free);
+    const rate = DAMP_HELD + (this.damp + SLUMP_DAMP * creepK - DAMP_HELD) * fr;
+    const damp = Math.exp(-rate * h);
+    const bulk = Math.exp(-BULK_DAMP * h);
+    this.soft = 1 + SLUMP_SOFT * creepK * fr;
+    this.fr = fr;
 
     let maxV2 = 0;
     for (let s = 0; s < SUBSTEPS; s++) {
@@ -295,20 +333,38 @@ export class DoughSim {
       if (s % COLLIDE_EVERY === COLLIDE_EVERY - 1) this.collide();
       this.floor();
 
-      maxV2 = 0;
+      let mx = 0,
+        my = 0,
+        mz = 0;
       for (let i = 0; i < n * 3; i += 3) {
-        const vx = ((p[i] - x[i]) / h) * damp;
-        const vy = ((p[i + 1] - x[i + 1]) / h) * damp;
-        const vz = ((p[i + 2] - x[i + 2]) / h) * damp;
-        v[i] = vx;
-        v[i + 1] = vy;
-        v[i + 2] = vz;
+        v[i] = (p[i] - x[i]) / h;
+        v[i + 1] = (p[i + 1] - x[i + 1]) / h;
+        v[i + 2] = (p[i + 2] - x[i + 2]) / h;
+        mx += v[i];
+        my += v[i + 1];
+        mz += v[i + 2];
         x[i] = p[i];
         x[i + 1] = p[i + 1];
         x[i + 2] = p[i + 2];
+      }
+      mx /= n;
+      my /= n;
+      mz /= n;
+      maxV2 = 0;
+      for (let i = 0; i < n * 3; i += 3) {
+        const vx = mx * bulk + (v[i] - mx) * damp;
+        const vy = my * bulk + (v[i + 1] - my) * damp;
+        const vz = mz * bulk + (v[i + 2] - mz) * damp;
+        v[i] = vx;
+        v[i + 1] = vy;
+        v[i + 2] = vz;
         const s2 = vx * vx + vy * vy + vz * vz;
         if (s2 > maxV2) maxV2 = s2;
       }
+      this.mean[0] = mx * bulk;
+      this.mean[1] = my * bulk;
+      this.mean[2] = mz * bulk;
+      this.viscous();
     }
     this.yieldRest(dt);
     this.fuse(dt);
@@ -318,7 +374,7 @@ export class DoughSim {
   }
 
   private links_(h: number) {
-    const { p, ca, cb, rest, rest0, comp } = this;
+    const { p, ca, cb, rest, rest0, comp, soft } = this;
     const ih2 = 1 / (h * h);
     for (let k = 0; k < ca.length; k++) {
       const i = ca[k] * 3,
@@ -331,7 +387,9 @@ export class DoughSim {
       // past the hard limit the link stops being soft, so a fast yank can't tear bits off
       const lim = Math.min(rest[k] * TEAR_MAX, rest0[k] * SPAN_MAX);
       const hard = len > lim;
-      const corr = hard ? (len - lim) / (len * 2) : (len - rest[k]) / (len * (2 + comp[k] * ih2));
+      const corr = hard
+        ? (len - lim) / (len * 2)
+        : (len - rest[k]) / (len * (2 + comp[k] * soft * ih2));
       p[i] -= dx * corr;
       p[i + 1] -= dy * corr;
       p[i + 2] -= dz * corr;
@@ -475,12 +533,15 @@ export class DoughSim {
     const holding = this.pinned;
     const slip2 = PIN_SLIP * PIN_SLIP;
     const brk = holding ? BREAK_HELD : BREAK;
+    // while it creeps the floured base slides out a little, so the lump can spread
+    const grip = this.grip * (1 - CREEP_SLIDE * (this.slump > 0 ? this.slump / SLUMP_S : 0));
     for (let i = 0; i < n; i++) {
       const o = i * 3;
       if (p[o + 1] > CEIL_Y) p[o + 1] = CEIL_Y;
       if (p[o + 2] < BACK_Z) p[o + 2] = BACK_Z;
-      if (p[o + 1] < RADIUS) {
-        p[o + 1] = RADIUS;
+      const fy = benchY(p[o], p[o + 2]) + RADIUS;
+      if (p[o + 1] < fy) {
+        p[o + 1] = fy;
         if (!stuck[i]) {
           stuck[i] = 1;
           pin[o] = p[o];
@@ -500,18 +561,18 @@ export class DoughSim {
           p[o + 2] = pin[o + 2] + dz * PIN_GIVE;
         }
       } else {
-        p[o] -= (p[o] - x[o]) * this.grip;
-        p[o + 2] -= (p[o + 2] - x[o + 2]) * this.grip;
+        p[o] -= (p[o] - x[o]) * grip;
+        p[o + 2] -= (p[o + 2] - x[o + 2]) * grip;
         pin[o] = p[o];
         pin[o + 2] = p[o + 2];
       }
       // upward: held until pulled past BREAK
-      const dy = p[o + 1] - RADIUS;
+      const dy = p[o + 1] - fy;
       if (dy > brk) {
         stuck[i] = 0;
         continue;
       }
-      p[o + 1] = RADIUS + dy * keep;
+      p[o + 1] = fy + dy * keep;
     }
   }
 
@@ -536,7 +597,8 @@ export class DoughSim {
       avg[i * 3 + 1] = sy * inv;
       avg[i * 3 + 2] = sz * inv;
     }
-    const k = this.slump > 0 ? SLUMP_TENSION : TENSION;
+    // right after release it irons spikes; while creeping it barely holds, or the lump would ball up
+    const k = TENSION + (CREEP_TENSION - TENSION) * this.fr;
     for (let i = 0; i < shellN * 3; i++) p[i] += (avg[i] - p[i]) * k;
   }
 
@@ -598,31 +660,47 @@ export class DoughSim {
       uz /= ul;
     }
     const { along, deep, tall } = GRAB;
+    const hx0 = hx,
+      hz0 = hz;
     let g = 0;
-    for (let i = 0; i < n; i++) {
-      const o = i * 3;
-      const dx = x[o] - hx,
-        dy = x[o + 1] - hy,
-        dz = x[o + 2] - hz;
-      let e: number;
-      if (strip) {
-        const inward = dx * ux + dz * uz;
-        const side = dx * -uz + dz * ux;
-        e = (side / along) ** 2 + (inward / deep) ** 2 + (dy / tall) ** 2;
-      } else e = (dx * dx + dy * dy + dz * dz) / (deep * deep * 2);
-      if (e >= 1) continue;
-      const f = 1 - e;
-      this.grabIdx[g] = i;
-      this.grabW[g] = f * f;
-      this.grabOff[g * 3] = dx;
-      this.grabOff[g * 3 + 1] = dy;
-      this.grabOff[g * 3 + 2] = dz;
-      g++;
+    // the skin sits a little outside the particles; a hit on the steep rim may miss the strip,
+    // so step once toward the middle before giving up
+    for (let tryN = 0; tryN < 2 && g === 0; tryN++) {
+      if (tryN) {
+        if (!strip) break;
+        hx -= ux * deep;
+        hz -= uz * deep;
+      }
+      for (let i = 0; i < n; i++) {
+        const o = i * 3;
+        const dx = x[o] - hx,
+          dy = x[o + 1] - hy,
+          dz = x[o + 2] - hz;
+        let e: number;
+        if (strip) {
+          const inward = dx * ux + dz * uz;
+          const side = dx * -uz + dz * ux;
+          e = (side / along) ** 2 + (inward / deep) ** 2 + (dy / tall) ** 2;
+        } else e = (dx * dx + dy * dy + dz * dz) / (deep * deep * 2);
+        if (e >= 1) continue;
+        const f = 1 - e;
+        this.grabIdx[g] = i;
+        this.grabW[g] = f * f;
+        this.grabOff[g * 3] = dx;
+        this.grabOff[g * 3 + 1] = dy;
+        this.grabOff[g * 3 + 2] = dz;
+        g++;
+      }
+    }
+    // offsets stay relative to where the hand actually is
+    for (let k = 0; k < g; k++) {
+      this.grabOff[k * 3] += hx - hx0;
+      this.grabOff[k * 3 + 2] += hz - hz0;
     }
     this.grabN = g;
-    this.gx = hx;
+    this.gx = hx0;
     this.gy = hy;
-    this.gz = hz;
+    this.gz = hz0;
   }
 
   drag(tx: number, ty: number, tz: number) {
@@ -664,7 +742,97 @@ export class DoughSim {
     this.slump = SLUMP_S;
   }
 
-  // push external points (the towel) out of the dough, using the hash from the last substep
+  // XSPH style: each particle eases toward the mean velocity of its linked neighbours
+  private viscous() {
+    const { v, ca, cb, dv, vc, n, shellN } = this;
+    dv.fill(0);
+    vc.fill(0);
+    for (let k = 0; k < ca.length; k++) {
+      const a = ca[k],
+        b = cb[k];
+      const i = a * 3,
+        j = b * 3;
+      const dx = v[j] - v[i],
+        dy = v[j + 1] - v[i + 1],
+        dz = v[j + 2] - v[i + 2];
+      dv[i] += dx;
+      dv[i + 1] += dy;
+      dv[i + 2] += dz;
+      dv[j] -= dx;
+      dv[j + 1] -= dy;
+      dv[j + 2] -= dz;
+      vc[a]++;
+      vc[b]++;
+    }
+    const held = this.grabN > 0;
+    const fr = this.fr;
+    const c = VISC_HELD + (VISC - VISC_HELD) * fr;
+    const mx = this.mean[0],
+      my = this.mean[1],
+      mz = this.mean[2];
+    const cap2 = FREE_SPEED * FREE_SPEED;
+    for (let i = 0; i < n; i++) {
+      const o = i * 3;
+      if (vc[i]) {
+        const k = c / vc[i];
+        v[o] += dv[o] * k;
+        v[o + 1] += dv[o + 1] * k;
+        v[o + 2] += dv[o + 2] * k;
+      }
+      if (held) continue;
+      // settles by flowing, not by dropping: inner vertical motion and any one particle's
+      // speed are limited relative to the whole mass
+      const rx = v[o] - mx,
+        ry = v[o + 1] - my,
+        rz = v[o + 2] - mz;
+      const ky = i >= shellN ? 1 + (CORE_FALL - 1) * fr : 1;
+      const s2 = rx * rx + ry * ry * ky * ky + rz * rz;
+      const f = s2 > cap2 ? 1 + (FREE_SPEED / Math.sqrt(s2) - 1) * fr : 1;
+      v[o] = mx + rx * f;
+      v[o + 1] = my + ry * ky * f;
+      v[o + 2] = mz + rz * f;
+    }
+  }
+
+  // THUD
+  // a landing flap loses its speed at once: dough lands dead, it does not bounce
+  deaden(cx: number, cz: number, r: number, keep: number) {
+    const { x, v, n } = this;
+    const r2 = r * r;
+    for (let i = 0; i < n; i++) {
+      const o = i * 3;
+      const dx = x[o] - cx,
+        dz = x[o + 2] - cz;
+      if (dx * dx + dz * dz > r2) continue;
+      v[o] *= keep;
+      v[o + 1] *= keep;
+      v[o + 2] *= keep;
+    }
+  }
+
+  // STRAIN
+  // how far each shell particle's skin is stretched from the fresh lump, mean link length over original
+  strain(out: Float32Array) {
+    const { x, ca, cb, rest0, cnt, shellN } = this;
+    out.fill(0, 0, shellN);
+    cnt.fill(0);
+    for (let k = 0; k < this.shellLinks; k++) {
+      const a = ca[k],
+        b = cb[k];
+      const i = a * 3,
+        j = b * 3;
+      const dx = x[i] - x[j],
+        dy = x[i + 1] - x[j + 1],
+        dz = x[i + 2] - x[j + 2];
+      const r = Math.sqrt(dx * dx + dy * dy + dz * dz) / rest0[k];
+      out[a] += r;
+      out[b] += r;
+      cnt[a]++;
+      cnt[b]++;
+    }
+    for (let i = 0; i < shellN; i++) out[i] = cnt[i] ? out[i] / cnt[i] : 1;
+  }
+
   // mean particle position, written into out
   centroid(out: Float32Array) {
     const { x, n } = this;

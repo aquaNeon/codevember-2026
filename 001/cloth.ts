@@ -2,12 +2,16 @@ import {
   BufferAttribute,
   BufferGeometry,
   CanvasTexture,
+  Color,
   DoubleSide,
   Mesh,
-  MeshStandardMaterial,
+  MeshPhysicalMaterial,
+  RepeatWrapping,
   SRGBColorSpace,
+  Vector2,
 } from "three";
 import type { Blobs } from "./blobs";
+import { benchY } from "./bench";
 
 // TEA TOWEL
 // small-step pbd grid that drops over the resting dough and gets whipped off for a new dough
@@ -33,13 +37,24 @@ const DOUGH_FRICTION = 0.6; // keeps the towel from sliding off the dough
 const LIFT_PULL = 0.25;
 const LIFT_SPEED = 6;
 const GONE_Y = 6;
-const TEX_PX = 512;
+const TEX_PX = 1024;
+const SUB = 3; // render vertices per sim cell edge, smooth folds and silhouettes
+const RSIDE = (SIDE - 1) * SUB + 1;
+const WEAVE_PX = 64;
+const WEAVE_THREADS = 8; // threads per weave tile
+const WEAVE_REPEAT = 34;
+const LINEN = "#efe8dc";
+const STRIPE = "#44608f";
 
 export class Cloth {
   readonly mesh: Mesh;
   private geo = new BufferGeometry();
-  private mat: MeshStandardMaterial;
-  private tex: CanvasTexture;
+  private mat: MeshPhysicalMaterial;
+  private tex: CanvasTexture | null = null;
+  private weave: CanvasTexture | null = null;
+  // catmull-rom weights per sub step, and the rows resampled along x
+  private cw = new Float32Array(SUB * 4);
+  private rows = new Float32Array(SIDE * RSIDE * 3);
   private n = SIDE * SIDE;
   private x: Float32Array;
   private p: Float32Array;
@@ -71,8 +86,17 @@ export class Cloth {
     this.v = new Float32Array(n * 3);
     this.pre = new Float32Array(n * 3);
     this.touch = new Uint8Array(n);
-    this.pos = new Float32Array(n * 3);
-    this.nor = new Float32Array(n * 3);
+    this.pos = new Float32Array(RSIDE * RSIDE * 3);
+    this.nor = new Float32Array(RSIDE * RSIDE * 3);
+    for (let s = 0; s < SUB; s++) {
+      const t = s / SUB,
+        t2 = t * t,
+        t3 = t2 * t;
+      this.cw[s * 4] = 0.5 * (-t3 + 2 * t2 - t);
+      this.cw[s * 4 + 1] = 0.5 * (3 * t3 - 5 * t2 + 2);
+      this.cw[s * 4 + 2] = 0.5 * (-3 * t3 + 4 * t2 + t);
+      this.cw[s * 4 + 3] = 0.5 * (t3 - t2);
+    }
 
     // LINKS
     // structural, shear and skip-one bend
@@ -107,24 +131,25 @@ export class Cloth {
     }
 
     // MESH
-    const uv = new Float32Array(n * 2);
-    for (let j = 0; j < SIDE; j++) {
-      for (let i = 0; i < SIDE; i++) {
-        uv[(j * SIDE + i) * 2] = i / (SIDE - 1);
-        uv[(j * SIDE + i) * 2 + 1] = j / (SIDE - 1);
+    const R = RSIDE;
+    const uv = new Float32Array(R * R * 2);
+    for (let j = 0; j < R; j++) {
+      for (let i = 0; i < R; i++) {
+        uv[(j * R + i) * 2] = i / (R - 1);
+        uv[(j * R + i) * 2 + 1] = j / (R - 1);
       }
     }
-    const idx = new Uint16Array((SIDE - 1) * (SIDE - 1) * 6);
+    const idx = new Uint16Array((R - 1) * (R - 1) * 6);
     let t = 0;
-    for (let j = 0; j < SIDE - 1; j++) {
-      for (let i = 0; i < SIDE - 1; i++) {
-        const q = j * SIDE + i;
+    for (let j = 0; j < R - 1; j++) {
+      for (let i = 0; i < R - 1; i++) {
+        const q = j * R + i;
         idx[t++] = q;
-        idx[t++] = q + SIDE;
+        idx[t++] = q + R;
         idx[t++] = q + 1;
         idx[t++] = q + 1;
-        idx[t++] = q + SIDE;
-        idx[t++] = q + SIDE + 1;
+        idx[t++] = q + R;
+        idx[t++] = q + R + 1;
       }
     }
     this.geo.setIndex(new BufferAttribute(idx, 1));
@@ -132,14 +157,45 @@ export class Cloth {
     this.geo.setAttribute("normal", new BufferAttribute(this.nor, 3));
     this.geo.setAttribute("uv", new BufferAttribute(uv, 2));
 
-    this.tex = new CanvasTexture(towel());
-    this.tex.colorSpace = SRGBColorSpace;
-    this.tex.anisotropy = 4;
-    this.mat = new MeshStandardMaterial({ map: this.tex, roughness: 0.95, side: DoubleSide });
+    this.mat = new MeshPhysicalMaterial({
+      color: LINEN,
+      roughness: 0.88,
+      sheen: 1,
+      sheenColor: new Color("#8a8072"),
+      sheenRoughness: 0.55,
+      side: DoubleSide,
+    });
     this.mesh = new Mesh(this.geo, this.mat);
     this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
     this.mesh.frustumCulled = false;
     this.mesh.visible = false;
+  }
+
+  // textures are drawn on first need, not at load
+  prep() {
+    if (this.tex) return;
+    this.tex = new CanvasTexture(towel());
+    this.tex.colorSpace = SRGBColorSpace;
+    this.tex.anisotropy = 8;
+    this.weave = new CanvasTexture(weave());
+    this.weave.wrapS = this.weave.wrapT = RepeatWrapping;
+    this.weave.repeat.set(WEAVE_REPEAT, WEAVE_REPEAT);
+    this.weave.anisotropy = 8;
+    this.mat.color.set(0xffffff);
+    this.mat.map = this.tex;
+    this.mat.normalMap = this.weave;
+    this.mat.normalScale = new Vector2(0.4, 0.4);
+    this.mat.needsUpdate = true;
+  }
+
+  // particles in the bottom layer, for the contact shadow on the board
+  get points() {
+    return this.x;
+  }
+
+  get count() {
+    return this.mesh.visible ? this.n : 0;
   }
 
   // a little skewed so it never lands square
@@ -166,6 +222,7 @@ export class Cloth {
     this.calm = 0;
     this.age = 0;
     this.lifting = false;
+    this.prep();
     this.mesh.visible = true;
     this.sync();
   }
@@ -256,8 +313,9 @@ export class Cloth {
         p[i + 2] -= (p[i + 2] - x[i + 2]) * DOUGH_FRICTION;
       }
       for (let i = 0; i < n * 3; i += 3) {
-        if (p[i + 1] < FLOOR_Y) {
-          p[i + 1] = FLOOR_Y;
+        const fy = benchY(p[i], p[i + 2]) + FLOOR_Y;
+        if (p[i + 1] < fy) {
+          p[i + 1] = fy;
           touch[i / 3] = 1;
           p[i] -= (p[i] - x[i]) * 0.8;
           p[i + 2] -= (p[i + 2] - x[i + 2]) * 0.8;
@@ -295,23 +353,73 @@ export class Cloth {
   }
 
   // GEOMETRY
-  // positions plus grid normals from central differences
+  // sim grid resampled with catmull-rom along rows, then columns; normals from the fine grid
   private sync() {
-    const { x, pos, nor } = this;
-    pos.set(x);
+    const { x, pos, nor, rows, cw } = this;
+    const R = RSIDE;
     for (let j = 0; j < SIDE; j++) {
-      for (let i = 0; i < SIDE; i++) {
-        const o = (j * SIDE + i) * 3;
-        const l = (j * SIDE + Math.max(i - 1, 0)) * 3,
-          r = (j * SIDE + Math.min(i + 1, SIDE - 1)) * 3;
-        const d = (Math.max(j - 1, 0) * SIDE + i) * 3,
-          u = (Math.min(j + 1, SIDE - 1) * SIDE + i) * 3;
-        const ax = x[r] - x[l],
-          ay = x[r + 1] - x[l + 1],
-          az = x[r + 2] - x[l + 2];
-        const bx = x[u] - x[d],
-          by = x[u + 1] - x[d + 1],
-          bz = x[u + 2] - x[d + 2];
+      for (let i = 0; i < R; i++) {
+        const c = Math.min(SIDE - 2, Math.floor(i / SUB));
+        const s = i - c * SUB;
+        const o = (j * R + i) * 3;
+        if (s === SUB) {
+          const q = (j * SIDE + SIDE - 1) * 3;
+          rows[o] = x[q];
+          rows[o + 1] = x[q + 1];
+          rows[o + 2] = x[q + 2];
+          continue;
+        }
+        const a = (j * SIDE + Math.max(0, c - 1)) * 3,
+          b = (j * SIDE + c) * 3,
+          d = (j * SIDE + c + 1) * 3,
+          e = (j * SIDE + Math.min(SIDE - 1, c + 2)) * 3;
+        const w0 = cw[s * 4],
+          w1 = cw[s * 4 + 1],
+          w2 = cw[s * 4 + 2],
+          w3 = cw[s * 4 + 3];
+        rows[o] = x[a] * w0 + x[b] * w1 + x[d] * w2 + x[e] * w3;
+        rows[o + 1] = x[a + 1] * w0 + x[b + 1] * w1 + x[d + 1] * w2 + x[e + 1] * w3;
+        rows[o + 2] = x[a + 2] * w0 + x[b + 2] * w1 + x[d + 2] * w2 + x[e + 2] * w3;
+      }
+    }
+    for (let j = 0; j < R; j++) {
+      const c = Math.min(SIDE - 2, Math.floor(j / SUB));
+      const s = j - c * SUB;
+      for (let i = 0; i < R; i++) {
+        const o = (j * R + i) * 3;
+        if (s === SUB) {
+          const q = ((SIDE - 1) * R + i) * 3;
+          pos[o] = rows[q];
+          pos[o + 1] = rows[q + 1];
+          pos[o + 2] = rows[q + 2];
+          continue;
+        }
+        const a = (Math.max(0, c - 1) * R + i) * 3,
+          b = (c * R + i) * 3,
+          d = ((c + 1) * R + i) * 3,
+          e = (Math.min(SIDE - 1, c + 2) * R + i) * 3;
+        const w0 = cw[s * 4],
+          w1 = cw[s * 4 + 1],
+          w2 = cw[s * 4 + 2],
+          w3 = cw[s * 4 + 3];
+        pos[o] = rows[a] * w0 + rows[b] * w1 + rows[d] * w2 + rows[e] * w3;
+        pos[o + 1] = rows[a + 1] * w0 + rows[b + 1] * w1 + rows[d + 1] * w2 + rows[e + 1] * w3;
+        pos[o + 2] = rows[a + 2] * w0 + rows[b + 2] * w1 + rows[d + 2] * w2 + rows[e + 2] * w3;
+      }
+    }
+    for (let j = 0; j < R; j++) {
+      for (let i = 0; i < R; i++) {
+        const o = (j * R + i) * 3;
+        const l = (j * R + Math.max(i - 1, 0)) * 3,
+          r = (j * R + Math.min(i + 1, R - 1)) * 3;
+        const d = (Math.max(j - 1, 0) * R + i) * 3,
+          u = (Math.min(j + 1, R - 1) * R + i) * 3;
+        const ax = pos[r] - pos[l],
+          ay = pos[r + 1] - pos[l + 1],
+          az = pos[r + 2] - pos[l + 2];
+        const bx = pos[u] - pos[d],
+          by = pos[u + 1] - pos[d + 1],
+          bz = pos[u + 2] - pos[d + 2];
         let nx = by * az - bz * ay,
           ny = bz * ax - bx * az,
           nz = bx * ay - by * ax;
@@ -331,30 +439,112 @@ export class Cloth {
   dispose() {
     this.geo.dispose();
     this.mat.dispose();
-    this.tex.dispose();
+    this.tex?.dispose();
+    this.weave?.dispose();
   }
 }
 
-// linen with a classic stripe near two edges
+// TEXTURES
+// linen ground with slubs, two woven stripes near opposite edges, a folded hem with a stitch line
 function towel() {
   const c = document.createElement("canvas");
   c.width = c.height = TEX_PX;
   const g = c.getContext("2d");
   if (!g) return c;
-  g.fillStyle = "#f2ece1";
-  g.fillRect(0, 0, TEX_PX, TEX_PX);
-  // weave
-  for (let i = 0; i < TEX_PX; i += 2) {
-    g.fillStyle = `rgba(120,100,70,${0.03 + ((i * 7) % 5) * 0.008})`;
-    g.fillRect(i, 0, 1, TEX_PX);
-    g.fillRect(0, i, TEX_PX, 1);
+  const P = TEX_PX;
+  g.fillStyle = LINEN;
+  g.fillRect(0, 0, P, P);
+  // slubs: thicker threads that catch the light a little differently
+  let seed = 7;
+  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < 420; k++) {
+    const along = rand() < 0.5;
+    const at = Math.floor(rand() * P);
+    const from = rand() * P;
+    const len = 20 + rand() * 160;
+    g.fillStyle = rand() < 0.5 ? "rgba(120,100,72,0.07)" : "rgba(255,252,244,0.25)";
+    if (along) g.fillRect(from, at, len, 1.5);
+    else g.fillRect(at, from, 1.5, len);
   }
+  // stripes: woven, so their edges break on the thread
   const stripe = (at: number, w: number) => {
-    g.fillStyle = "#2f4a86";
-    g.fillRect(0, at * TEX_PX, TEX_PX, w * TEX_PX);
-    g.fillRect(0, (1 - at - w) * TEX_PX, TEX_PX, w * TEX_PX);
+    for (const y of [at, 1 - at - w]) {
+      const y0 = y * P,
+        h = w * P;
+      g.fillStyle = STRIPE;
+      g.fillRect(0, y0, P, h);
+      g.fillStyle = "rgba(239,232,220,0.55)";
+      for (let x = 0; x < P; x += 4) {
+        g.fillRect(x, y0 - 0.5, 2, 1.5);
+        g.fillRect(x + 2, y0 + h - 1, 2, 1.5);
+      }
+      g.fillStyle = "rgba(20,30,60,0.12)";
+      for (let x = 0; x < P; x += 3) g.fillRect(x, y0, 1, h);
+    }
   };
-  stripe(0.07, 0.035);
-  stripe(0.125, 0.012);
+  stripe(0.075, 0.034);
+  stripe(0.128, 0.011);
+  // hem: a folded band, a little denser, a stitch line, a soft rolled edge
+  const hem = 0.022 * P;
+  g.fillStyle = "rgba(110,92,64,0.07)";
+  g.fillRect(0, 0, P, hem);
+  g.fillRect(0, P - hem, P, hem);
+  g.fillRect(0, hem, hem, P - hem * 2);
+  g.fillRect(P - hem, hem, hem, P - hem * 2);
+  g.fillStyle = "rgba(96,80,56,0.3)";
+  for (let k = 6; k < P - 6; k += 9) {
+    g.fillRect(k, hem - 2, 5, 1);
+    g.fillRect(k, P - hem + 1, 5, 1);
+    g.fillRect(hem - 2, k, 1, 5);
+    g.fillRect(P - hem + 1, k, 1, 5);
+  }
+  for (let e = 0; e < 4; e++) {
+    g.fillStyle = `rgba(90,72,48,${0.16 - e * 0.04})`;
+    g.fillRect(0, e, P, 1);
+    g.fillRect(0, P - 1 - e, P, 1);
+    g.fillRect(e, 0, 1, P);
+    g.fillRect(P - 1 - e, 0, 1, P);
+  }
+  return c;
+}
+
+// plain weave height as a tangent space normal map
+function weave() {
+  const c = document.createElement("canvas");
+  c.width = c.height = WEAVE_PX;
+  const g = c.getContext("2d");
+  if (!g) return c;
+  const P = WEAVE_PX;
+  const cell = P / WEAVE_THREADS;
+  const h = new Float32Array(P * P);
+  for (let y = 0; y < P; y++) {
+    for (let x = 0; x < P; x++) {
+      const ti = Math.floor(x / cell),
+        tj = Math.floor(y / cell);
+      const u = (x % cell) / cell - 0.5,
+        v = (y % cell) / cell - 0.5;
+      // warp on top where the cell parity is even, weft otherwise; each thread a rounded ridge
+      const warp = Math.cos(u * Math.PI) * (0.8 + 0.2 * Math.cos(v * Math.PI * 2));
+      const weft = Math.cos(v * Math.PI) * (0.8 + 0.2 * Math.cos(u * Math.PI * 2));
+      h[y * P + x] = (ti + tj) % 2 ? weft : warp;
+    }
+  }
+  const img = g.createImageData(P, P);
+  const k = 2.2;
+  for (let y = 0; y < P; y++) {
+    for (let x = 0; x < P; x++) {
+      const dx = h[y * P + ((x + 1) % P)] - h[y * P + ((x + P - 1) % P)];
+      const dy = h[((y + 1) % P) * P + x] - h[((y + P - 1) % P) * P + x];
+      const nx = -dx * k,
+        ny = dy * k;
+      const l = Math.hypot(nx, ny, 1);
+      const o = (y * P + x) * 4;
+      img.data[o] = (nx / l) * 127.5 + 127.5;
+      img.data[o + 1] = (ny / l) * 127.5 + 127.5;
+      img.data[o + 2] = (1 / l) * 127.5 + 127.5;
+      img.data[o + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
   return c;
 }

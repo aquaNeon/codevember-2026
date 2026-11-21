@@ -1,17 +1,23 @@
 import "../shared/style.css";
 import { mountNav } from "../shared/nav";
-import { art } from "./art";
-import type { Phase } from "./pane";
 
 const DAY = 2;
 const IDLE_MS = 1200; // longest wait before the scene starts anyway
-const HINT: Record<Phase, string> = {
-  whole: "Pull the sling back, let go",
-  aiming: "Let go to shoot",
-  flying: "Hold to rewind",
-  held: "Hold to rewind, tap to play",
-  mending: "Let go to stop",
+const STILL_WIDE = "../stills/002-wide.webp";
+const STILL_TALL = "../stills/002-tall.webp";
+const HINT = {
+  whole: "Snap the tail",
+  breaking: "Scroll to move through time",
+  held: "Scroll back, or tap, to reform",
+  mending: "Reforming",
 };
+
+// real time since the snap, in the unit that suits it
+function stamp(t: number) {
+  if (t < 1e-3) return `${(t * 1e6).toFixed(1)} µs`;
+  if (t < 1) return `${(t * 1e3).toFixed(1)} ms`;
+  return `${t.toFixed(2)} s`;
+}
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 
@@ -23,54 +29,61 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   const time = root.querySelector<HTMLElement>("[data-cv-time]");
   const count = root.querySelector<HTMLElement>("[data-cv-count]");
   const hint = root.querySelector<HTMLElement>("[data-cv-hint]");
-  const rewind = root.querySelector<HTMLButtonElement>("[data-cv-rewind]");
   const scrub = root.querySelector<HTMLInputElement>("[data-cv-scrub]");
-  // STILL
-  // the window itself, drawn flat; no three needed
+  const polar = root.querySelector<HTMLButtonElement>("[data-cv-pol]");
+  const params = new URLSearchParams(location.search);
   const still = () => {
     if (root.hasAttribute("data-cv-still")) return;
+    root.removeAttribute("data-cv-live");
     root.setAttribute("data-cv-still", "");
+    // a capture of the live room, wide or tall to match the screen
     const frame = root.querySelector<HTMLElement>(".still");
-    if (frame) frame.append(art());
+    if (!frame) return;
+    const img = document.createElement("img");
+    img.src = innerWidth > innerHeight ? STILL_WIDE : STILL_TALL;
+    img.alt = "";
+    img.decoding = "async";
+    frame.append(img);
   };
 
-  if (!canvas || new URLSearchParams(location.search).has("still")) still();
+  if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();
   else {
-    // three is the heavy part; wait for load and an idle moment, so a cold gpu
-    // process has finished starting before the first webgl call blocks on it
-    afterLoad(() => import("./pane"))
-      .then(({ Pane }) => {
-        const pane = new Pane(canvas);
-        if (import.meta.env.DEV && location.search.includes("debug"))
-          Object.assign(window, { pane });
+    const at = params.has("t") ? Math.max(0, Number(params.get("t")) || 0) : -1;
+    // after load and an idle moment; the scene itself starts the gpu off this thread
+    afterLoad(() => import("./stage"))
+      .then(({ Stage }) => Stage.create(canvas, at))
+      .then((stage) => {
         root.setAttribute("data-cv-live", "");
-        pane.onState = (t, n, phase) => {
-          if (time) time.textContent = `${t.toFixed(2)} s`;
-          if (count) count.textContent = String(n);
-          if (hint) hint.textContent = HINT[phase];
-          if (rewind) rewind.disabled = phase === "whole";
-          if (scrub && !seeking) {
-            scrub.disabled = !pane.shot;
-            scrub.value = String(t);
-          }
+        stage.onShown = () => canvas.setAttribute("data-cv-shown", "");
+        stage.onLost = () => {
+          stage.dispose();
+          still();
         };
         // TIMELINE
-        // while the thumb is held the pane follows it, not the other way round
+        // while the thumb is held the scene follows it, not the other way round
         let seeking = false;
+        stage.onState = (m) => {
+          if (time) time.textContent = stamp(m.real);
+          if (count) count.textContent = String(m.pieces);
+          if (hint && hint.textContent !== HINT[m.phase]) hint.textContent = HINT[m.phase];
+          if (scrub && !seeking) {
+            scrub.max = m.dur.toFixed(2);
+            scrub.value = String(m.time);
+          }
+        };
+        polar?.addEventListener("click", () => {
+          const on = polar.getAttribute("aria-pressed") !== "true";
+          polar.setAttribute("aria-pressed", String(on));
+          root.toggleAttribute("data-cv-polarised", on);
+          stage.post({ t: "pol", v: on });
+        });
         if (scrub) {
-          scrub.max = String(pane.duration);
           const opts = { passive: true };
           scrub.addEventListener("pointerdown", () => (seeking = true), opts);
           scrub.addEventListener("pointerup", () => (seeking = false), opts);
           scrub.addEventListener("pointercancel", () => (seeking = false), opts);
-          scrub.addEventListener("input", () => pane.seek(Number(scrub.value)));
+          scrub.addEventListener("input", () => stage.post({ t: "seek", s: Number(scrub.value) }));
         }
-        rewind?.addEventListener("click", () => pane.rewind());
-        canvas.addEventListener("webglcontextlost", (e) => {
-          e.preventDefault();
-          pane.dispose();
-          still();
-        });
       })
       .catch(still);
   }

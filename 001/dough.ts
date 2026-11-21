@@ -1,22 +1,38 @@
 import {
-  CanvasTexture,
+  BackSide,
+  Color,
   DirectionalLight,
   HemisphereLight,
   Mesh,
-  MeshBasicMaterial,
-  MeshStandardMaterial,
+  MeshDepthMaterial,
+  MeshPhysicalMaterial,
   NeutralToneMapping,
   PCFShadowMap,
   PerspectiveCamera,
-  PlaneGeometry,
   Scene,
-  ShadowMaterial,
+  ShaderChunk,
   Vector3,
+  Vector4,
+  type WebGLProgramParametersWithUniforms,
   WebGLRenderer,
 } from "three";
 import { Cloth } from "./cloth";
-import { DoughSim, GRIP, icosphere } from "./sim";
-import { Blobs } from "./blobs";
+import { DoughSim, GRIP, SHAPE, icosphere } from "./sim";
+import { Blobs, type Skin } from "./blobs";
+import { Board } from "./board";
+import { Puff } from "./puff";
+import { BENCH, benchY } from "./bench";
+import {
+  DOUGH_FS_COLOR,
+  DOUGH_FS_ENV,
+  DOUGH_FS_LIGHT,
+  DOUGH_FS_NORMAL,
+  DOUGH_FS_PARS,
+  DOUGH_FS_ROUGH,
+  DOUGH_SSS,
+  DOUGH_VS,
+  DOUGH_VS_PARS,
+} from "./shaders";
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
@@ -31,10 +47,11 @@ const SETTLE_FRAMES = 30;
 const FOLD_LIFT = 0.25;
 const FOLD_TRAVEL = 0.3;
 const FOLDS_TO_REST = 4;
-const SHADOW_PX = 1024;
-const ROUGH = 0.72;
-const DROP_Y = 3.4; // fresh dough falls in from above the frame
-const INTRO = { height: 1.6, fallS: 0.42, wobbleS: 0.9, squash: 0.2, hz: 2.6, decay: 5 }; // first-load drop, tweak feel here
+const SHADOW_PX = 1536;
+const SHADOW_SPAN = 4.6; // half width of the key light's shadow box
+const ROUGH = 0.8;
+const DROP_Y = 2.0; // fresh dough falls in from just above the frame: half a second at full gravity, under the sim ceiling
+const INTRO = { height: 1.6, fallS: 0.42, wobbleS: 0.7, squash: 0.08, decay: 5 }; // first-load drop, tweak feel here
 const OFFSCREEN_S = 0.45;
 const EDGE_NDC = 1.0;
 const LOST_SHARE = 0.3; // share of the dough outside the frame that counts as thrown away
@@ -43,7 +60,35 @@ const FOLD_ASSIST = 1.3; // inward travel per unit of lift, carries the flap bac
 const FOLD_OVERSHOOT = 1.5; // how far past the grab-to-centre distance the flap may travel
 const THROW_SPAN = 2.2; // hand further out than this many grab-to-centre distances counts as a throw
 const FOLD_REACH = 2.6; // a fold only counts when released over the dough, not flung away
-const DOUGH_COLOR = "#ecdcbf";
+const COLORS = {
+  dough: "#efe4cf", // creamy pale wheat
+  tack: "#e9d5b0", // just handled, a touch deeper and wetter
+  flour: "#f8f6f1",
+  key: "#fff0dc",
+  fill: "#dfe7f5",
+  sky: "#fff3e2",
+  bounce: "#c9a47e",
+  window: "#fff1de",
+};
+const SSS = [0.55, 0.28, 0.12] as const; // light that creeps past the terminator, linear rgb
+const BUMP = 0.008; // pore and bubble depth in world units
+const FLOUR = { top: 0.72, side: 0.22, bottom: 0.4, jitter: 0.35 }; // dusting the fresh lump starts with
+const TACK_TAU_S = 11; // how long handled dough stays tacky
+const HAND_RUB = 0.7; // flour left on the strip a hand grabs
+const SHADE = { cloth: 0.12, clothR: 0.08 }; // towel contact stamps
+const SINK = 0.02; // how far the base of the skin goes into the bench
+const WIPE = { r: 0.06, k: -0.05, floor: 0.36 }; // what dough sitting on the board takes from the flour each step
+const FINGERS = { n: 3, gap: 0.19, r: 0.055, out: 0.32, gapIn: 0.3, k: -0.35 }; // marks where the hand slid under the rim
+const SLAP = { fall: 0.9, stop: 0.3, maxS: 1.6 }; // flap speeds that count as landing
+const INTRO_PUFF = { n: 260, speed: 1.8 };
+const FOLD_PUFF = { n: 360, speed: 1.9, r: 0.4 };
+const GRAB_PUFF = { n: 60, speed: 0.5, r: 0.12 }; // fingers sliding under the rim
+const PEEL = { every: 0.1, n: 24, speed: 0.4, until: 0.7 }; // motes as the strip peels off the board
+const RELAX_TAU_S = 1.4; // after a fold the surface detail re-forms on the new shape instead of smearing
+const HAND = { tau: 0.05, stretch: 1.1, free: 0.7 }; // the strip trails the hand, more the further it is pulled
+const THUD = { r: 1.1, keep: 0.15 }; // a landing flap loses most of its speed at once
+const FIELD = { heldS: 0.02, freeS: 0.06, follow: 0.6 }; // skin low-pass time constants, none above fast
+const SLEEP_WIPE = 0.05; // the board only gets wiped while the dough moves
 const CLOTH_DELAY_S = 1.1; // let the last fold slump before the towel lands
 
 export type Phase = "fold" | "rest" | "covered";
@@ -57,13 +102,43 @@ export class Dough {
   private renderer: WebGLRenderer;
   private scene = new Scene();
   private camera = new PerspectiveCamera(FOV_DEG, 1, 0.1, 40);
-  private sim: DoughSim;
+  private sim!: DoughSim;
   private surface = new Blobs();
-  private material: MeshStandardMaterial;
-  private blob: Mesh;
-  private contact: Mesh;
-  private contactTex: CanvasTexture;
+  private material!: MeshPhysicalMaterial;
+  private blob!: Mesh;
+  private board!: Board;
+  private puff: Puff;
+  private flourRaw = new Float32Array(0);
+  private skin!: Skin;
+  private win = {
+    uWin: { value: new Vector3() },
+    uWinColor: { value: new Color(COLORS.window) },
+    uKeyDir: { value: new Vector3() },
+  };
+  private key: DirectionalLight;
   private cloth = new Cloth();
+  private prepped = false;
+  private lastGrabN = 0;
+  private fieldBox = new Float32Array(4);
+  private bench = { value: new Vector4(BENCH.hw, BENCH.hd, BENCH.r, BENCH.drop) };
+  // a fresh lump replaces the old one at once, the skin must not ease between them
+  private snap = false;
+  // FLAP WATCH
+  // after a fold the grabbed strip is followed until it lands, then flour puffs
+  private flap = new Int32Array(0);
+  private flapN = 0;
+  private slapT = -1;
+  private slapY = 0;
+  private slapV = 0;
+  private slapAll = false;
+  private aimX = 0;
+  private aimY = 0;
+  private aimZ = 0;
+  private handX = 0;
+  private handY = 0;
+  private handZ = 0;
+  private peelT = -1;
+  private peelAcc = 0;
   private clothIn = 0;
   private disposables: { dispose(): void }[] = [];
 
@@ -75,6 +150,7 @@ export class Dough {
   private visible = false;
   private sized = false;
   private ready = false;
+  private dead = false;
   private shown = false;
   // seconds into the intro drop, -1 once it has landed
   private intro = -1;
@@ -107,12 +183,14 @@ export class Dough {
 
   constructor(private canvas: HTMLCanvasElement) {
     this.reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.puff = new Puff(this.win.uWin);
     const r = new WebGLRenderer({
       canvas,
       antialias: true,
       alpha: true,
       powerPreference: "high-performance",
     });
+    r.debug.checkShaderErrors = import.meta.env.DEV; // reading every shader log stalls the first frame
     r.setClearColor(0x000000, 0);
     r.toneMapping = NeutralToneMapping;
     r.shadowMap.enabled = true;
@@ -120,86 +198,24 @@ export class Dough {
     this.renderer = r;
 
     // LIGHT
-    const key = new DirectionalLight(0xfff2e2, 2.6);
-    key.position.set(-4.2, 3.6, 2.2);
+    // morning window to the left and a little behind, a cool bounce from the room, warm bounce off the wood
+    const key = new DirectionalLight(COLORS.key, 3.1);
+    key.position.set(-5.2, 4.4, -2.2);
     key.castShadow = true;
     key.shadow.mapSize.set(SHADOW_PX, SHADOW_PX);
-    key.shadow.radius = 6;
-    key.shadow.bias = -0.0006;
-    key.shadow.normalBias = 0.04;
+    key.shadow.radius = 7;
+    key.shadow.bias = -0.00015;
+    key.shadow.normalBias = 0.006;
     const sc = key.shadow.camera;
-    sc.left = -3;
-    sc.right = 3;
-    sc.top = 3;
-    sc.bottom = -3;
-    sc.near = 1;
-    sc.far = 14;
-    // no env map: hemisphere plus a cool fill reads the same on matte clay and skips the cube render
-    const fill = new DirectionalLight(0xe6eeff, 0.7);
-    fill.position.set(3.5, 2, 3);
-    this.scene.add(key, fill, new HemisphereLight(0xfff8ee, 0xb8a58c, 1.6));
-
-    // FLOOR
-    // shadow only, the css backdrop shows through
-    const floorGeo = new PlaneGeometry(30, 30);
-    const floorMat = new ShadowMaterial({ color: 0x3a2c1c, opacity: 0.2 });
-    const floor = new Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    this.scene.add(floor);
-    this.disposables.push(floorGeo, floorMat);
-
-    // contact shadow, a soft blob that tracks the dough footprint
-    const c = document.createElement("canvas");
-    c.width = c.height = 128;
-    const g = c.getContext("2d");
-    if (g) {
-      const grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-      grad.addColorStop(0, "rgba(40,28,16,0.55)");
-      grad.addColorStop(0.55, "rgba(40,28,16,0.18)");
-      grad.addColorStop(1, "rgba(40,28,16,0)");
-      g.fillStyle = grad;
-      g.fillRect(0, 0, 128, 128);
-    }
-    this.contactTex = new CanvasTexture(c);
-    const contactGeo = new PlaneGeometry(1, 1);
-    const contactMat = new MeshBasicMaterial({
-      map: this.contactTex,
-      transparent: true,
-      depthWrite: false,
-    });
-    this.contact = new Mesh(contactGeo, contactMat);
-    this.contact.rotation.x = -Math.PI / 2;
-    this.contact.position.y = 0.002;
-    this.contact.renderOrder = -1;
-    this.scene.add(this.contact);
-    this.disposables.push(this.contactTex, contactGeo, contactMat);
-
-    // DOUGH
-    const shell = icosphere(SHELL_LEVEL);
-    this.sim = new DoughSim(shell);
-    if (this.reducedMotion) this.sim.damp = 6;
-    this.material = new MeshStandardMaterial({
-      color: DOUGH_COLOR,
-      roughness: ROUGH,
-      vertexColors: true,
-    });
-    this.blob = new Mesh(this.surface.geometry, this.material);
-    this.blob.castShadow = true;
-    this.blob.receiveShadow = true;
-    this.blob.frustumCulled = false;
-    this.scene.add(this.blob, this.cloth.mesh);
-    this.surface.update(this.sim.x, this.sim.n, this.sim.ca, this.sim.cb);
-    this.disposables.push(this.surface, this.material, this.cloth);
-
-    // compile off the main thread where the driver allows, first frame waits for it
-    r.compileAsync(this.scene, this.camera)
-      .catch(() => {})
-      .then(() => {
-        this.ready = true;
-        if (!this.reducedMotion) this.intro = 0;
-        this.wake();
-      });
+    sc.left = sc.bottom = -SHADOW_SPAN;
+    sc.right = sc.top = SHADOW_SPAN;
+    sc.near = 2;
+    sc.far = 16;
+    this.key = key;
+    this.win.uKeyDir.value.copy(key.position).normalize();
+    const fill = new DirectionalLight(COLORS.fill, 0.55);
+    fill.position.set(3.5, 2.5, 5);
+    this.scene.add(key, fill, new HemisphereLight(COLORS.sky, COLORS.bounce, 1.25));
 
     // OBSERVERS
     const ro = new ResizeObserver(() => this.queueResize());
@@ -230,13 +246,364 @@ export class Dough {
       () => canvas.removeEventListener("pointerup", this.up),
       () => canvas.removeEventListener("pointercancel", this.up),
     );
+    void this.boot();
+  }
+
+  // BOOT
+  // the scene is built in small steps with a yield between them, so no single task blocks input for long
+  private async boot() {
+    const r = this.renderer;
+    await pause();
+    if (this.dead) return;
+    this.board = new Board(this.win, this.surface.nx, this.surface.nz);
+    this.scene.add(...this.board.meshes);
+    await pause();
+    if (this.dead) return;
+
+    // DOUGH
+    const shell = icosphere(SHELL_LEVEL);
+    this.sim = new DoughSim(shell);
+    if (this.reducedMotion) this.sim.damp = 6;
+    const sn = this.sim.shellN;
+    this.skin = {
+      count: sn,
+      rest: this.sim.spawn.slice(0, sn * 3),
+      flour: new Float32Array(sn),
+      strain: new Float32Array(sn).fill(1),
+      tack: new Float32Array(sn),
+    };
+    this.flap = new Int32Array(this.sim.n);
+    this.flourRaw = new Float32Array(sn);
+    this.dust();
+    await pause();
+    if (this.dead) return;
+    this.material = this.doughMaterial();
+    this.blob = new Mesh(this.surface.geometry, this.material);
+    this.blob.castShadow = true;
+    this.blob.receiveShadow = true;
+    this.blob.frustumCulled = false;
+    this.scene.add(this.blob, this.cloth.mesh, this.puff.points);
+    await pause();
+    if (this.dead) return;
+    this.surface.shape(this.sim.x, this.sim.n, this.sim.ca, this.sim.cb, this.skin);
+    await pause();
+    if (this.dead) return;
+    this.surface.mesh(this.skin);
+    this.shadeBoard();
+    this.disposables.push(this.surface, this.material, this.cloth, this.board, this.puff);
+
+    // one program per task, compiled off the main thread where the driver allows.
+    // the proxy builds the shadow pass program now instead of on the first frame
+    const proxy = new Mesh(this.surface.geometry, new MeshDepthMaterial({ side: BackSide }));
+    proxy.receiveShadow = true;
+    this.disposables.push(proxy.material as MeshDepthMaterial);
+    const parts = [this.blob, ...this.board.meshes, this.puff.points, proxy];
+    for (const o of parts) {
+      await pause();
+      if (this.dead) return;
+      await r.compileAsync(o, this.camera, this.scene).catch(() => {});
+    }
+    if (this.dead) return;
+    this.ready = true;
+    if (!this.reducedMotion) this.intro = 0;
+    this.wake();
+  }
+
+  // MATERIAL
+  // physical dough with flour, pores, satin where taut and a wrap of warm light; all from the skin attributes
+  private doughMaterial() {
+    const m = new MeshPhysicalMaterial({
+      color: COLORS.dough,
+      roughness: ROUGH,
+      specularIntensity: 0.25,
+      sheen: 1,
+      sheenColor: new Color("#ffffff"),
+      sheenRoughness: 0.65,
+    });
+    const uniforms = {
+      uFlour: { value: new Color(COLORS.flour) },
+      uTackColor: { value: new Color(COLORS.tack) },
+      uSss: { value: new Color(SSS[0], SSS[1], SSS[2]) },
+      uBump: { value: BUMP },
+      uBench: this.bench,
+      uSink: { value: SINK },
+      ...this.win,
+    };
+    const pars = ShaderChunk.lights_physical_pars_fragment.replace(
+      "reflectedLight.directDiffuse += irradiance * diffuseBRDF * ( 1.0 - F );",
+      DOUGH_SSS,
+    );
+    m.onBeforeCompile = (sh: WebGLProgramParametersWithUniforms) => {
+      Object.assign(sh.uniforms, uniforms);
+      sh.vertexShader = sh.vertexShader
+        .replace("#include <common>", `#include <common>\n${DOUGH_VS_PARS}`)
+        .replace("#include <begin_vertex>", `#include <begin_vertex>\n${DOUGH_VS}`);
+      sh.fragmentShader = sh.fragmentShader
+        .replace("#include <common>", `#include <common>\n${DOUGH_FS_PARS}`)
+        .replace("#include <lights_physical_pars_fragment>", pars)
+        .replace("#include <color_fragment>", `#include <color_fragment>\n${DOUGH_FS_COLOR}`)
+        .replace("#include <roughnessmap_fragment>", DOUGH_FS_ROUGH)
+        .replace("#include <normal_fragment_maps>", DOUGH_FS_NORMAL)
+        .replace(
+          "#include <lights_physical_fragment>",
+          `#include <lights_physical_fragment>\n${DOUGH_FS_LIGHT}`,
+        )
+        .replace(
+          "#include <lights_fragment_end>",
+          `#include <lights_fragment_end>\n${DOUGH_FS_ENV}`,
+        );
+    };
+    m.customProgramCacheKey = () => "cv-dough";
+    return m;
+  }
+
+  // SKIN
+  // a fresh lump: heavy dusting on top, lighter on the sides, what the board left underneath
+  private dust() {
+    const { flour, tack, rest } = this.skin;
+    const raw = this.flourRaw;
+    const s = this.sim.spawn;
+    const lift = SHAPE.ry + SHAPE.drop;
+    for (let i = 0; i < this.sim.shellN; i++) {
+      const ny = (s[i * 3 + 1] - lift) / SHAPE.ry;
+      const base =
+        ny > 0
+          ? FLOUR.side + (FLOUR.top - FLOUR.side) * Math.sqrt(ny)
+          : FLOUR.side + (FLOUR.bottom - FLOUR.side) * -ny;
+      const j = Math.sin(i * 12.9898) * 43758.5453;
+      raw[i] = base * (1 - FLOUR.jitter * 0.5 + FLOUR.jitter * (j - Math.floor(j)));
+      flour[i] = raw[i];
+    }
+    rest.set(s.subarray(0, rest.length));
+    tack.fill(0);
+  }
+
+  // strain from the sim, tack fades, dough sitting on the board takes flour off it
+  private skinStep(dt: number) {
+    const { sim, skin, board, flourRaw } = this;
+    const { strain, flour, tack, rest } = skin;
+    sim.strain(strain);
+    const k = Math.exp(-dt / TACK_TAU_S);
+    for (let i = 0; i < skin.count; i++) {
+      tack[i] *= k;
+      // flour per area: stretched skin shows the dough through
+      const st = strain[i] > 1 ? strain[i] : 1;
+      flour[i] = flourRaw[i] / (st * st);
+    }
+    // RELAX
+    // rest positions drift toward the current shape (minus the overall move), so pores and
+    // flour re-form on the folded dough instead of stretching into streaks
+    if (sim.grabN === 0) {
+      const x = sim.x;
+      const n = skin.count;
+      let cx = 0,
+        cy = 0,
+        cz = 0,
+        rx = 0,
+        ry = 0,
+        rz = 0;
+      for (let i = 0; i < n * 3; i += 3) {
+        cx += x[i];
+        cy += x[i + 1];
+        cz += x[i + 2];
+        rx += rest[i];
+        ry += rest[i + 1];
+        rz += rest[i + 2];
+      }
+      const ox = (rx - cx) / n,
+        oy = (ry - cy) / n,
+        oz = (rz - cz) / n;
+      const r = 1 - Math.exp(-dt / RELAX_TAU_S);
+      for (let i = 0; i < n * 3; i += 3) {
+        rest[i] += (x[i] + ox - rest[i]) * r;
+        rest[i + 1] += (x[i + 1] + oy - rest[i + 1]) * r;
+        rest[i + 2] += (x[i + 2] + oz - rest[i + 2]) * r;
+      }
+    }
+    if (sim.speed < SLEEP_WIPE) return;
+    const x = sim.x;
+    for (let i = 0; i < skin.count; i += 2)
+      if (sim.stuck[i]) board.dab(x[i * 3], x[i * 3 + 2], WIPE.r, WIPE.k, WIPE.floor);
+  }
+
+  // HAND
+  // the strip follows the hand a beat late, later the further it has been pulled, like heavy dough
+  private follow(dt: number) {
+    if (this.pointer === -1) return;
+    const far = Math.hypot(this.aimX - this.hx, this.aimY - this.hy, this.aimZ - this.hz);
+    const k = 1 - Math.exp(-dt / (HAND.tau * (1 + Math.max(0, far - HAND.free) * HAND.stretch)));
+    this.handX += (this.aimX - this.handX) * k;
+    this.handY += (this.aimY - this.handY) * k;
+    this.handZ += (this.aimZ - this.handZ) * k;
+    this.sim.drag(this.handX, this.handY, this.handZ);
+    // PEEL
+    // a few motes where the strip leaves the board
+    if (this.peelT < 0) return;
+    this.peelT += dt;
+    this.peelAcc += dt;
+    if (this.peelT > PEEL.until) this.peelT = -1;
+    else if (this.peelAcc > PEEL.every && this.handY > this.hy + 0.1) {
+      this.peelAcc = 0;
+      this.puff.burst(this.hx, 0.04, this.hz, 0.15, 0.15, PEEL.n, PEEL.speed);
+    }
+  }
+
+  // the strip a hand holds goes tacky and loses some flour; fingers leave marks on the board
+  private handle() {
+    const { sim, skin } = this;
+    for (let g = 0; g < sim.grabN; g++) {
+      const i = sim.grabIdx[g];
+      if (i >= skin.count || sim.grabW[g] < 0.15) continue;
+      skin.tack[i] = Math.max(skin.tack[i], Math.min(1, sim.grabW[g] * 1.5));
+      skin.flour[i] *= 1 - (1 - HAND_RUB) * sim.grabW[g];
+    }
+    if (this.reach <= 0 || this.hy > 0.45) return;
+    // rim: furthest low shell particle outward, near the grab line
+    const x = sim.x;
+    let rim = 0;
+    for (let i = 0; i < sim.shellN; i++) {
+      const o = i * 3;
+      if (x[o + 1] > 0.2) continue;
+      const dx = x[o] - this.mid[0],
+        dz = x[o + 2] - this.mid[2];
+      const side = Math.abs(dx * this.uz - dz * this.ux);
+      if (side > 0.3) continue;
+      const out = -(dx * this.ux + dz * this.uz);
+      if (out > rim) rim = out;
+    }
+    const { n, gap, r, out, gapIn, k } = FINGERS;
+    for (let f = 0; f < n; f++) {
+      const lat = (f - (n - 1) / 2) * gap;
+      const bx = this.mid[0] - this.ux * (rim + gapIn) - this.uz * lat,
+        bz = this.mid[2] - this.uz * (rim + gapIn) + this.ux * lat;
+      const len = out * (0.8 + 0.25 * Math.cos(f * 2.1));
+      this.board.streak(bx - this.ux * len, bz - this.uz * len, bx, bz, r, k);
+    }
+  }
+
+  // follow what just moved until it stops falling, then puff
+  private watch(all: boolean) {
+    if (this.reducedMotion) return;
+    this.slapAll = all;
+    this.slapT = 0;
+    this.slapY = this.slapMean();
+    this.slapV = 0;
+  }
+
+  private slapMean() {
+    if (this.slapAll) {
+      this.sim.centroid(this.mid);
+      return this.mid[1];
+    }
+    const x = this.sim.x;
+    let y = 0;
+    for (let g = 0; g < this.flapN; g++) y += x[this.flap[g] * 3 + 1];
+    return this.flapN ? y / this.flapN : 0;
+  }
+
+  private slap(dt: number) {
+    if (this.slapT < 0 || dt <= 0) return;
+    this.slapT += dt;
+    const y = this.slapMean();
+    const v = (y - this.slapY) / dt;
+    this.slapY = y;
+    if (v < this.slapV) this.slapV = v;
+    const landed = this.slapV < -SLAP.fall && v > -SLAP.stop;
+    if (!landed) {
+      if (this.slapT > SLAP.maxS) this.slapT = -1;
+      return;
+    }
+    this.slapT = -1;
+    const fall = Math.min(1.6, -this.slapV / 3);
+    if (this.slapAll) {
+      this.sim.centroid(this.mid);
+      this.ring(this.mid[0], this.mid[2], fall);
+      this.sim.deaden(this.mid[0], this.mid[2], 3, THUD.keep);
+      return;
+    }
+    const x = this.sim.x;
+    let cx = 0,
+      cz = 0;
+    for (let g = 0; g < this.flapN; g++) {
+      cx += x[this.flap[g] * 3];
+      cz += x[this.flap[g] * 3 + 2];
+    }
+    cx /= this.flapN;
+    cz /= this.flapN;
+    this.puff.burst(
+      cx,
+      y + 0.05,
+      cz,
+      FOLD_PUFF.r,
+      FOLD_PUFF.r,
+      FOLD_PUFF.n,
+      FOLD_PUFF.speed * fall,
+    );
+    this.sim.deaden(cx, cz, THUD.r, THUD.keep);
+  }
+
+  // a lump landing: flour kicked out in a ring and pushed into a soft ridge round the rim
+  private ring(cx: number, cz: number, k: number) {
+    const rx = SHAPE.rx * 1.02,
+      rz = SHAPE.rz * 1.02;
+    if (!this.reducedMotion)
+      this.puff.burst(cx, 0.06, cz, rx, rz, INTRO_PUFF.n, INTRO_PUFF.speed * k);
+    for (let a = 0; a < 40; a++) {
+      const t = (a / 40) * Math.PI * 2;
+      const w = 1 + 0.08 * Math.sin(a * 2.7);
+      this.board.dab(
+        cx + Math.cos(t) * rx * 1.12 * w,
+        cz + Math.sin(t) * rz * 1.12 * w,
+        0.2,
+        0.12 * k,
+      );
+    }
+  }
+
+  // contact shadow: whatever rests low on the board
+  private shadeBoard() {
+    const { board } = this;
+    board.clearShade();
+    // the dough's contact comes straight from its field; the map only carries the towel
+    this.surface.contact(board.fieldData, this.fieldBox);
+    board.fieldBox.value.set(
+      this.fieldBox[0],
+      this.fieldBox[1],
+      this.fieldBox[2],
+      this.fieldBox[3],
+    );
+    board.field.needsUpdate = true;
+    const c = this.cloth.points;
+    for (let i = 0; i < this.cloth.count; i += 2) {
+      const y = Math.max(0, c[i * 3 + 1] - benchY(c[i * 3], c[i * 3 + 2]));
+      if (y > SHADE.cloth) continue;
+      board.shade(c[i * 3], c[i * 3 + 2], SHADE.clothR, 0.55 * (1 - y / SHADE.cloth));
+    }
+    board.flushShade();
+  }
+
+  // towel textures and its program, made on the first touch instead of at load
+  private prep() {
+    if (this.prepped) return;
+    this.prepped = true;
+    this.cloth.prep();
+    const m = this.cloth.mesh;
+    if (m.visible) return;
+    m.visible = true;
+    this.renderer.compileAsync(m, this.camera, this.scene).catch(() => {});
+    m.visible = false;
   }
 
   // PUBLIC
   reset() {
+    if (!this.ready) return;
     this.dormant = false;
     if (this.intro >= 0) this.land();
     this.sim.reset(DROP_Y);
+    this.snap = true;
+    this.dust();
+    this.board.redust();
+    this.watch(true);
     // the towel gets whipped off while the fresh lump drops in
     if (this.cloth.covering) this.cloth.lift();
     this.clothIn = 0;
@@ -261,7 +628,7 @@ export class Dough {
   }
 
   private down = (e: PointerEvent) => {
-    if (this.pointer !== -1) return;
+    if (this.pointer !== -1 || !this.ready) return;
     const d = this.ray(e.clientX, e.clientY);
     const o = this.camera.position;
     if (!this.surface.pick(o.x, o.y, o.z, d.x, d.y, d.z)) return;
@@ -287,6 +654,24 @@ export class Dough {
     this.dormant = false;
     if (this.intro >= 0) this.land();
     this.sim.grab(this.hx, this.hy, this.hz);
+    this.aimX = this.handX = this.hx;
+    this.aimY = this.handY = this.hy;
+    this.aimZ = this.handZ = this.hz;
+    this.handle();
+    if (!this.reducedMotion && this.hy < 0.45) {
+      this.puff.burst(
+        this.hx,
+        0.03,
+        this.hz,
+        GRAB_PUFF.r,
+        GRAB_PUFF.r,
+        GRAB_PUFF.n,
+        GRAB_PUFF.speed,
+      );
+      this.peelT = 0;
+      this.peelAcc = 0;
+    }
+    this.prep();
     this.quiet = 0;
     this.wake();
   };
@@ -316,7 +701,9 @@ export class Dough {
     const folding = out < this.span * THROW_SPAN;
     this.sim.grip = folding ? GRIP.fold : GRIP.throw;
     this.sim.pinned = folding;
-    this.sim.drag(tx, ty, tz);
+    this.aimX = tx;
+    this.aimY = ty;
+    this.aimZ = tz;
     this.tx = tx;
     this.tz = tz;
     this.maxLift = Math.max(this.maxLift, ty - this.hy);
@@ -326,6 +713,7 @@ export class Dough {
   };
 
   private hover(e: PointerEvent) {
+    if (!this.ready) return;
     const d = this.ray(e.clientX, e.clientY);
     const o = this.camera.position;
     const over = this.surface.pick(o.x, o.y, o.z, d.x, d.y, d.z);
@@ -336,6 +724,8 @@ export class Dough {
     if (e.pointerId !== this.pointer) return;
     this.pointer = -1;
     this.canvas.style.cursor = "grab";
+    this.lastGrabN = this.sim.grabN;
+    this.flap.set(this.sim.grabIdx.subarray(0, this.lastGrabN));
     this.sim.release();
     if (
       this.maxLift > FOLD_LIFT &&
@@ -344,12 +734,15 @@ export class Dough {
       this.folds < FOLDS_TO_REST
     ) {
       this.folds++;
-      this.material.roughness = ROUGH - (this.folds / FOLDS_TO_REST) * 0.22; // smoother with each fold
+      this.material.roughness = ROUGH - (this.folds / FOLDS_TO_REST) * 0.06; // a touch smoother with each fold, never glossy
       const resting = this.folds === FOLDS_TO_REST;
       if (resting) {
         this.clothIn = CLOTH_DELAY_S;
       }
       this.onState(this.folds, resting ? "rest" : "fold");
+      // remember the flap so the puff comes when it lands, not when the hand lets go
+      this.flapN = Math.min(this.lastGrabN, this.flap.length);
+      this.watch(false);
     }
     this.quiet = 0;
     this.wake();
@@ -397,11 +790,15 @@ export class Dough {
     let active = false;
     let steps = 0;
     while (!this.dormant && this.acc >= STEP_S && steps < MAX_STEPS) {
+      this.follow(STEP_S);
       const moving = this.sim.step(STEP_S);
       active = this.cloth.step(STEP_S, this.surface, moving) || moving || active;
+      this.skinStep(STEP_S);
       this.acc -= STEP_S;
       steps++;
     }
+    if (steps) this.slap(steps * STEP_S);
+    if (this.puff.step(dt)) active = true;
     if (steps === MAX_STEPS) this.acc = 0;
     if (!steps && !this.dormant) active = true;
     if (!this.dormant && this.lost(dt)) active = true;
@@ -417,22 +814,30 @@ export class Dough {
       }
     }
 
-    // asleep, the shape cannot change, so the surface is built once
-    if (!this.dormant || !this.shown) {
-      this.surface.update(this.sim.x, this.sim.n, this.sim.ca, this.sim.cb);
-      this.track();
+    // asleep, the shape cannot change; boot already built it once
+    if (!this.dormant) {
+      // the drawn skin trails the particles a touch, so inner shuffling never shows through
+      // continuous: faster motion follows closer, never a switch
+      const tau =
+        (this.pointer !== -1 ? FIELD.heldS : FIELD.freeS) / (1 + this.sim.speed * FIELD.follow);
+      this.surface.blend = tau > 0 && !this.snap ? 1 - Math.exp(-dt / tau) : 1;
+      this.snap = false;
+      this.surface.update(this.sim.x, this.sim.n, this.sim.ca, this.sim.cb, this.skin);
+      this.shadeBoard();
     }
     if (this.intro >= 0) {
       this.drop(dt);
       active = true;
     }
+    this.board.flush();
     this.renderer.render(this.scene, this.camera);
     if (!this.shown) {
       this.shown = true;
       this.canvas.setAttribute("data-cv-shown", "");
     }
     // dormant: nothing changes until the first touch, so one frame is enough
-    this.quiet = this.dormant && this.intro < 0 ? SETTLE_FRAMES : active ? 0 : this.quiet + 1;
+    const settled = this.dormant && this.intro < 0 && !this.puff.active;
+    this.quiet = settled ? SETTLE_FRAMES : active ? 0 : this.quiet + 1;
     if (this.quiet < SETTLE_FRAMES) this.wake();
     else this.last = 0;
   };
@@ -441,8 +846,9 @@ export class Dough {
   // the mesh falls and squashes on its own, the sim stays asleep so load costs nothing
   private drop(dt: number) {
     const t = (this.intro += dt);
-    const { height, fallS, wobbleS, squash, hz, decay } = INTRO;
+    const { height, fallS, wobbleS, squash, decay } = INTRO;
     const b = this.blob;
+    if (t >= fallS && t - dt < fallS) this.ring(0, 0, 1);
     if (t < fallS) {
       const k = t / fallS;
       const st = 0.06 * k; // a little stretch on the way down
@@ -450,17 +856,18 @@ export class Dough {
       b.scale.set(1 - st * 0.5, 1 + st, 1 - st * 0.5);
     } else if (t < fallS + wobbleS) {
       const u = t - fallS;
-      const sq = squash * Math.exp(-u * decay) * Math.cos(u * hz * Math.PI * 2);
+      const sq = squash * Math.exp(-u * decay);
       b.position.y = 0;
       b.scale.set(1 + sq * 0.5, 1 - sq, 1 + sq * 0.5);
     } else this.land();
-    this.contact.visible = b.position.y < 0.1;
+    this.board.contact.value = 1 - Math.min(1, b.position.y / 0.8);
   }
 
   private land() {
     this.intro = -1;
     this.blob.position.y = 0;
     this.blob.scale.set(1, 1, 1);
+    this.board.contact.value = 1;
   }
 
   // THROWN OUT
@@ -480,30 +887,6 @@ export class Dough {
     this.offscreen = out ? this.offscreen + dt : 0;
     if (this.offscreen > OFFSCREEN_S) this.reset();
     return out;
-  }
-
-  // contact blob follows the footprint of the bottom layer
-  private track() {
-    const x = this.sim.x;
-    let minX = Infinity,
-      maxX = -Infinity,
-      minZ = Infinity,
-      maxZ = -Infinity,
-      low = 0;
-    for (let i = 0; i < this.sim.shellN * 3; i += 3) {
-      if (x[i + 1] > 0.25) continue;
-      low++;
-      if (x[i] < minX) minX = x[i];
-      if (x[i] > maxX) maxX = x[i];
-      if (x[i + 2] < minZ) minZ = x[i + 2];
-      if (x[i + 2] > maxZ) maxZ = x[i + 2];
-    }
-    const c = this.contact;
-    c.visible = low > 0;
-    if (!low) return;
-    c.position.x = (minX + maxX) / 2;
-    c.position.z = (minZ + maxZ) / 2;
-    c.scale.set((maxX - minX) * 1.35 + 0.3, (maxZ - minZ) * 1.35 + 0.3, 1);
   }
 
   // RESIZE
@@ -533,10 +916,19 @@ export class Dough {
     cam.lookAt(0, TARGET_Y, 0);
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
+    this.board.fit(aspect);
+    this.bench.value.set(BENCH.hw, BENCH.hd, BENCH.r, BENCH.drop);
+    // window highlight direction in view space, point size in pixels per world unit at depth 1
+    this.win.uWin.value
+      .copy(this.key.position)
+      .normalize()
+      .transformDirection(cam.matrixWorldInverse);
+    this.puff.dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
     this.sized = true;
   }
 
   dispose() {
+    this.dead = true;
     cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.cleanups.forEach((fn) => fn());
@@ -544,6 +936,10 @@ export class Dough {
     this.disposables.forEach((d) => d.dispose());
     this.disposables.length = 0;
     this.renderer.dispose();
-    this.renderer.forceContextLoss();
+    if (!this.renderer.getContext().isContextLost()) this.renderer.forceContextLoss();
   }
+}
+
+function pause() {
+  return new Promise<void>((done) => setTimeout(done, 0));
 }

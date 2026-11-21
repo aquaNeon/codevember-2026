@@ -1,7 +1,7 @@
 import "../shared/style.css";
 import { mountNav } from "../shared/nav";
+import type { Hud } from "./haze";
 import { mount } from "./host";
-import { placePlate } from "./plate";
 
 const DAY = 15;
 const IDLE_MS = 1200; // longest wait before the scene starts anyway
@@ -13,44 +13,54 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   mountNav(DAY);
 
   const canvas = root.querySelector<HTMLCanvasElement>("[data-cv-canvas]");
-  const driven = root.querySelector<HTMLElement>("[data-cv-driven]");
-  const ahead = root.querySelector<HTMLElement>("[data-cv-ahead]");
+  const q = (s: string) => root.querySelector<HTMLElement>(`[data-cv-${s}]`);
+  const out = { eye: q("eye"), ground: q("ground"), mirage: q("mirage") };
   const params = new URLSearchParams(location.search);
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const still = () => {
     root.removeAttribute("data-cv-live");
     root.setAttribute("data-cv-still", "");
   };
-
-  const avoid = [...root.querySelectorAll<HTMLElement>(".cv-title > *, .cv-hud dl")];
-
-  // STILL
-  // the first paint is a frame of the scene, laid where the live one will fall
-  const plate = root.querySelector<HTMLElement>("[data-cv-plate]");
-  const paint = () => {
-    if (plate) placePlate(plate, avoid);
+  const text = (el: HTMLElement | null, s: string) => {
+    if (el && el.textContent !== s) el.textContent = s;
   };
-  paint();
-  addEventListener("resize", paint, { passive: true });
-  document.fonts?.ready.then(paint);
+  const num = (k: string, fallback: number) => {
+    const v = params.get(k);
+    return v === null || Number.isNaN(Number(v)) ? fallback : Number(v);
+  };
+
+  // HUD
+  const hud = (h: Hud) => {
+    text(out.eye, `${h.eyeM.toFixed(1)} m`);
+    text(out.ground, `${h.groundC} °C`);
+    text(out.mirage, `${h.arcmin}′`);
+  };
 
   if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();
   else {
-    // the css road is the first paint; the live scene starts once the page is idle,
-    // then fades in over the road
-    afterLoad()
-      .then(() => {
-        const mirage = mount(canvas, {
-          avoid,
-          state: (d, a) => {
-            if (driven) driven.textContent = `${d} m`;
-            if (ahead) ahead.textContent = `${a} m ahead`;
+    // after load and an idle moment; the haze itself starts the gpu off this thread
+    afterLoad().then(() => {
+      const haze = mount(
+        canvas,
+        {
+          hud,
+          shown: () => {
+            canvas.setAttribute("data-cv-shown", "");
+            root.setAttribute("data-cv-live", "");
           },
-          ready: () => root.setAttribute("data-cv-live", ""),
           fail: still,
-        });
-        if (import.meta.env.DEV && params.has("debug")) Object.assign(window, { mirage });
-      })
-      .catch(still);
+        },
+        {
+          reducedMotion: reduced,
+          hold: params.has("hold"),
+          at: num("at", 0),
+          eye: num("eye", -1),
+          heat: num("heat", 0),
+          heatAt: num("hx", 0.5),
+        },
+      );
+      if (import.meta.env.DEV && params.has("debug")) Object.assign(window, { haze });
+    });
   }
 }
 

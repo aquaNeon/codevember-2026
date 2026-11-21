@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bolt · Codevember 021</title>
+    <meta
+      name="description"
+      content="A lettuce bolts: the rosette shoots up into a stalk, flowers pale yellow and goes to seed on the wind. Scrub the weeks, tap to shake the seeds loose. Codevember day 21."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#ebe5da" />
+    <style>
+      :root {
+        --accent: #a2700a;
+      }
+      .cv-figure canvas {
+        touch-action: none;
+        cursor: default;
+        opacity: 0;
+        transition: opacity 0.9s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .fig em {
+        font: italic 400 15px/1.4 var(--serif);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      /* STILL */
+      /* the plant in seed, rendered, for no webgl */
+      .still {
+        position: absolute;
+        inset: 0;
+        display: none;
+        background: url("/stills/021-seed.webp") center bottom / cover no-repeat;
+      }
+      @media (max-aspect-ratio: 1/1) {
+        .still {
+          background-image: url("/stills/021-seed-tall.webp");
+        }
+      }
+      [data-cv-still] .still {
+        display: block;
+      }
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      .cv-hud dd {
+        font-variant-numeric: tabular-nums;
+        min-width: 8ch;
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+        .cv-hud {
+          gap: 8px;
+        }
+        .cv-hud dl {
+          grid-auto-flow: column;
+          grid-template-columns: none;
+          gap: 0 14px;
+        }
+        .cv-hud dt {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+        }
+        .cv-hud dd {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 021 of 030</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A lettuce in a garden bed bolts through a summer: the stem shoots up through spiralling leaves, flowers pale yellow and turns to seed puffs that blow away. The pointer leans the sun, and the plant's soft shadow swings with it. The view turns slowly round the plant. Scroll, drag or press the arrow keys to hurry the summer; click or press Enter to shake the plant and loose its seeds. At the end a seed drifts to the next seedling in the bed and the year goes round again."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A bolted lettuce on paper: a tall stalk with clasping leaves over the old rosette, topped with a spray of white seed puffs"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 21<br /><em>Lactuca sativa</em></p>
+
+      <section class="cv-title">
+        <span class="mono">No. 021</span>
+        <h1>Bolt<em>.</em></h1>
+        <p>
+          <em>Gone to seed.</em> Lettuce bolts when summer runs long. Scroll to hurry the summer.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Time</dt>
+          <dd data-cv-day>Day 1</dd>
+          <dt>Heat</dt>
+          <dd data-cv-temp>–</dd>
+          <dt>Daylight</dt>
+          <dd data-cv-hours>–</dd>
+          <dt>Height</dt>
+          <dd data-cv-height>–</dd>
+        </dl>
+        <span
+          ><span data-cv-stage>Rosette</span> ·
+          <span data-cv-hint>Scroll to hurry the summer</span></span
+        >
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

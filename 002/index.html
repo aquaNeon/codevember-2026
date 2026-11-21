@@ -6,18 +6,68 @@
     <title>Shatter · Codevember 002</title>
     <meta
       name="description"
-      content="A pane of glass you break, then scrub through time. Codevember day 2."
+      content="A Prince Rupert's drop: a glass tear the hammer cannot break, until you snap its tail. Scroll through the fifty microseconds it takes to turn to powder. Codevember day 2."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
     />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-    <meta name="theme-color" content="#ebe5da" />
+    <meta name="theme-color" content="#8d867f" />
     <style>
-      :root {
-        --accent: #2f6a5e;
+      /* STUDIO */
+      /* this day only: the page is the studio sweep, matched to where the canvas meets
+         it. doubled selector wins over the shared sheet */
+      :root:root {
+        --bone: #8d867f;
+        --bone-hi: #8d867f;
+        --ink: #1f1b17;
+        --muted: #211c17;
+        --rule: rgb(31 27 23 / 0.18);
+        --accent: #3d7e8e;
       }
-      .cv-figure canvas {
+      html,
+      body {
+        background: #8d867f;
+      }
+      /* POLARISER */
+      /* crossed polarisers black out the studio; the type turns light to stay legible */
+      :root:root:has([data-cv-polarised]) {
+        --bone: #15120f;
+        --bone-hi: #15120f;
+        --ink: #ece6dc;
+        --muted: #b8aea1;
+        --rule: rgb(236 230 220 / 0.16);
+      }
+      html:has([data-cv-polarised]),
+      html:has([data-cv-polarised]) body {
+        background: #15120f;
+      }
+      .cv-btn[aria-pressed="true"] {
+        background: var(--ink);
+        color: var(--bone);
+      }
+      [data-cv-canvas] {
         touch-action: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        opacity: 0;
+        transition: opacity 1.2s cubic-bezier(0.2, 0.7, 0.1, 1);
       }
-      .cv-figure canvas:focus-visible {
+      [data-cv-canvas][data-cv-shown] {
+        opacity: 1;
+      }
+      [data-cv-canvas]:focus-visible {
         outline: 1px solid var(--ink);
         outline-offset: -8px;
       }
@@ -25,23 +75,24 @@
         position: fixed;
         top: 64px;
         right: var(--gutter);
+        margin: 0;
         color: var(--muted);
         text-align: right;
+      }
+      /* µ would capitalise into an M */
+      [data-cv-time] {
+        text-transform: none;
       }
       /* TIMELINE */
       .scrub {
         -webkit-appearance: none;
         appearance: none;
-        width: min(240px, 60vw);
-        height: 24px;
+        width: min(200px, 44vw);
+        height: 28px;
         margin: 0;
-        background: none;
+        background: transparent;
         cursor: pointer;
         touch-action: none;
-      }
-      .scrub:disabled {
-        opacity: 0.35;
-        cursor: default;
       }
       .scrub::-webkit-slider-runnable-track {
         height: 1px;
@@ -53,52 +104,62 @@
       }
       .scrub::-webkit-slider-thumb {
         -webkit-appearance: none;
-        width: 12px;
-        height: 12px;
-        margin-top: -5.5px;
+        width: 13px;
+        height: 13px;
+        margin-top: -6px;
         border-radius: 50%;
         background: var(--ink);
+        border: 3px solid var(--bone);
+        box-shadow: 0 0 0 1px var(--ink);
       }
       .scrub::-moz-range-thumb {
-        width: 12px;
-        height: 12px;
-        border: 0;
+        width: 9px;
+        height: 9px;
         border-radius: 50%;
         background: var(--ink);
+        border: 3px solid var(--bone);
+        box-shadow: 0 0 0 1px var(--ink);
       }
-      .scrub:focus-visible {
-        outline: 1px solid var(--ink);
-        outline-offset: 4px;
+      .scrub:focus {
+        outline: none;
       }
-      .cv-btn:disabled {
-        opacity: 0.35;
-        pointer-events: none;
+      .scrub:focus-visible::-webkit-slider-thumb {
+        box-shadow:
+          0 0 0 1px var(--ink),
+          0 0 0 5px var(--bone),
+          0 0 0 6px var(--ink);
       }
-      .still,
+      .scrub:focus-visible::-moz-range-thumb {
+        box-shadow:
+          0 0 0 1px var(--ink),
+          0 0 0 5px var(--bone),
+          0 0 0 6px var(--ink);
+      }
       .live-only {
         visibility: hidden;
       }
       [data-cv-live] .live-only {
         visibility: visible;
       }
-      [data-cv-still] .cv-hud,
       [data-cv-still] [data-cv-canvas] {
         display: none;
       }
+      /* STILL */
+      /* a capture of the room, for no webgl */
+      .still {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        visibility: hidden;
+      }
       [data-cv-still] .still {
         visibility: visible;
-        position: absolute;
-        left: 50%;
-        top: 44%;
-        height: min(56vh, 520px);
-        aspect-ratio: 1.6 / 2.1;
-        translate: -50% -50%;
-        box-shadow: 0 60px 40px -50px rgb(28 42 38 / 0.25);
       }
-      .still canvas {
+      .still img {
         display: block;
         width: 100%;
         height: 100%;
+        object-fit: cover;
       }
       @media (max-width: 640px) {
         .fig {
@@ -119,30 +180,32 @@
         <canvas
           data-cv-canvas
           tabindex="0"
-          aria-label="A stained glass window, a slingshot below. Drag back and let go to shoot it, then press and hold to rewind. Enter shoots or plays, arrow keys step time."
+          aria-label="A Prince Rupert's drop, a glass tear with a long thin tail, lying on a dark studio floor under a softbox. Tap the tail to snap it; tapping the bulb does nothing, it is too strong. Scroll or drag to move through the break in slow motion. Enter snaps it or reforms it, arrow keys step time."
         ></canvas>
         <div
           class="still"
           role="img"
-          aria-label="A stained glass window: a sun of rings over arches and a fan lotus"
+          aria-label="A Prince Rupert's drop, a glass tear with a long thin tail, on a dark studio floor"
         ></div>
       </div>
 
-      <p class="fig mono">Fig. 2<br />Leaded glass, 6 mm</p>
+      <p class="fig mono">Fig. 2<br />Prince Rupert's drop, 1 cm</p>
 
       <section class="cv-title">
         <span class="mono">No. 02</span>
         <h1>Shatter<em>.</em></h1>
         <p>
-          <em>Break it, then hold the moment.</em> Pull the sling and let go. Hold to rewind, or
-          drag the timeline to stop it mid-air.
+          <em>Strong at the head, fatal at the tail.</em> Snap the tail. Scroll through the fifty
+          microseconds it takes.
         </p>
       </section>
 
       <aside class="cv-hud mono live-only">
         <dl>
           <dt>Time</dt>
-          <dd data-cv-time>0.00 s</dd>
+          <dd data-cv-time>0.0 µs</dd>
+          <dt>Front</dt>
+          <dd>1.5 km/s</dd>
           <dt>Pieces</dt>
           <dd data-cv-count>1</dd>
         </dl>
@@ -151,14 +214,13 @@
           class="scrub"
           data-cv-scrub
           min="0"
-          max="3.6"
+          max="6.63"
           step="0.01"
           value="0"
           aria-label="Time"
-          disabled
         />
-        <span data-cv-hint aria-live="polite">Pull the sling back, let go</span>
-        <button type="button" class="cv-btn" data-cv-rewind disabled>Rewind</button>
+        <button type="button" class="cv-btn" data-cv-pol aria-pressed="false">Polariser</button>
+        <span data-cv-hint aria-live="polite">Snap the tail</span>
       </aside>
     </main>
     <script type="module" src="./main.ts"></script>

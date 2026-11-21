@@ -126,6 +126,18 @@
         color: var(--muted);
         text-align: right;
       }
+      /* the plate frame fades in when it appears, its caption a beat later */
+      [data-cv-plate] .panel {
+        animation: cv-fade-in 0.8s cubic-bezier(0.2, 0.7, 0.1, 1) backwards;
+      }
+      [data-cv-plate] .panel-cap {
+        animation: cv-rise-in 0.9s cubic-bezier(0.2, 0.7, 0.1, 1) 0.24s backwards;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        [data-cv-plate] .panel-cap {
+          animation-name: cv-fade-in;
+        }
+      }
       @media (max-width: 640px) {
         .fig {
           display: none;
@@ -146,7 +158,7 @@
   <body>
     <header class="cv-top mono">
       <a href="../">Codevember ’26</a>
-      <span>Day 016 of 030</span>
+      <span>Day 16 of 30</span>
       <nav data-cv-nav aria-label="Days"></nav>
     </header>
 
@@ -176,7 +188,7 @@
       </p>
 
       <section class="cv-title">
-        <span class="mono">No. 016</span>
+        <span class="mono">No. 16</span>
         <h1>Spore<em>.</em></h1>
         <p>
           <em>Ripe, and waiting for a nudge.</em> Press a puffball and it sighs out its spores, then

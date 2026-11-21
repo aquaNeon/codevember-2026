@@ -56,6 +56,20 @@
       }
 
       /* ROWS */
+      /* the list cascades in under the masthead, one row a beat after the last */
+      [data-cv-days] > li {
+        animation: cv-rise 0.8s cubic-bezier(0.2, 0.7, 0.1, 1) calc(1.3s + var(--cv-i) * 30ms)
+          backwards;
+      }
+      [data-cv-fonts] [data-cv-days] > li {
+        animation-name: cv-rise-in;
+        animation-delay: calc(0.3s + var(--cv-i) * 30ms);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        [data-cv-fonts] [data-cv-days] > li {
+          animation-name: cv-fade-in;
+        }
+      }
       .row {
         --ease: cubic-bezier(0.2, 0.7, 0.1, 1);
         position: relative;
@@ -138,15 +152,24 @@
         margin: 0;
         pointer-events: none;
         opacity: 0;
-        transform: translate3d(var(--x, 0), var(--y, 0), 0) scale(0.94);
+        transform: translate3d(var(--x, 0), var(--y, 0), 0) scale(0.96);
+        translate: 0 14px;
         transition:
           opacity 0.25s ease,
+          translate 0.45s cubic-bezier(0.2, 0.7, 0.1, 1),
           transform 0.35s cubic-bezier(0.2, 0.7, 0.1, 1);
         box-shadow: 0 18px 40px -18px rgb(40 28 16 / 0.35);
       }
       .peek[data-cv-on] {
         opacity: 1;
         transform: translate3d(var(--x, 0), var(--y, 0), 0) scale(1);
+        translate: none;
+      }
+      /* first frame of a show: jump to the pointer, only the rise animates */
+      .peek[data-cv-snap] {
+        transition:
+          opacity 0.25s ease,
+          translate 0.45s cubic-bezier(0.2, 0.7, 0.1, 1);
       }
       .peek-frame {
         display: block;

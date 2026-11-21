@@ -15,6 +15,7 @@ if (list && !list.hasAttribute("data-cv-mounted")) {
     const n = i + 1;
     const ready = READY.has(n);
     const li = document.createElement("li");
+    li.style.setProperty("--cv-i", String(i));
     const row = document.createElement(ready ? "a" : "span");
     row.className = ready ? "row" : "row soon";
     if (row instanceof HTMLAnchorElement) {
@@ -112,11 +113,19 @@ if (list && !list.hasAttribute("data-cv-mounted")) {
           if (!on) requestAnimationFrame(() => reel.removeAttribute("data-cv-snap"));
         }
         if (!on) {
+          // appear right at the pointer and rise into place, never glide in from the last spot
+          // (or from the corner after a reload with the mouse already over a row)
           const r = peek.getBoundingClientRect();
           w = r.width || w;
           h = r.height || h;
+          px = e.clientX;
+          py = e.clientY;
+          if (raf) cancelAnimationFrame(raf);
+          peek.setAttribute("data-cv-snap", "");
+          place();
           on = true;
           peek.setAttribute("data-cv-on", "");
+          requestAnimationFrame(() => peek.removeAttribute("data-cv-snap"));
         }
       },
       { passive: true },

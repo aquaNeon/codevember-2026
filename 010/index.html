@@ -61,6 +61,44 @@
         display: none;
       }
 
+      /* ENTRANCE */
+      /* the sheet arrives with the other live panels (shared/style.css), its rows a beat apart */
+      .mat {
+        --ease-out: cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .mat-body > * {
+        opacity: 0;
+        translate: 0 8px;
+        transition:
+          opacity 0.5s var(--ease-out),
+          translate 0.8s var(--ease-out);
+      }
+      [data-cv-live] .mat-body > * {
+        opacity: 1;
+        translate: none;
+        transition-delay: var(--in, 0.4s);
+      }
+      .mat-body > :nth-child(2) {
+        --in: 0.46s;
+      }
+      .mat-body > :nth-child(3) {
+        --in: 0.52s;
+      }
+      .mat-body > :nth-child(4) {
+        --in: 0.58s;
+      }
+      .mat-body > :nth-child(5) {
+        --in: 0.64s;
+      }
+      .mat-body > :nth-child(n + 6) {
+        --in: 0.7s;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .mat-body > * {
+          translate: none;
+        }
+      }
+
       /* FIRST PAINT */
       /* the room as lines that draw themselves in, see sketch.ts; the live canvas fades
          in over it */
@@ -335,8 +373,33 @@
         main:has(.mat-toggle[aria-expanded="true"]) .cv-hud {
           visibility: hidden;
         }
+        /* the sheet rises out of the bottom edge, rows close behind */
+        .mat-body {
+          transition:
+            opacity 0.35s var(--ease-out),
+            translate 0.5s var(--ease-out),
+            display 0.5s allow-discrete;
+        }
+        .mat-body > :nth-child(n) {
+          --in: 0.04s;
+        }
+        .mat-body > :nth-child(n + 3) {
+          --in: 0.1s;
+        }
+        .mat-body > :nth-child(n + 5) {
+          --in: 0.16s;
+        }
         .mat-toggle[aria-expanded="false"] + .mat-body {
           display: none;
+          opacity: 0;
+          translate: 0 16px;
+        }
+        @starting-style {
+          .mat-toggle[aria-expanded="true"] + .mat-body,
+          .mat-toggle[aria-expanded="true"] + .mat-body > * {
+            opacity: 0;
+            translate: 0 16px;
+          }
         }
         .cv-hud {
           left: var(--gutter);
@@ -363,7 +426,7 @@
   <body>
     <header class="cv-top mono">
       <a href="../">Codevember ’26</a>
-      <span>Day 010 of 030</span>
+      <span>Day 10 of 30</span>
       <nav data-cv-nav aria-label="Days"></nav>
     </header>
 
@@ -384,7 +447,7 @@
       <p class="fig mono">Fig. 10<br />Study in light</p>
 
       <section class="cv-title">
-        <span class="mono">No. 010</span>
+        <span class="mono">No. 10</span>
         <h1>Caustic<em>.</em></h1>
         <p>
           <em>Sun through water.</em> Drag the sculpture to make it wobble, or change what it is

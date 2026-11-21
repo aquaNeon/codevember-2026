@@ -24,14 +24,15 @@ const accents = Object.fromEntries(
 );
 
 // REVEAL
-// every page flags <html> once the serif is in, so the fade starts on real glyphs
+// every page flags <html> once the serif is in, so the fade starts on real glyphs;
+// a fresh load or reload also flags data-cv-enter, so the top bar only animates then
 const reveal: Plugin = {
   name: "cv-reveal",
   transformIndexHtml: () => [
     {
       tag: "script",
       injectTo: "head",
-      children: `(()=>{const r=document.documentElement,f=document.fonts,t=setTimeout(o,${FONT_WAIT_MS});function o(){clearTimeout(t);r.setAttribute("data-cv-fonts","")}Promise.all([f.load('1em "Instrument Serif"'),f.load('italic 1em "Instrument Serif"')]).then(o,o)})()`,
+      children: `(()=>{const r=document.documentElement,f=document.fonts,n=performance.getEntriesByType("navigation")[0],x=document.referrer;let s=!1;try{s=new URL(x).origin===location.origin}catch{}if(!n||n.type==="reload"||(n.type==="navigate"&&!s))r.setAttribute("data-cv-enter","");t=setTimeout(o,${FONT_WAIT_MS});function o(){clearTimeout(t);r.setAttribute("data-cv-fonts","")}Promise.all([f.load('1em "Instrument Serif"'),f.load('italic 1em "Instrument Serif"')]).then(o,o)})()`,
     },
   ],
 };

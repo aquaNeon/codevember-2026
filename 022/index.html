@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Echo · Codevember 022</title>
+    <meta
+      name="description"
+      content="Fly as a bat through a pitch-black cave, seen only where your pings reach: stalactites, still pools and other bats light up as the sound passes. Codevember day 22."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#04070a" />
+    <style>
+      /* NIGHT */
+      /* this day only: a dark cave, so the type goes light.
+         doubled selector so it wins over the shared sheet that loads after it */
+      :root:root {
+        --bone: #04070a;
+        --bone-hi: #04070a;
+        --ink: #e4edf1;
+        --muted: #8796a0;
+        --rule: rgb(228 237 241 / 0.14);
+        --accent: #5ee0ff;
+        color-scheme: dark;
+      }
+      body {
+        background: var(--bone);
+      }
+      body::after {
+        mix-blend-mode: screen;
+        opacity: 0.06;
+      }
+      .still {
+        position: absolute;
+        inset: 0;
+        background: var(--bone);
+      }
+      /* STILL */
+      /* a few echoes caught at once, for no webgl */
+      [data-cv-still] .still {
+        background: var(--bone) url("/stills/022-wide.jpg") center / cover no-repeat;
+      }
+      @media (max-aspect-ratio: 1/1) {
+        [data-cv-still] .still {
+          background-image: url("/stills/022-tall.jpg");
+        }
+      }
+      .cv-figure canvas {
+        position: relative;
+        z-index: 1;
+        touch-action: none;
+        cursor: crosshair;
+        opacity: 0;
+        transition: opacity 0.9s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      /* FOCUS */
+      /* a quiet frame for keyboard focus only; a click or tap never draws one */
+      .cv-figure canvas:focus {
+        outline: none;
+      }
+      .cv-figure canvas:focus-visible:not([data-cv-pointer]) {
+        outline: 1px solid var(--rule);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] .live-only,
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      /* HINT */
+      /* after a long quiet the call to ping steps forward, a colour change and nothing more */
+      .cv-hud .hint {
+        transition: color 0.6s ease;
+      }
+      [data-cv-idle] .cv-hud .hint {
+        color: var(--accent);
+      }
+      [data-cv-idle] .hint-steer {
+        display: none;
+      }
+      .cv-hud dd {
+        font-variant-numeric: tabular-nums;
+        min-width: 9ch;
+      }
+      .cv-title,
+      .cv-hud,
+      .fig {
+        text-shadow:
+          0 0 10px var(--bone),
+          0 1px 18px var(--bone);
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 22 of 30</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A first-person flight through a pitch-black cave. The cave stays dark until you call: each click, tap or press of Enter sends a sphere of sound outward, and the rock, stalactites, still pools and passing bats light up as fine points where it reaches, then fade. Scroll or swipe to fly faster, move the pointer or drag to steer."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A cave tunnel picked out in fine cyan points, stalactites hanging from the roof and a still pool mirroring them"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 22<br />In flight</p>
+
+      <section class="cv-title">
+        <span class="mono">No. 22</span>
+        <h1>Echo<em>.</em></h1>
+        <p>
+          <em>Seeing by sound.</em> You are the bat. The cave is there only where a ping reaches it.
+          <span data-cv-verb>Scroll</span> to fly, tap to call.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Pings</dt>
+          <dd data-cv-pings>0</dd>
+          <dt>Front</dt>
+          <dd data-cv-echo>–</dd>
+          <dt>Speed</dt>
+          <dd data-cv-speed>–</dd>
+          <dt>Delay</dt>
+          <dd data-cv-delay>–</dd>
+        </dl>
+        <span class="hint"
+          ><span class="hint-steer"><span data-cv-fly>Scroll to fly</span> · </span>Tap to
+          call</span
+        >
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

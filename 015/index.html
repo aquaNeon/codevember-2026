@@ -6,7 +6,7 @@
     <title>Mirage · Codevember 015</title>
     <meta
       name="description"
-      content="A desert road in the heat, and a pool of sky on it that you never reach. Codevember day 15."
+      content="A desert road cut as a copperplate engraving, the heat bending its lines, and a pool of sky on it that you never reach. Codevember day 15."
     />
     <link
       rel="preload"
@@ -39,20 +39,35 @@
       fetchpriority="high"
     />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-    <meta name="theme-color" content="#86a9c0" />
+    <meta name="theme-color" content="#f3ebd9" />
     <style>
-      /* the title has a tail below the line; room so it clears the intro */
       .cv-title.cv-title h1 {
         margin-bottom: 0.2em;
       }
-      /* doubled selectors so these win over the shared sheet, which loads after */
       :root:root {
-        --accent: #4f8fa6;
-        --muted: #4f463f;
-        --rule: rgb(28 26 23 / 0.12);
+        --paper: #f3ebd9;
+        --ink: #1e1914;
+        --accent: #b8391a;
+        --muted: #574d44;
+        --rule: rgb(30 25 20 / 0.2);
+        --bone: var(--paper);
+      }
+      .cv-top {
+        background: var(--bone);
       }
       html body {
-        background: #efcfae;
+        background: var(--paper);
+      }
+      /* KNOCKOUT */
+      .cv-top,
+      .cv-title > :not(h1),
+      .cv-hud,
+      .fig {
+        text-shadow:
+          0 0 2px var(--paper),
+          0 0 4px var(--paper),
+          0 0 8px var(--paper),
+          0 0 14px var(--paper);
       }
       .cv-figure canvas {
         position: relative;
@@ -68,6 +83,9 @@
         outline-offset: -8px;
       }
       .fig {
+        padding: 4px 8px;
+        margin: -4px -8px 0 0;
+        background: var(--bone);
         position: fixed;
         top: 64px;
         right: var(--gutter);
@@ -82,8 +100,6 @@
       }
 
       /* REVEAL */
-      /* the still is the first paint, so the page does not fade in under it; only the text
-         waits for the serif, as on every other day */
       html body > main {
         animation: none;
       }
@@ -98,9 +114,6 @@
       }
 
       /* STILL */
-      /* a frame of the scene itself, for no webgl or ?still; it also holds the place while
-         the gpu warms up, and the live scene fades in over its own picture. plate.ts lays it
-         through the live camera; these values are the fallback without script */
       .cv-figure canvas {
         opacity: 0;
         transition: opacity 0.8s cubic-bezier(0.2, 0.7, 0.1, 1);
@@ -115,9 +128,8 @@
         position: absolute;
         inset: 0;
         overflow: hidden;
-        background: linear-gradient(180deg, #a3b1b6, #efcfae 78%, #e0a36c);
+        background: var(--paper);
       }
-      /* shown once plate.ts has laid it, so it never shifts in view */
       .still img:not([data-cv-placed]) {
         visibility: hidden;
       }
@@ -141,7 +153,6 @@
         .fig {
           display: none;
         }
-        /* the road fills the bottom of a tall screen, so the text sits up in the sky */
         .cv-hud.cv-hud,
         .cv-title.cv-title {
           bottom: auto;
@@ -162,7 +173,7 @@
         <canvas
           data-cv-canvas
           tabindex="0"
-          aria-label="A desert road running to the horizon under heat haze, telegraph poles along it. A pool of reflected sky lies on the road ahead. Scroll, drag up or press the up arrow to drive toward it; it keeps its distance."
+          aria-label="An engraving of a desert road running to the horizon under a vermilion sun, telegraph poles along it. The heat bends the engraved lines, and a pool of mirrored sky lies on the road ahead. Scroll, drag up or press the up arrow to drive toward it; it keeps its distance."
         ></canvas>
         <picture class="still" aria-hidden="true">
           <source media="(max-aspect-ratio: 4 / 5)" srcset="/stills/015-tall.webp" />

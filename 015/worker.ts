@@ -3,14 +3,12 @@ import type { FromWorker, ToWorker } from "./host";
 import { Mirage } from "./mirage";
 
 // WORKER
-// owns the canvas and the gl context; the page only forwards events
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 const send = (msg: FromWorker) => scope.postMessage(msg);
 let m: Mirage | null = null;
 let dead = false;
 
-// the hud only hears about whole metres, and only when one changes
 let shownD = -1;
 let shownA = -1;
 const state = (travelled: number, ahead: number) => {
@@ -44,7 +42,6 @@ function start(d: Extract<ToWorker, { t: "init" }>) {
   queue.length = 0;
 }
 
-// messages that arrive before the scene is up wait their turn
 const queue: ToWorker[] = [];
 
 scope.onmessage = (e: MessageEvent<ToWorker>) => {

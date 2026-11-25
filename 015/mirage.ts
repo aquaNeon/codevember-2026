@@ -3,39 +3,37 @@ import { SCENE } from "./scene";
 import { FULLSCREEN_VS, SCENE_FS, TRAFFIC_N } from "./shaders";
 
 // MIRAGE
-// a desert road under heat. the pool of sky on the road ahead is always the same way off:
-// drive at it as fast as you like and it never comes nearer. no dom in here, so it runs in
-// a worker or the page alike
 
 const MAX_DPR = 2;
-const MAX_PIXELS = 2_400_000; // fill budget; the scene is soft enough to upscale past this
+const MAX_PIXELS = 2_400_000; // change fill cap here
 const MAX_DT_S = 0.05;
-const PUDDLE_M = 44; // the scale the road's water is laid out on
-const FIRST_WATER_K = 1.4; // the nearest band lies about this many PUDDLE_M ahead, see the shader
-const V_MAX_MS = 36; // top speed, m/s
-const COAST_S = 1.4; // how long the car rolls on after the last push
-const WHEEL_GAIN = 0.09; // m/s per pixel of wheel
-const DRAG_GAIN = 0.32; // m/s per pixel dragged upward
+const PUDDLE_M = 44;
+const V_MAX_MS = 36; // raise for a faster drive
+const COAST_S = 1.4; // raise for a longer coast
+const WHEEL_GAIN = 0.09;
+const DRAG_GAIN = 0.32;
 const KEY_ACCEL_MS2 = 22;
-const SWAY_M = 0.2; // how far the eye drifts sideways with the cursor
+const SWAY_M = 0.2; // raise for more sway
 const SWAY_S = 2.2;
-const SPEED_S = 0.5; // how quickly the shimmer follows the speed
-const IDLE_S = 30; // with no input for this long the heat settles and the loop stops
+const SPEED_S = 0.5;
+const IDLE_S = 30; // change idle stop here
+const REDUCED_PACE = 0.25; // raise for faster heat under reduced motion
+// ENGRAVING
+const LINES_PER_VIEW = 175;
+const LINE_MIN_PX = 3.6;
+const LINE_MAX_PX = 6.5;
 const SETTLE_S = 1.6;
-const REVEAL_S = 1.2; // the traffic fades in over this once the full program is up
-const FRAME_EASE_S = 0.45; // how gently the view settles when the text it frames moves // the shimmer slows to a stop over about this long
-// the shader sees the distance wrapped here, a whole number of pole, post and dash
-// repeats, so float precision holds however far anyone drives
+const REVEAL_S = 1.2;
+const FRAME_EASE_S = 0.45;
 const WRAP_M = 9996;
 // LOOPS
-// counts as uniforms so the compiler keeps one copy of each loop body: triples (clouds, dune
-// rows, post candidates, car parts), traffic slots and wheels, post rows, passes
+// counts go in as uniforms so the compiler keeps one copy of each loop body
 const LOOP = new Int32Array([3, TRAFFIC_N + 1, 3, 2]);
 // ONCOMING
-const SPAWN_M = 900; // they come out of the heat somewhere past this, with long empty gaps
+const SPAWN_M = 900;
 const SPAWN_SPREAD_M = 2600;
-const ONCOMING_X_M = 1.45; // the oncoming lane's middle, left of the centre line
-const GONE_M = -6; // passed us, behind the eye
+const ONCOMING_X_M = 1.45;
+const GONE_M = -6;
 const CAR_MS = 26;
 const TRUCK_MS = 22;
 const PICKUP_SHARE = 0.3;
@@ -45,8 +43,6 @@ const FIRST_Z_M = [260, 1700, 3200];
 type Uniforms = Record<string, WebGLUniformLocation | null>;
 type Prog = { prog: WebGLProgram; shaders: WebGLShader[]; u: Uniforms; done: boolean };
 
-// the scene without traffic links in a fraction of the time, so it goes up first while the
-// full scene links alongside
 const LITE_FS = SCENE_FS.replace("precision highp float;", "precision highp float;\n#define LITE");
 
 export type Options = {
@@ -58,7 +54,7 @@ export class Mirage {
   private gl: WebGL2RenderingContext;
   private full: Prog | null = null;
   private lite: Prog | null = null;
-  private reveal = 1; // how far the traffic has faded in since the full program came up
+  private reveal = 1;
   private prog: Prog | null = null;
   private vao: WebGLVertexArrayObject;
   private parallel: boolean;
@@ -67,7 +63,7 @@ export class Mirage {
   private raf = 0;
   private last = 0;
   private time = 0;
-  private pace = 1; // how fast the heat moves; eases to 0 when nobody is there
+  private pace = 1;
   private idle = 0;
   private visible = false;
   private sized = false;
@@ -82,10 +78,8 @@ export class Mirage {
   private zoom = 1;
   private hor = 0.5;
   private vp = 0.5;
-  // where the framing is heading: a late font or a resize eases the horizon there, never jumps
   private horTo = 0.5;
   private vpTo = 0.5;
-  // text to keep clear of: side (0 left, 1 right), inner edge x, bottom y, in shares
   private keep = new Float32Array(KEEP_MAX * 3);
   private keepN = 0;
   private framed = new Float32Array(2);
@@ -96,14 +90,13 @@ export class Mirage {
   private tk = new Float32Array(TRAFFIC_N);
   private tt = new Float32Array(TRAFFIC_N);
   private order = new Int8Array(TRAFFIC_N);
-  // slot 0 is the car ahead in our lane, always the same way off; the rest come at us
   private traffic = new Float32Array((TRAFFIC_N + 1) * 4);
   private seed = 0x2f6b1d;
 
   // MOTION
   private travel = 0;
   private v = 0;
-  private speed = 0; // eased |v| over V_MAX, drives the shimmer
+  private speed = 0;
   private cam = EYE_X_M;
   private camTarget = EYE_X_M;
   private dragging = false;
@@ -118,28 +111,25 @@ export class Mirage {
     opts: Options,
   ) {
     this.reducedMotion = opts.reducedMotion;
-    this.pace = opts.reducedMotion ? 0 : 1;
+    this.pace = opts.reducedMotion ? REDUCED_PACE : 1;
+    // CONTEXT
+    // keep the buffer so a frame presented without a redraw shows the same picture
     const gl = canvas.getContext("webgl2", {
       antialias: false,
       alpha: false,
       depth: false,
       stencil: false,
-      // keep the last frame in the buffer: a frame that presents without redrawing then shows
-      // the same picture, not the one before it, which made the sky flick between two places
       preserveDrawingBuffer: true,
       powerPreference: "high-performance",
     }) as WebGL2RenderingContext | null;
     if (!gl) throw new Error("webgl2 unavailable");
     // SOFTWARE GL
-    // cpu renderers get the still before the shader compiles; ?gl forces the live path
     if (!opts.forceGl && software(gl)) {
       gl.getExtension("WEBGL_lose_context")?.loseContext();
       throw new Error("software gl");
     }
     this.gl = gl;
     this.parallel = !!gl.getExtension("KHR_parallel_shader_compile");
-    // with parallel compile the quick one builds first off this thread, and the full one
-    // after the first frame is up, so the two never queue together; without it only the full one
     if (this.parallel) this.lite = this.compile(LITE_FS);
     else this.full = this.compile(SCENE_FS);
     const vao = gl.createVertexArray();
@@ -149,13 +139,11 @@ export class Mirage {
     for (let i = 0; i < TRAFFIC_N; i++) this.spawn(i, FIRST_Z_M[i % FIRST_Z_M.length]);
   }
 
-  // the nearest water, as the readout shows it
   get ahead() {
-    return PUDDLE_M * FIRST_WATER_K;
+    return PUDDLE_M * SCENE.FIRST_WATER_K;
   }
 
   // PUBLIC
-  // sizes in css pixels; the host owns observers, visibility and events
   size(w: number, h: number, dpr: number) {
     this.cssW = Math.max(1, w);
     this.cssH = Math.max(1, h);
@@ -165,7 +153,6 @@ export class Mirage {
     this.wake();
   }
 
-  // flat list of side, inner edge and bottom per box, in shares of the view, y up
   avoid(boxes: ArrayLike<number>) {
     const n = Math.min(KEEP_MAX, Math.floor(boxes.length / 3));
     for (let i = 0; i < n * 3; i++) this.keep[i] = boxes[i];
@@ -188,13 +175,11 @@ export class Mirage {
     this.wake();
   }
 
-  // cursor in uv, y up; the eye sways a little with it
   point(x: number) {
     this.camTarget = EYE_X_M + (x - 0.5) * 2 * SWAY_M;
     this.poke();
   }
 
-  // drags in css pixels down the screen; dragging up drives forward
   down(yPx: number) {
     this.dragging = true;
     this.dragY = yPx;
@@ -224,7 +209,6 @@ export class Mirage {
     this.poke();
   }
 
-  // -1, 0 or 1 while a key is held
   keys(dir: number) {
     this.keyDir = dir;
     this.poke();
@@ -240,8 +224,6 @@ export class Mirage {
   }
 
   // LOOP
-  // runs while the heat moves or anything eases; stops when offscreen, hidden,
-  // idle for IDLE_S, or under reduced motion once nothing changes
   private wake() {
     if (!this.raf && this.visible) this.raf = requestAnimationFrame(this.frame);
   }
@@ -254,7 +236,6 @@ export class Mirage {
       if (!this.full && this.ready) this.full = this.compile(SCENE_FS);
       if (this.full && this.linked(this.full)) {
         this.prog = this.full;
-        // traffic only lives in the full program, so it fades in rather than pops
         if (this.lite) this.reveal = 0;
         if (this.lite) this.drop(this.lite);
         this.lite = null;
@@ -281,10 +262,9 @@ export class Mirage {
     else this.last = 0;
   };
 
-  // returns true while anything is still moving
   private step(dt: number) {
     this.idle += dt;
-    const target = this.reducedMotion || this.idle > IDLE_S ? 0 : 1;
+    const target = this.idle > IDLE_S ? 0 : this.reducedMotion ? REDUCED_PACE : 1;
     this.pace += (target - this.pace) * (1 - Math.exp(-dt / (SETTLE_S * 0.4)));
     if (target === 0 && this.pace < 0.003) this.pace = 0;
     this.time += dt * this.pace;
@@ -320,7 +300,6 @@ export class Mirage {
   }
 
   // ONCOMING
-  // a few cars and trucks in the other lane, closing at their speed plus ours
   private rnd() {
     this.seed = (Math.imul(this.seed, 1664525) + 1013904223) >>> 0;
     return this.seed / 4294967296;
@@ -330,7 +309,6 @@ export class Mirage {
     const r = this.rnd();
     const truck = r < TRUCK_SHARE;
     this.tz[i] = z;
-    // 1 a sedan, 2 a pickup, 3 a small box truck, all coming at us
     this.tk[i] = truck ? 3 : r < TRUCK_SHARE + PICKUP_SHARE ? 2 : 1;
     this.tv[i] = (truck ? TRUCK_MS : CAR_MS) * (0.9 + 0.2 * this.rnd());
     this.tt[i] = Math.floor(this.rnd() * 4);
@@ -342,7 +320,6 @@ export class Mirage {
       tz[i] -= (this.tv[i] * this.pace + this.v) * dt;
       if (tz[i] < GONE_M) this.spawn(i, SPAWN_M + this.rnd() * SPAWN_SPREAD_M);
     }
-    // far to near, so nearer ones paint over
     const o = this.order;
     for (let i = 0; i < TRAFFIC_N; i++) o[i] = i;
     for (let i = 1; i < TRAFFIC_N; i++) {
@@ -382,28 +359,24 @@ export class Mirage {
     gl.uniform4fv(u["uTraffic[0]"], this.traffic);
     gl.uniform4iv(u.uLoop, LOOP);
     gl.uniform1f(u.uReveal, this.reveal);
-    gl.uniform4f(u.uView, 0, 0, 1, 1);
     gl.uniform1f(u.uTime, this.time);
     gl.uniform1f(u.uTravel, this.travel % WRAP_M);
     gl.uniform1f(u.uPuddle, PUDDLE_M);
     gl.uniform1f(u.uCam, this.cam);
     gl.uniform1f(u.uShimmer, (this.reducedMotion ? 0.6 : 1) + this.speed * 0.6);
-    // the side of the view the poles stand on
+    gl.uniform1f(u.uLine, lineFor(this.cssH, this.zoom));
     const halfW = (1 - this.vp) * this.aspect * this.zoom;
     const sky = skyFor(this.aspect);
     gl.uniform1f(u.uTop, sky.top);
     gl.uniform2f(u.uFrame, this.zoom, 0.5 * this.aspect * this.zoom);
-    // the telegraph line stands far enough out that a pole leaves the screen sideways
-    // before it grows tall enough to reach the label or the sun
     gl.uniform1f(u.uPoleX, EYE_X_M + POLE_X_M * Math.max(1, halfW / 0.8));
-    // up and left of the wires' fan, so no wire ever crosses it
     gl.uniform2f(u.uSun, sky.sunX, sky.sunY);
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
   // RESIZE
-  // resizing clears the canvas, so only do it right before a draw
+  // resizing clears the canvas, so only right before a draw
   private resize() {
     const dpr = Math.min(this.dpr || 1, MAX_DPR);
     let w = this.cssW * dpr;
@@ -416,8 +389,6 @@ export class Mirage {
       this.canvas.height = h;
     }
     this.aspect = this.cssW / this.cssH;
-    // a long lens, like the roadside shots of a mirage: the far road and its water come close.
-    // narrow screens see a wider field so the road still fits
     this.zoom = zoomFor(this.aspect);
     this.frameView();
     this.sized = true;
@@ -454,8 +425,6 @@ export class Mirage {
     return { prog, shaders, u: {}, done: false };
   }
 
-  // COMPLETION_STATUS_KHR, polled so linking never blocks the thread; once linked, check it,
-  // free its shaders and look up its uniforms
   private linked(p: Prog) {
     const gl = this.gl;
     if (this.parallel && !gl.getProgramParameter(p.prog, 0x91b1)) return false;
@@ -490,6 +459,11 @@ export class Mirage {
     gl.deleteVertexArray(this.vao);
     gl.getExtension("WEBGL_lose_context")?.loseContext();
   }
+}
+
+export function lineFor(cssH: number, zoom: number) {
+  const linePx = Math.min(LINE_MAX_PX, Math.max(LINE_MIN_PX, cssH / LINES_PER_VIEW));
+  return (linePx * zoom) / cssH;
 }
 
 function software(gl: WebGL2RenderingContext) {

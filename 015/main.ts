@@ -4,7 +4,7 @@ import { mount } from "./host";
 import { placePlate } from "./plate";
 
 const DAY = 15;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200; // lower to start the scene sooner
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 
@@ -24,7 +24,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   const avoid = [...root.querySelectorAll<HTMLElement>(".cv-title > *, .cv-hud dl")];
 
   // STILL
-  // the first paint is a frame of the scene, laid where the live one will fall
   const plate = root.querySelector<HTMLElement>("[data-cv-plate]");
   const paint = () => {
     if (plate) placePlate(plate, avoid);
@@ -35,8 +34,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();
   else {
-    // the css road is the first paint; the live scene starts once the page is idle,
-    // then fades in over the road
     afterLoad()
       .then(() => {
         const mirage = mount(canvas, {

@@ -45,9 +45,6 @@ export type ToWorker =
 export type FromWorker = { t: "state"; d: number; a: number } | { t: "ready" } | { t: "fail" };
 
 // HOST
-// the page side of the mirage: events, size and visibility in, numbers out. the scene
-// runs in a worker when the canvas can be handed over, so the gpu warming up, compiling
-// and drawing never hold up the page; otherwise it runs here
 export function mount(canvas: HTMLCanvasElement, sink: Sink) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");
@@ -96,7 +93,6 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink) {
   async function inPage(): Promise<Driver> {
     const { Mirage } = await import("./mirage");
     const m = new Mirage(canvas, { reducedMotion: mq.matches, forceGl });
-    // only touch the dom when a shown number changes
     let d = -1;
     let a = -1;
     m.onState = (travelled, ahead) => {
@@ -129,7 +125,7 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink) {
   function wire(d: Driver) {
     let onScreen = false;
     let rect = canvas.getBoundingClientRect();
-    let keys = 0; // bit 1 forward, bit 2 back
+    let keys = 0;
     let dragId = -1;
     const show = () => d.show(onScreen && !document.hidden);
     const ro = new ResizeObserver(() => {
@@ -138,7 +134,6 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink) {
       keepClear();
     });
     // FRAMING
-    // the text in the bottom corners, for the scene to frame the road between
     const boxes: number[] = [];
     const keepClear = () =>
       d.avoid(textBoxes(sink.avoid, rect.width || 1, rect.height || 1, boxes));

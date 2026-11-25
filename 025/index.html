@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Veil · Codevember 025</title>
+    <meta
+      name="description"
+      content="A long veil of silk chiffon drifting through a dark studio, lit from behind so the light comes through every fold. Your pointer is a breath of air. Codevember day 25."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/stills/025-wide.webp"
+      as="image"
+      fetchpriority="high"
+      media="(min-aspect-ratio: 1/1)"
+    />
+    <link
+      rel="preload"
+      href="/stills/025-tall.webp"
+      as="image"
+      fetchpriority="high"
+      media="(max-aspect-ratio: 1/1)"
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#140e0b" />
+    <style>
+      /* STUDIO */
+      /* this day only: a warm dark studio, so the type goes light.
+         doubled selector so it wins over the shared sheet that loads after it */
+      :root:root {
+        --bone: #140e0b;
+        --bone-hi: #140e0b;
+        --ink: #efe6da;
+        --muted: #a8998a;
+        --rule: rgb(239 230 218 / 0.14);
+        --accent: #d9a46a;
+        color-scheme: dark;
+      }
+      body::after {
+        mix-blend-mode: screen;
+        opacity: 0.06;
+      }
+      html,
+      body {
+        background: var(--bone);
+      }
+      /* FIRST PAINT */
+      /* a frame of the live room; the canvas fades in over it */
+      .still {
+        position: absolute;
+        inset: 0;
+        background: var(--bone) url("/stills/025-wide.webp") center / cover no-repeat;
+      }
+      @media (max-aspect-ratio: 1/1) {
+        .still {
+          background-image: url("/stills/025-tall.webp");
+        }
+      }
+      .cv-figure {
+        /* the pointer is the air, so a finger drags it instead of the page */
+        touch-action: none;
+      }
+      .cv-figure canvas {
+        position: relative;
+        z-index: 1;
+        user-select: none;
+        -webkit-touch-callout: none;
+        opacity: 0;
+        transition: opacity 1.2s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      /* the silk drifts behind the type; a faint dark halo keeps it readable */
+      .cv-top,
+      .fig,
+      .cv-title,
+      .cv-hud {
+        text-shadow: 0 0 6px rgb(22 15 10 / 0.55);
+      }
+      .fig em {
+        font: italic 400 15px/1.4 var(--serif);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      [data-cv-still] .live-only,
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      .cv-hud dd {
+        font-variant-numeric: tabular-nums;
+        min-width: 9ch;
+      }
+      .touch-only {
+        display: none;
+      }
+      @media (hover: none) {
+        .touch-only {
+          display: inline;
+        }
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+        .cv-hud dl {
+          grid-template-columns: auto auto auto auto;
+          gap: 4px 12px;
+        }
+        .cv-hud dd {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 25 of 30</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          aria-label="A long sheer veil of pale silk chiffon floats and turns slowly in a dark warm studio. A light behind it shines through the cloth, so single layers glow and folds lying over each other read brighter. Move the pointer through it and it lifts and drifts on your breath."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A sheer veil of pale chiffon floating in the air, lit from behind against a dark warm ground"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 25<br /><em>Silk chiffon, 7 m</em></p>
+
+      <section class="cv-title">
+        <span class="mono">No. 25</span>
+        <h1>Veil<em>.</em></h1>
+        <p><em>Seven metres of silk, and no weight at all.</em> Breathe on it with the pointer.</p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Drift</dt>
+          <dd data-cv-drift>0.0 cm/s</dd>
+          <dt>Span</dt>
+          <dd data-cv-span>0.00 m</dd>
+        </dl>
+        <span class="touch-only">Drag to breathe on it</span>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

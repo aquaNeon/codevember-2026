@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Nest · Codevember 024</title>
+    <meta
+      name="description"
+      content="A baya weaver's nest weaves itself from shredded grass, strand by strand: a loop on a twisted neck, then a round doorway, then the chamber and its belly, fresh green drying to straw. Scroll to weave or unweave it. Codevember day 24."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#b49d82" />
+    <style>
+      /* WALL */
+      /* this day only: the page is the clay wall the nest hangs in front of. doubled selector
+         wins over the shared sheet */
+      :root:root {
+        --bone: #b49d82;
+        --bone-hi: #b49d82;
+        --ink: #241b12;
+        --muted: #3d3025;
+        --rule: rgb(36 27 18 / 0.2);
+        --accent: #3f5a17;
+      }
+      html,
+      body {
+        background: #b49d82;
+      }
+      .cv-figure canvas {
+        touch-action: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        opacity: 0;
+        transition: opacity 1.2s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      @media (hover: hover) {
+        [data-cv-live] [data-cv-canvas] {
+          cursor: grab;
+        }
+        [data-cv-live] [data-cv-canvas]:active {
+          cursor: grabbing;
+        }
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .fig em {
+        font: italic 400 15px/1.4 var(--serif);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      /* STILL */
+      /* the finished nest, rendered, for no webgl */
+      .still {
+        position: absolute;
+        inset: 0;
+        display: none;
+        background: url("/stills/024-wide.webp") center / cover no-repeat;
+      }
+      @media (max-aspect-ratio: 1/1) {
+        .still {
+          background-image: url("/stills/024-tall.webp");
+        }
+      }
+      [data-cv-still] .still {
+        display: block;
+      }
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      .cv-hud dd {
+        font-variant-numeric: tabular-nums;
+        min-width: 8ch;
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+        .cv-hud {
+          gap: 8px;
+        }
+        .cv-hud dl {
+          grid-auto-flow: column;
+          grid-template-columns: none;
+          gap: 0 14px;
+        }
+        .cv-hud dt {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+        }
+        .cv-hud dd {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 24 of 30</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A baya weaver's nest hangs from a bare stem against a warm clay wall and weaves itself from fine shredded grass: a twisted neck and a loop, then a round doorway low on one side, then the chamber closes in and the belly rounds out. New strands are green and dry to straw. When it is finished it holds, then unweaves back to the ring and begins again. Scroll or press the up and down arrows to weave or unweave it; drag or press left and right to turn it; move the pointer past it to stir the air."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A finished baya weaver's nest of fine green grass hanging by a twisted straw neck from a bare stem, a round doorway low on its side, its soft shadow on a clay wall"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 24<br /><em>Ploceus philippinus</em></p>
+
+      <section class="cv-title">
+        <span class="mono">No. 24</span>
+        <h1>Nest<em>.</em></h1>
+        <p>
+          <em>Woven a strand at a time.</em> A baya weaver’s nest, looped, knotted and tucked.
+          Scroll to weave it, drag to turn it.
+        </p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Strands</dt>
+          <dd data-cv-blades>–</dd>
+          <dt>Grass</dt>
+          <dd data-cv-grass>–</dd>
+          <dt>Stage</dt>
+          <dd data-cv-stage>Ring</dd>
+        </dl>
+        <span data-cv-hint>Scroll to weave, drag to turn</span>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

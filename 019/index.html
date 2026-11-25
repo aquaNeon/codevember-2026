@@ -37,26 +37,13 @@
       media="(max-aspect-ratio: 1/1)"
     />
     <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
-    <meta name="theme-color" content="#0c1233" />
+    <meta name="theme-color" content="#ebe5da" />
     <style>
-      /* DUSK */
-      /* this day only: a night sky, so the type goes light.
+      /* PAGE */
+      /* printed in ink on the shared paper, with one hot accent for the fire.
          doubled selector so it wins over the shared sheet that loads after it */
       :root:root {
-        --bone: #0c1233;
-        --bone-hi: #141b45;
-        --ink: #f1ebe4;
-        --muted: #b9b2c8;
-        --rule: rgb(241 235 228 / 0.16);
-        --accent: #ff3fb4;
-        color-scheme: dark;
-      }
-      body {
-        background: var(--bone);
-      }
-      body::after {
-        mix-blend-mode: screen;
-        opacity: 0.08;
+        --accent: #e6462e;
       }
       /* FIRST PAINT */
       /* the opening frame of the live sky, rendered; the canvas fades in over it */
@@ -87,18 +74,6 @@
       .cv-figure canvas:focus-visible {
         outline: 1px solid var(--ink);
         outline-offset: -8px;
-      }
-      /* SCRIM */
-      /* a little dark under the type, so every shot keeps it legible */
-      .cv-figure::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        z-index: 2;
-        pointer-events: none;
-        background:
-          linear-gradient(to top, rgb(6 8 26 / 0.62), rgb(6 8 26 / 0) 34%),
-          linear-gradient(to bottom, rgb(6 8 26 / 0.45), rgb(6 8 26 / 0) 14%);
       }
       .fig {
         position: fixed;
@@ -138,10 +113,13 @@
         transform: scaleX(var(--cv-m, 1));
         transition: transform 0.12s linear;
       }
+      /* the tone thins out under the type; a paper halo keeps it clear of stray lines */
       .cv-title,
       .cv-hud,
       .fig {
-        text-shadow: 0 1px 12px rgb(6 8 26 / 0.6);
+        text-shadow:
+          0 0 4px var(--bone),
+          0 0 14px var(--bone);
       }
       @media (max-width: 640px) {
         .fig {
@@ -169,12 +147,12 @@
         <canvas
           data-cv-canvas
           tabindex="0"
-          aria-label="A meteor streaks across a dusk sky over a mountain town, its trail splitting into glowing strands as it wears away and sheds fragments, until it bursts in a fireball above the clouds. Tap or press Enter to send another."
+          aria-label="A meteor, drawn like a printed manga page, streaks across a dusk sky over a mountain town, its trail splitting into burning strands as it wears away and sheds fragments, until it bursts in a fireball above the clouds. Tap or press Enter to send another."
         ></canvas>
         <div
           class="still"
           role="img"
-          aria-label="A dusk sky over mountains and a small town, a crescent moon and pink clouds"
+          aria-label="An inked dusk sky over mountains and a small town, a crescent moon and clouds in screentone"
         ></div>
       </div>
 

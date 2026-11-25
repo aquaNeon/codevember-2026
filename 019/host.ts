@@ -8,7 +8,16 @@ export type Sink = {
 };
 
 // the calls the page makes on the sky, the same in a worker or on the page
-export const CALLS = ["size", "visibility", "motion", "press", "drag", "lift", "key"] as const;
+export const CALLS = [
+  "size",
+  "visibility",
+  "motion",
+  "press",
+  "drag",
+  "lift",
+  "key",
+  "type",
+] as const;
 type Call = (typeof CALLS)[number];
 type Driver = Pick<Sky, Call | "dispose">;
 
@@ -93,9 +102,31 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
     let downY = 0;
     let downT = 0;
     const show = () => d.visibility(onScreen && !document.hidden);
+    // TYPE
+    // where the title and hud sit, so the sky can thin its tone behind them
+    const blocks = canvas.closest("[data-cv]")?.querySelectorAll<HTMLElement>(".cv-title, .cv-hud");
+    const type = () => {
+      const b: number[] = [];
+      blocks?.forEach((el, i) => {
+        if (i > 1) return;
+        const r = el.getBoundingClientRect();
+        b.push(
+          r.left - rect.left,
+          rect.bottom - r.bottom,
+          r.right - rect.left,
+          rect.bottom - r.top,
+        );
+      });
+      while (b.length < 8) b.push(0);
+      d.type(b);
+    };
     const ro = new ResizeObserver(() => {
       rect = canvas.getBoundingClientRect();
       d.size(canvas.clientWidth, canvas.clientHeight, devicePixelRatio || 1);
+      type();
+    });
+    document.fonts?.ready.then(() => {
+      if (!dead) type();
     });
     ro.observe(canvas);
     const io = new IntersectionObserver(([e]) => {

@@ -11,6 +11,7 @@ import {
   MOTE_VS,
   NB,
   POST_FS,
+  SOFT_FS,
   SPINE_W,
   TUBE_FS,
   TUBE_VS,
@@ -27,7 +28,7 @@ const SEG_S = 200;
 const SEG_U = 22;
 const RING_S = 192;
 const RING_A = 20;
-const MOTES = 720;
+const MOTES = 1000; // raise for denser marine snow
 const STEP_S = 1 / 120;
 const STILL_T_S = 14; // the moment shown under reduced motion
 const STIPE_R = 0.02;
@@ -36,6 +37,7 @@ const KERNEL = [0.1, 0.35, 0.75, 1, 0.75, 0.35, 0.1];
 const RIPPLE_PX = 1.1; // css px the frame wobbles by
 const FRINGE_PX = 1.3; // css px of colour split at the corners
 const GRAIN_PX = 1.5; // css px per grain clump
+const BLUR_PX = 2.2; // raise for a wider soft focus, css px
 const ZIG_RAD = 0.07; // the stipe bends away from each float by this much
 const ZIG_ROUND = 0.4; // each bend is rounded over this fraction of the gap to the next node
 const GAP_R = 0.84; // each gap along the stipe is this much shorter than the one before
@@ -92,6 +94,8 @@ export class Kelp {
   private tubeProg: WebGLProgram;
   private moteProg: WebGLProgram;
   private postProg: WebGLProgram;
+  private softProg: WebGLProgram;
+  private uso: Record<string, WebGLUniformLocation | null>;
   private upo: Record<string, WebGLUniformLocation | null>;
   private ubg: Record<string, WebGLUniformLocation | null>;
   private ucp: Record<string, WebGLUniformLocation | null>;
@@ -117,6 +121,10 @@ export class Kelp {
   private colorRb: WebGLRenderbuffer | null = null;
   private depthRb: WebGLRenderbuffer | null = null;
   private samples: number;
+  private softFbo: WebGLFramebuffer;
+  private softTex: WebGLTexture | null = null;
+  private softW = 1;
+  private softH = 1;
   private sceneW = 0;
   private sceneH = 0;
   private dropAll: number[];
@@ -233,6 +241,7 @@ export class Kelp {
     this.tubeProg = program(gl, TUBE_VS, TUBE_FS);
     this.moteProg = program(gl, MOTE_VS, MOTE_FS);
     this.postProg = program(gl, FULL_VS, POST_FS);
+    this.softProg = program(gl, FULL_VS, SOFT_FS);
     const lit = [
       "uBg",
       "uRes",
@@ -267,7 +276,10 @@ export class Kelp {
       "uRipple",
       "uFringe",
       "uGrain",
+      "uSoft",
+      "uBlur",
     ]);
+    this.uso = uniforms(gl, this.softProg, ["uScene", "uRes"]);
     this.umo = uniforms(gl, this.moteProg, [
       "uProj",
       "uTime",
@@ -305,6 +317,7 @@ export class Kelp {
     this.bgFbo = gl.createFramebuffer();
     this.sceneFbo = gl.createFramebuffer();
     this.resolveFbo = gl.createFramebuffer();
+    this.softFbo = gl.createFramebuffer();
     this.samples = opts.dpr < 1.5 ? Math.min(4, gl.getParameter(gl.MAX_SAMPLES) as number) : 0;
     this.dropAll = [gl.COLOR_ATTACHMENT0, gl.DEPTH_STENCIL_ATTACHMENT];
     this.dropDepth = [gl.DEPTH_STENCIL_ATTACHMENT];
@@ -930,8 +943,9 @@ export class Kelp {
     gl.disable(gl.CULL_FACE);
 
     // BLADES
+    // alpha keeps the frond's coverage for the soft focus in post
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(this.bladeProg);
     this.lit(this.ubl, w, h, sunX, sunY);
     gl.uniform1i(this.ubl.uField, 2);
@@ -1005,21 +1019,32 @@ export class Kelp {
       gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
       gl.invalidateFramebuffer(gl.READ_FRAMEBUFFER, this.dropAll);
     } else gl.invalidateFramebuffer(gl.READ_FRAMEBUFFER, this.dropDepth);
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.disable(gl.DEPTH_TEST);
-    gl.useProgram(this.postProg);
+    gl.bindVertexArray(this.empty);
     gl.activeTexture(gl.TEXTURE3);
     gl.bindTexture(gl.TEXTURE_2D, this.sceneTex);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, this.softTex);
     gl.activeTexture(gl.TEXTURE0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.softFbo);
+    gl.viewport(0, 0, this.softW, this.softH);
+    gl.useProgram(this.softProg);
+    gl.uniform1i(this.uso.uScene, 3);
+    gl.uniform2f(this.uso.uRes, this.softW, this.softH);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, w, h);
+    gl.useProgram(this.postProg);
     const u = this.upo;
     gl.uniform1i(u.uScene, 3);
     gl.uniform1i(u.uBg, 0);
+    gl.uniform1i(u.uSoft, 4);
+    gl.uniform1f(u.uBlur, BLUR_PX * this.dpr);
     gl.uniform2f(u.uRes, w, h);
     gl.uniform1f(u.uTime, this.t);
     gl.uniform1f(u.uRipple, this.reducedMotion ? 0 : RIPPLE_PX * this.dpr);
     gl.uniform1f(u.uFringe, FRINGE_PX * this.dpr);
     gl.uniform1f(u.uGrain, GRAIN_PX * this.dpr);
-    gl.bindVertexArray(this.empty);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
@@ -1035,6 +1060,15 @@ export class Kelp {
     gl.bindTexture(gl.TEXTURE_2D, this.sceneTex);
     gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, w, h);
     params(gl, gl.LINEAR);
+    if (this.softTex) gl.deleteTexture(this.softTex);
+    this.softW = Math.max(1, w >> 1);
+    this.softH = Math.max(1, h >> 1);
+    this.softTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.softTex);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, this.softW, this.softH);
+    params(gl, gl.LINEAR);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.softFbo);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.softTex, 0);
     this.depthRb = gl.createRenderbuffer();
     gl.bindRenderbuffer(gl.RENDERBUFFER, this.depthRb);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFbo);
@@ -1119,6 +1153,9 @@ export class Kelp {
     if (this.bgTex) gl.deleteTexture(this.bgTex);
     gl.deleteFramebuffer(this.bgFbo);
     gl.deleteProgram(this.postProg);
+    gl.deleteProgram(this.softProg);
+    gl.deleteFramebuffer(this.softFbo);
+    if (this.softTex) gl.deleteTexture(this.softTex);
     gl.deleteFramebuffer(this.sceneFbo);
     gl.deleteFramebuffer(this.resolveFbo);
     if (this.sceneTex) gl.deleteTexture(this.sceneTex);

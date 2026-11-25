@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Magma · Codevember 023</title>
+    <meta
+      name="description"
+      content="A sphere of lava in the dark: slabs of cooling crust grind over the melt, seams open and close, bubbles swell through the cracks and burst. Drag to turn it. Codevember day 23."
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="/fonts/instrument-serif-italic.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#000000" />
+    <style>
+      /* DARK */
+      /* this day only: the sphere hangs in black, so the type goes light.
+         doubled selector so it wins over the shared sheet that loads after it */
+      :root:root {
+        --bone: #000000;
+        --bone-hi: #000000;
+        --ink: #efe8e2;
+        --muted: #a39a93;
+        --rule: rgb(239 232 226 / 0.16);
+        --accent: #ff5a1f;
+        color-scheme: dark;
+      }
+      html,
+      body {
+        background: #000;
+      }
+      body::after {
+        mix-blend-mode: screen;
+        opacity: 0.06;
+      }
+      /* the g has a tail below the line; room so it clears the intro */
+      .cv-title.cv-title h1 {
+        margin-bottom: 0.2em;
+      }
+      .cv-figure canvas {
+        touch-action: none;
+        user-select: none;
+        opacity: 0;
+        transition: opacity 1.2s cubic-bezier(0.2, 0.7, 0.1, 1);
+      }
+      .cv-figure canvas[data-cv-shown] {
+        opacity: 1;
+      }
+      .cv-figure canvas:focus-visible {
+        outline: 1px solid var(--ink);
+        outline-offset: -8px;
+      }
+      .fig {
+        position: fixed;
+        top: 64px;
+        right: var(--gutter);
+        margin: 0;
+        color: var(--muted);
+        text-align: right;
+      }
+      .fig em {
+        font: italic 400 15px/1.4 var(--serif);
+        letter-spacing: 0;
+        text-transform: none;
+      }
+      .live-only {
+        visibility: hidden;
+      }
+      [data-cv-live] .live-only {
+        visibility: visible;
+      }
+      /* STILL */
+      /* the sphere, rendered: holds the place while the live one builds, and stays for no webgl */
+      .cv-figure canvas {
+        position: relative;
+        z-index: 1;
+      }
+      /* placed like resize() in magma.ts (its cy counts from the bottom); still cropped to 1.5r */
+      .cv-figure {
+        container-type: size;
+      }
+      .still {
+        --r: min(30cqw, 30cqh);
+        --cy: 48cqh;
+        position: absolute;
+        top: var(--cy);
+        left: 50%;
+        width: calc(var(--r) * 3);
+        aspect-ratio: 1;
+        translate: -50% -50%;
+        background: url("/stills/023-sphere.webp") center / contain no-repeat;
+      }
+      @container (aspect-ratio < 10 / 11) {
+        .still {
+          --r: min(40cqw, 26cqh);
+          --cy: 42cqh;
+        }
+      }
+      @container (aspect-ratio < 10 / 11) and (width <= 640px) {
+        .still {
+          --cy: 50cqh;
+        }
+      }
+      /* gone once the canvas has faded in over it */
+      [data-cv-live] .still {
+        visibility: hidden;
+        transition: visibility 0s 1.2s;
+      }
+      [data-cv-still] [data-cv-canvas] {
+        display: none;
+      }
+      .cv-hud dd {
+        font-variant-numeric: tabular-nums;
+        min-width: 8ch;
+      }
+      @media (max-width: 640px) {
+        .fig {
+          display: none;
+        }
+        .cv-hud {
+          gap: 8px;
+        }
+        .cv-hud dl {
+          grid-auto-flow: column;
+          grid-template-columns: none;
+          gap: 0 14px;
+        }
+        .cv-hud dt {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+        }
+        .cv-hud dd {
+          min-width: 0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="cv-top mono">
+      <a href="../">Codevember ’26</a>
+      <span>Day 23 of 30</span>
+      <nav data-cv-nav aria-label="Days"></nav>
+    </header>
+
+    <main data-cv>
+      <div class="cv-figure">
+        <canvas
+          data-cv-canvas
+          tabindex="0"
+          aria-label="A sphere of lava turning slowly in the dark. Thick slabs of charcoal crust drift and grind over the melt; the seams between them open into bands of orange and yellow and close again, and bubbles of lava swell up through the cracks, burst with a small splash and skin over. Drag or use the arrow keys to turn it; hovering warms the crust under the pointer."
+        ></canvas>
+        <div
+          class="still"
+          role="img"
+          aria-label="A sphere of dark, folded lava crust with glowing orange melt in the seams between the plates"
+        ></div>
+      </div>
+
+      <p class="fig mono">Fig. 23<br /><em>Crust over melt</em></p>
+
+      <section class="cv-title">
+        <span class="mono">No. 23</span>
+        <h1>Magma<em>.</em></h1>
+        <p><em>A skin over fire.</em> Cooling crust grinds over the melt. Drag to turn it.</p>
+      </section>
+
+      <aside class="cv-hud mono live-only">
+        <dl>
+          <dt>Melt</dt>
+          <dd data-cv-temp>–</dd>
+          <dt>Seams</dt>
+          <dd data-cv-seams>–</dd>
+          <dt>Bursts</dt>
+          <dd data-cv-bursts>0</dd>
+        </dl>
+        <span data-cv-hint>Hover to warm the crust</span>
+      </aside>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -63,6 +63,7 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
           reducedMotion: reduced,
           forceGl: params.has("gl"),
           hold: import.meta.env.DEV && params.has("hold"),
+          // smooth tone instead of the screens, for the stills, which must stay small
         },
       );
       if (import.meta.env.DEV && params.has("debug")) Object.assign(window, { sky });

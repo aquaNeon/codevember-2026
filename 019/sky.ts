@@ -42,7 +42,14 @@ const GAMMAS = [0.5, 0.82, 0.18, 0.32, 0.66, 0.42] as const;
 const STRANDS_MAIN = 8;
 const STRANDS_FRAG = 2;
 const SPRITES = MAX_BODIES + 3;
-const FLARES = 7;
+const CELL_CSS_PX = [6, 4.5]; // halftone cell, wide and narrow screens; change for a coarser screen
+const NARROW_PX = 640; // the shared layout moves the title to the top below this
+const BOIL_HZ = 8; // speed lines are redrawn this often
+const IMPACT_FRAMES = 3; // inverted, inverted, flat accent
+// speed lines per shot: radial focus lines, parallel streaks
+const RADIAL = [0, 0, 0.7, 0, 0, 0];
+const PARALLEL = [0, 0.4, 0, 1, 0, 0];
+const SPEED0_KMS = 19;
 const HUD_MS = 110;
 const SUN = norm([0.62, -0.06, -0.78]);
 const MOON = norm([0.16, 0.36, -0.92]);
@@ -58,14 +65,6 @@ const STRAND = [
   [0.45, 2.2, 0.35, 0.55],
   [0.72, 1.1, 0.3, 0.12],
   [0.2, 0.3, 5, 0.03], // the soft glow round it all
-] as const;
-// lens ghosts along the line from the head through the centre: place, size px, kind, tint
-const GHOSTS = [
-  [-0.35, 26, 3, 0.25, 0.5, 1.0],
-  [-0.7, 60, 5, 0.6, 0.35, 1.0],
-  [-1.05, 14, 3, 1.0, 0.6, 0.3],
-  [-1.3, 110, 4, 0.4, 0.7, 1.0],
-  [0.45, 40, 5, 1.0, 0.4, 0.6],
 ] as const;
 
 export type Hud = {
@@ -108,10 +107,14 @@ export class Sky {
   private spriteBuf: WebGLBuffer;
   private sprites = new Float32Array(SPRITES * 10);
   private spriteN = 0;
-  private flareVao: WebGLVertexArrayObject;
-  private flareBuf: WebGLBuffer;
-  private flares = new Float32Array(FLARES * 10);
-  private flareN = 0;
+  // speed lines and the impact frame
+  private focus = new Float32Array(4);
+  private flow = new Float32Array([1, 0]);
+  private ndc = new Float32Array(2);
+  private cutLines = 0;
+  private lastShot = -1;
+  private impact = 0;
+  private boxes = new Float32Array(8);
 
   private fall = new Fall();
   private dir: Director;
@@ -214,16 +217,13 @@ export class Sky {
     this.spriteBuf = this.instanced(this.sprites.byteLength, 0, 3, 40, 0, gl.DYNAMIC_DRAW);
     this.attr(1, 3, 40, 12);
     this.attr(2, 4, 40, 24);
-    this.flareVao = this.vao();
-    this.flareBuf = this.instanced(this.flares.byteLength, 0, 3, 40, 0, gl.DYNAMIC_DRAW);
-    this.attr(1, 3, 40, 12);
-    this.attr(2, 4, 40, 24);
     gl.bindVertexArray(null);
 
     this.fall.onEvent = (e) => {
       if (e === "burst") {
         this.flashGoal = this.reduced ? 0 : this.fall.burst[3] * 1.2;
         this.dir.shock(this.fall.burst[3]);
+        this.impact = this.reduced ? 0 : IMPACT_FRAMES;
       }
     };
     this.fall.aim(this.gamma);
@@ -279,6 +279,12 @@ export class Sky {
       clearTimeout(this.timer);
       this.timer = 0;
     }
+    this.wake();
+  }
+
+  // the title and hud blocks, css px from the bottom left of the canvas
+  type(b: number[]) {
+    this.boxes.set(b);
     this.wake();
   }
 
@@ -376,6 +382,9 @@ export class Sky {
     } else this.flash *= Math.exp(-dt / 0.55);
     if (this.flash < 0.003) this.flash = 0;
 
+    this.proj.tan = this.dir.tanHalf;
+    this.proj.aspect = this.cssW / this.cssH;
+    this.lines(dt);
     this.adapt(rawMs, busyNow);
     this.render(now);
     if (!this.drawn) {
@@ -467,8 +476,6 @@ export class Sky {
     const L = this.layer;
     const C = this.cloudT;
     if (!L || !C) return;
-    this.proj.tan = this.dir.tanHalf;
-    this.proj.aspect = this.cssW / this.cssH;
     this.build();
 
     // METEOR LAYER
@@ -556,23 +563,26 @@ export class Sky {
     gl.bindVertexArray(this.trailVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    // LENS
-    if (this.flareN) {
-      gl.enable(gl.BLEND);
-      gl.blendFunc(gl.ONE, gl.ONE);
-      const q = this.spriteP;
-      gl.useProgram(q.prog);
-      this.camera(q, W, H);
-      gl.bindVertexArray(this.flareVao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.flareBuf);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.flares, 0, this.flareN * 10);
-      gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.flareN);
-      gl.disable(gl.BLEND);
-    }
+    gl.uniform1f(p.u.uLine, W / this.cssW);
+    const narrow = this.cssW <= NARROW_PX;
+    gl.uniform1f(p.u.uCell, (CELL_CSS_PX[narrow ? 1 : 0] * W) / this.cssW);
+    // the tone thins out round the title and the hud, and in bands along the edges they sit
+    // on: the bottom on wide screens, both ends on narrow ones where the title is at the top
+    const h = this.cssH;
+    gl.uniform4fv(p.u.uBox, this.boxes);
+    if (narrow) gl.uniform4f(p.u.uBand, 40 / h, 220 / h, 1 - 300 / h, 1 - 190 / h);
+    else gl.uniform4f(p.u.uBand, 0.03, 0.34, 1 - 150 / h, 1 - 50 / h);
+    gl.uniform4fv(p.u.uFocus, this.focus);
+    gl.uniform2fv(p.u.uFlow, this.flow);
+    gl.uniform1f(p.u.uBoil, this.reduced ? 0 : Math.floor((now / 1000) * BOIL_HZ) % 97);
+    gl.uniform1f(p.u.uImpact, this.impact > 0 ? (this.impact === 1 ? 2 : 1) : 0);
+    if (this.impact > 0) this.impact--;
+    gl.bindVertexArray(this.trailVao);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
   // INSTANCES
-  // strand list, sprites and flares for this frame, into the preallocated arrays
+  // strand list and sprites for this frame, into the preallocated arrays
   private build() {
     const f = this.fall;
     const m = this.meta;
@@ -648,7 +658,7 @@ export class Sky {
       sp[o + 3] = Math.min(1, age / 2.4); // how far it has cooled
       sp[o + 4] = 0;
       sp[o + 5] = 0;
-      sp[o + 6] = (1.2 + 5.5 * (1 - Math.exp(-age * 2.2))) * e;
+      sp[o + 6] = (2 + 8 * (1 - Math.exp(-age * 2.2))) * e;
       sp[o + 7] =
         1.5 *
         e *
@@ -673,57 +683,75 @@ export class Sky {
       }
     }
     this.spriteN = k;
-    this.flareBuild();
   }
 
-  // LENS
-  // ghosts on the line from the head through the centre of the frame, and a long streak
-  private flareBuild() {
+  // SPEED LINES
+  // focus lines round the head on the low angle and as a cut lands, parallel streaks along
+  // its flight while tracking and chasing, all scaled by its speed; the airburst throws its
+  // own focus lines out from where it went
+  private lines(dt: number) {
     const f = this.fall;
-    this.flareN = 0;
-    if (!f.alive[0] || this.reduced) return;
+    const d = this.dir;
+    const fo = this.focus;
+    const s = d.shot;
+    if (s !== this.lastShot) {
+      if (s === SHOT.chase || s === SHOT.low) this.cutLines = 1;
+      this.lastShot = s;
+    }
+    this.cutLines *= Math.exp(-dt / 0.35);
+    fo[2] = 0;
+    fo[3] = 0;
+    if (this.reduced) return;
+    if (f.active && f.out === OUT.flying && f.alive[0] && this.project(f.px[0], f.py[0], f.pz[0])) {
+      const k = Math.min(1.2, f.speed(0) / SPEED0_KMS);
+      const sx = this.ndc[0];
+      const sy = this.ndc[1];
+      fo[0] = sx;
+      fo[1] = sy;
+      // a cut to the low angle lands with a burst of focus lines; any cut eases the streaks in
+      fo[2] = (RADIAL[s] + (s === SHOT.low ? this.cutLines * 0.6 : 0)) * k;
+      fo[3] = PARALLEL[s] * k * (1 - this.cutLines);
+      const e = d.eye;
+      const v = f.speed(0) || 1;
+      const step = (Math.hypot(f.px[0] - e[0], f.py[0] - e[1], f.pz[0] - e[2]) * 0.05) / v;
+      if (
+        this.project(f.px[0] + f.vx[0] * step, f.py[0] + f.vy[0] * step, f.pz[0] + f.vz[0] * step)
+      ) {
+        const dx = (this.ndc[0] - sx) * this.proj.aspect;
+        const dy = this.ndc[1] - sy;
+        const l = Math.hypot(dx, dy);
+        if (l > 1e-4) {
+          this.flow[0] = dx / l;
+          this.flow[1] = dy / l;
+        }
+      }
+    }
+    const age = f.t - f.burst[4];
+    if (f.burst[3] > 0 && age >= 0 && age < 1.5) {
+      const b = Math.exp(-age / 0.5) * Math.min(1, f.burst[3] * 1.5);
+      if (b > fo[2] && this.project(f.burst[0], f.burst[1], f.burst[2])) {
+        fo[0] = this.ndc[0];
+        fo[1] = this.ndc[1];
+        fo[2] = b;
+        fo[3] *= 1 - b;
+      }
+    }
+  }
+
+  // a world point to ndc, into this.ndc; false when behind the camera
+  private project(x: number, y: number, z: number) {
     const d = this.dir;
     const e = d.eye;
-    const x = f.px[0] - e[0];
-    const y = f.py[0] - e[1];
-    const z = f.pz[0] - e[2];
-    const w = x * d.fwd[0] + y * d.fwd[1] + z * d.fwd[2];
-    if (w < 0.01) return;
-    const a = this.proj.aspect;
+    const dx = x - e[0];
+    const dy = y - e[1];
+    const dz = z - e[2];
+    const w = dx * d.fwd[0] + dy * d.fwd[1] + dz * d.fwd[2];
+    if (w < 0.001) return false;
     const t = this.proj.tan;
-    const sx = (x * d.right[0] + y * d.right[1] + z * d.right[2]) / (t * a * w) + d.shift[0];
-    const sy = (x * d.up[0] + y * d.up[1] + z * d.up[2]) / (t * w) + d.shift[1];
-    if (Math.abs(sx) > 1.1 || Math.abs(sy) > 1.1) return;
-    const L = Math.min(1, lit(f.lum[0]) * 0.5) * (d.shot === SHOT.chase ? 0.5 : 1);
-    if (L < 0.02) return;
-    const fl = this.flares;
-    let k = 0;
-    for (let gi = 0; gi < GHOSTS.length; gi++) {
-      const g = GHOSTS[gi];
-      const o = k++ * 10;
-      fl[o] = sx * g[0];
-      fl[o + 1] = sy * g[0];
-      fl[o + 2] = 0;
-      fl[o + 3] = g[3] * 0.06;
-      fl[o + 4] = g[4] * 0.06;
-      fl[o + 5] = g[5] * 0.06;
-      fl[o + 6] = g[1] * (this.cssH / 900);
-      fl[o + 7] = L;
-      fl[o + 8] = g[2];
-      fl[o + 9] = 0;
-    }
-    const o = k++ * 10;
-    fl[o] = sx;
-    fl[o + 1] = sy;
-    fl[o + 2] = 0;
-    fl[o + 3] = 0.25;
-    fl[o + 4] = 0.4;
-    fl[o + 5] = 0.75;
-    fl[o + 6] = this.cssW * 0.35;
-    fl[o + 7] = L;
-    fl[o + 8] = 6;
-    fl[o + 9] = 0;
-    this.flareN = k;
+    this.ndc[0] =
+      (dx * d.right[0] + dy * d.right[1] + dz * d.right[2]) / (t * this.proj.aspect * w);
+    this.ndc[1] = (dx * d.up[0] + dy * d.up[1] + dz * d.up[2]) / (t * w) + d.shift[1];
+    return true;
   }
 
   // HUD

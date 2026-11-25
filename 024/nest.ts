@@ -37,8 +37,8 @@ const PHASE = { start: 0.035, built: 0.6, hold: 0.79, gone: 0.975 };
 const START_AT = 0.2; // where a visit opens, mid-weave
 const REST_AT = 0.7; // where it comes to rest after the untouched cycles
 const AUTO_CYCLES = 2;
-const SCRUB_PER_PX = 1 / 5200; // cycles per pixel scrolled
-const CLOCK_TAU_S = 0.45;
+const SCRUB_PER_PX = 1 / 14000; // cycles per pixel scrolled; change speed here
+const CLOCK_TAU_S = 0.7;
 const AGE_PER_BUILD = 1; // fresh green fades over the build, keeps fading while held
 
 // TURN AND SWAY
@@ -53,7 +53,6 @@ const AIR_PER_PX = 0.0009; // pointer speed into a breath of air
 const AIR_TAU_S = 1.1;
 const AIR_MAX = 0.9;
 const SWAY_PER_AIR = 0.06; // rad of lean per unit of air
-const FLUTTER = 0.05; // world units free ends move per unit of air
 
 const SLOW_MS = 26;
 const MIN_SCALE = 0.6;
@@ -108,6 +107,7 @@ export class Nest {
   private kGoal: number;
   private cycles = 0;
   private resting = false;
+  private steered = false;
   private build = 0;
   private age = 0;
   private time = 0;
@@ -433,11 +433,17 @@ export class Nest {
     this.wake();
   }
 
+  // the scroll runs between the bare ring and the finished nest; it never pulls it apart.
+  // caught mid-unravel, any scroll weaves it back
   private scrub(px: number) {
     if (this.hold) return;
+    const base = Math.floor(this.kGoal);
+    const top = base + REST_AT;
+    const k = this.kGoal >= base + PHASE.hold ? top : this.kGoal + px * SCRUB_PER_PX;
+    this.kGoal = Math.max(base, Math.min(top, k));
+    this.steered = true;
     this.cycles = 0;
-    this.resting = false;
-    this.kGoal += px * SCRUB_PER_PX;
+    this.resting = this.kGoal >= top;
     this.wake();
   }
 
@@ -500,7 +506,11 @@ export class Nest {
       this.kGoal += dt / CYCLE_S;
       if (Math.floor(this.kGoal) > before) this.cycles++;
       const c = this.kGoal - Math.floor(this.kGoal);
-      if (this.cycles >= AUTO_CYCLES && c >= REST_AT && c < PHASE.hold) this.resting = true;
+      // once scrolled, it weaves on by itself only as far as the finished nest
+      if ((this.steered || this.cycles >= AUTO_CYCLES) && c >= REST_AT && c < PHASE.hold) {
+        this.kGoal = Math.floor(this.kGoal) + REST_AT;
+        this.resting = true;
+      }
     }
     const dk = this.kGoal - this.k;
     const ease = this.reduced ? 1 - Math.exp(-dt / 0.12) : 1 - Math.exp(-dt / CLOCK_TAU_S);
@@ -533,9 +543,10 @@ export class Nest {
       this.vz += fz * h;
       this.sz += this.vz * h;
     }
-    this.wind[0] = this.air * FLUTTER + this.vx * 0.04;
-    this.wind[1] = Math.abs(this.air) * FLUTTER * 0.3;
-    this.wind[2] = this.airZ * FLUTTER;
+    // free ends only trail the nest's own swing; pushed by the pointer they all lean one way
+    this.wind[0] = this.vx * 0.04;
+    this.wind[1] = 0;
+    this.wind[2] = this.vz * 0.04;
     this.wind[3] = this.time;
 
     // the nest hangs from the knot: lean, then turn, about it

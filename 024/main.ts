@@ -19,6 +19,7 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const coarse = matchMedia("(pointer: coarse)").matches;
   const hint = coarse ? "Swipe to weave and turn" : "Scroll to weave, drag to turn";
+  const rest = coarse ? "Swipe down to unweave" : "Scroll up to unweave";
   const still = () => {
     root.removeAttribute("data-cv-live");
     root.setAttribute("data-cv-still", "");
@@ -32,7 +33,7 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
     text(out.blades, String(h.blades));
     text(out.grass, `${h.metres.toFixed(1)} m`);
     text(out.stage, h.stage);
-    text(out.hint, h.resting ? "Scroll to go on" : hint);
+    text(out.hint, h.resting ? rest : hint);
   };
 
   if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();

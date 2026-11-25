@@ -3,6 +3,16 @@ export const FIELD_S = 64; // billow cells along each blade
 export const FIELD_U = 9; // and across it
 export const SPINE_W = 160; // samples per spine row
 
+// UNDERWATER
+const VEIL_MIX = 0.16; // raise for more water over the frond
+const SOFT_MIX = 0.45; // raise for a softer frond
+const HALATION_MIX = 0.55; // raise for more glow off the sunlit blades
+const BOKEH_SHARE = 0.06; // raise for more discs in front of the lens
+const BOKEH_GAIN = 0.11; // raise for brighter discs
+const GRAIN_MIX = 0.034; // raise for more grain
+const GRAIN_FROND = 0.15; // raise for more grain on the frond than the water
+const glf = (v: number) => v.toFixed(3);
+
 const HEAD = `#version 300 es
 precision highp float;
 `;
@@ -122,7 +132,7 @@ uniform vec2 uRes;
 out vec4 o;
 ${NOISE}
 void main() {
-  o = vec4(texture(uBg, gl_FragCoord.xy / uRes).rgb + (hash12(gl_FragCoord.xy) - .5) / 255., 1.);
+  o = vec4(texture(uBg, gl_FragCoord.xy / uRes).rgb + (hash12(gl_FragCoord.xy) - .5) / 255., 0.);
 }
 `;
 
@@ -190,6 +200,14 @@ vec3 sheen(vec3 N, vec3 V, float shaft, float lightY, float hard) {
   vec3 hi = vec3(1., .93, .75) * (pow(rl, hard) * 2. + pow(rl, 12.) * .25) * (.4 + 2. * shaft + lightY);
   float satin = pow(rl, 5.) * .16 + pow(max(R.y, 0.), 3.) * .06;
   return (env * .55 + hi) * fr + hi * .06 + vec3(1., .9, .7) * satin * (.4 + shaft + lightY);
+}
+// VEIL
+// the water between the eye and the frond, thicker for the far parts, so it shares the background's light
+vec3 veil(vec3 col, vec3 bg, vec3 pos, float shaft, float extra) {
+  float dist = length(uCam - pos);
+  float k = ${glf(VEIL_MIX)} + clamp((dist - uCam.z + .6) * .17, 0., .34) + clamp(-pos.z * .42, 0., .21) + extra;
+  vec3 water = bg * vec3(.78, 1.04, 1.02) + vec3(.004, .016, .016) + vec3(.03, .07, .06) * shaft;
+  return mix(col, water, clamp(k, 0., .8));
 }
 `;
 
@@ -362,20 +380,22 @@ void main() {
   vec3 col = through(tau, N, V, vPos, bg, shaft, lightY, caus);
   // the side of each pucker that faces the sun takes a little more of it
   col *= 1. + 1.1 * dot(N - N0, normalize(L));
-  // warm amber-brown, deeper than the lemon-gold stipe and floats
-  col *= vec3(1.06, .88, .66);
+  // COLOUR
+  // warm amber-brown, deeper than the lemon-gold stipe and floats, patchy from blade to blade
+  float blot = noise2(vec2(x * 3.1, sg * 1.3) + vB.z * 2.7);
+  col *= mix(vec3(1.1, .86, .58), vec3(1.02, .9, .66), blot);
   col += vec3(.012, .04, .04) * (.6 + .4 * N.y);
-  col = mix(col, vec3(.5, .54, .48) * (.25 + .5 * lightY + 1.3 * shaft), speck * .7);
-  col += sheen(N, V, shaft + caus * .4, lightY, 40.);
+  // BACKLIGHT
+  // thin tissue facing away from the sun lets it through, warmer the thinner it gets
+  float back = pow(max(dot(-V, normalize(L)), 0.), 2.) * (.4 + lightY + 1.6 * shaft);
+  col += vec3(.4, .22, .04) * exp(-tau * 2.2) * back * (.5 + 1.5 * caus);
+  col = mix(col, vec3(.5, .54, .48) * (.25 + .5 * lightY + 1.3 * shaft), speck * .55);
+  col += sheen(N, V, shaft + caus * .4, lightY, 16.) * .55; // raise for a wetter blade
   // the margin is thinner and glows amber where the sun comes through
   float rim = smoothstep(edge - .14, edge - fw, au);
   col *= 1. + .45 * rim;
   col += vec3(.35, .2, .04) * rim * (.15 + .5 * lightY + shaft) * .3;
-  // HAZE
-  // the far side of the frond sinks into the water
-  float dist = length(uCam - vPos);
-  float haze = clamp((dist - uCam.z + .6) * .16, 0., .5) + clamp(-vPos.z * .6, 0., .3);
-  col = mix(col, bg * vec3(.85, 1., 1.), haze);
+  col = veil(col, bg, vPos, shaft, s * s * .14 + e * .06);
   col *= vig(gl_FragCoord.xy / uRes);
   o = vec4(tone(col), alpha);
 }
@@ -516,28 +536,33 @@ void main() {
   // the stalk end of each bulb is older, darker olive-brown tissue
   float root = (1. - smoothstep(.12, .6, vAlong)) * vBulb;
   float blot = noise2(vec2(vS * 2.3, vPhi * .4)) * rough;
+  // MOTTLE
+  // the float wall is uneven: cloudy thicker patches and a few darker freckles
+  float mot = noise2(vec2(vPhi * 2.2, vS * 34.)) * .65 + noise2(vec2(vPhi * 6., vS * 90.)) * .35;
+  float frk = smoothstep(.72, .86, noise2(vec2(vPhi * 11., vS * 160.)));
   float tau = mix(1.35, 1.05, vBulb) + str * .15 * rough + fib * .3 * rough + blot * .3;
   tau += (1. - nv) * mix(.5, 1., vBulb) * smoothstep(0., .35, vAlong) + vAge * .15 + root * .35;
+  tau += ((mot - .5) * .5 + frk * .25) * vBulb;
   vec3 bg;
   float shaft;
   float lightY;
   float caus;
   vec3 col = through(tau, N, V, vPos, bg, shaft, lightY, caus);
   // WAX
-  // gas inside: light scatters in the wall and the far side glows softly through the near one
-  col *= 1. + vBulb * .6 * pow(nv, 1.5);
-  col += vec3(.42, .2, .04) * vBulb * (.1 + .45 * lightY + shaft + caus * .5) * nv * nv * .32;
+  // gas inside: light scatters in the wall and the far side glows warm through the near one
+  float lit = .1 + .45 * lightY + shaft + caus * .6;
+  col *= 1. + vBulb * .45 * pow(nv, 1.5);
+  col += vec3(.5, .26, .05) * vBulb * lit * smoothstep(.15, 1., nv) * (.75 + .5 * mot) * .3;
+  col += vec3(.36, .2, .05) * vBulb * lit * pow(1. - nv, 2.) * .12;
   col = mix(col, col * vec3(.7, .74, .42), root);
   col *= .95 + .1 * noise2(vec2(vPhi * 14., vS * 120.)) * rough;
   col += vec3(.015, .04, .036) * (.5 + .5 * N.y);
-  // a wet, glossy skin on the bulbs; a duller one on the stipe
-  col += sheen(N, V, shaft + caus * .5, lightY, mix(14., 70., vBulb)) * mix(.45, 1.15, vBulb);
-  // GLOSS
-  // a tight wet highlight on each bulb, with a softer bloom round it
-  float rg = max(dot(reflect(-V, N), normalize(vec3(-.3, .75, .6))), 0.);
-  col += vec3(1., .94, .8) * (pow(rg, 45.) * 2.4 + pow(rg, 9.) * .14) * vBulb * (.45 + lightY + shaft + caus);
+  // SHEEN
+  // broad and soft on the bulbs, duller still on the stipe
+  col += sheen(N, V, shaft + caus * .5, lightY, mix(14., 7., vBulb)) * mix(.45, .3, vBulb); // raise for wetter floats
   // stipe and floats glow a lemon gold, the stipe mottled along its length
-  col *= vec3(1.38, 1.04, .34) * mix(.9 + .2 * blot, 1., vBulb);
+  col *= mix(vec3(1.38, 1.04, .34) * (.9 + .2 * blot), vec3(1.3, 1., .42), vBulb);
+  col = veil(col, bg, vPos, shaft, 0.);
   col *= vig(gl_FragCoord.xy / uRes);
   o = vec4(tone(col), 1.);
 }
@@ -564,7 +589,10 @@ ${NOISE}
 ${RAYS}
 void main() {
   float snow = step(.86, fract(aSeed.w * 13.7 + aSeed.x * 3.1));
-  float z = mix(-3.2, 2.35, aSeed.z);
+  // LENS
+  // a few right in front of the camera, huge and faint
+  float lens = step(${glf(1 - BOKEH_SHARE)}, fract(aSeed.w * 7.3 + aSeed.y * 1.7)) * (1. - snow);
+  float z = mix(mix(-3.2, 2.35, aSeed.z), mix(2.6, 3.05, aSeed.z), lens);
   float dist = uCamZ - z;
   float hh = dist * uTan;
   float sp = .6 + aSeed.w;
@@ -578,12 +606,17 @@ void main() {
   gl_Position = uProj * vec4(v, 1.);
   float coc = abs(z - .25) * .55;
   float size = mix(.5 + aSeed.w * .9, 2.2 + aSeed.w * 2.4, snow) * (2.4 / dist) + coc * coc * 26.;
-  gl_PointSize = clamp(size * uDpr, 1., 90.);
-  vSoft = clamp(coc * .9, mix(.1, .45, snow), .95);
+  size = mix(size, 70. + 90. * aSeed.w, lens);
+  gl_PointSize = clamp(size * uDpr, 1., 400.);
+  vSoft = clamp(coc * .9, mix(.1, .45, snow), mix(.95, .7, lens));
   vSnow = snow * (1. - smoothstep(.3, .7, coc));
   vSeed = aSeed.w * 37.;
   float sh = rays(q * vec2(uAspect, 1.), uTime);
-  vA = (.25 + 2.6 * sh) * (.4 + .6 * (q.y * .5 + .5)) / (1. + coc * coc * 9.) * (.6 + .4 * aSeed.w) * mix(1., .55, snow);
+  // GLINT
+  // fine dust flashes as it turns in a shaft
+  float glint = 1. + 2.5 * sh * pow(noise1(uTime * 1.3 + aSeed.x * 91.), 6.) * (1. - snow);
+  vA = (.25 + 2.6 * sh) * (.4 + .6 * (q.y * .5 + .5)) / (1. + coc * coc * 9.) * (.6 + .4 * aSeed.w) * mix(1., .55, snow) * glint;
+  vA = mix(vA, (${glf(BOKEH_GAIN)} + .6 * sh) * (.5 + .5 * (q.y * .5 + .5)) * (.6 + .4 * aSeed.x), lens);
 }
 `;
 
@@ -601,7 +634,20 @@ void main() {
   float d = length(c) * 2. + rag;
   float disc = 1. - smoothstep(1. - vSoft, 1., d);
   float rim = smoothstep(.6, .95, d) * disc * step(.4, vSoft) * (1. - vSnow);
-  o = vec4(mix(vec3(.6, .8, .72), vec3(.82, .86, .78), vSnow) * vA * (disc * .5 + rim * .12), 1.);
+  o = vec4(mix(vec3(.6, .8, .72), vec3(.82, .86, .78), vSnow) * vA * (disc * .5 + rim * .12), 0.);
+}
+`;
+
+// SOFT
+// the scene at half resolution through a small box, alpha carrying where the frond is
+export const SOFT_FS = `${HEAD}
+uniform sampler2D uScene;
+uniform vec2 uRes;
+out vec4 o;
+void main() {
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec2 k = .5 / uRes;
+  o = (texture(uScene, uv + k) + texture(uScene, uv - k) + texture(uScene, uv + vec2(k.x, -k.y)) + texture(uScene, uv - vec2(k.x, -k.y))) * .25;
 }
 `;
 
@@ -611,11 +657,13 @@ void main() {
 export const POST_FS = `${HEAD}
 uniform sampler2D uScene;
 uniform sampler2D uBg;
+uniform sampler2D uSoft;
 uniform vec2  uRes;
 uniform float uTime;
 uniform float uRipple; // wobble, device px
 uniform float uFringe; // colour split at the corners, device px
 uniform float uGrain; // grain clump size, device px
+uniform float uBlur; // soft focus radius, device px
 out vec4 o;
 ${NOISE}
 void main() {
@@ -631,9 +679,21 @@ void main() {
   vec2 c = uv - .5;
   float edge = dot(c, c);
   vec2 ca = c * edge * uFringe * 5.6 / uRes;
-  vec3 col = texture(uScene, uv).rgb;
+  vec4 sc = texture(uScene, uv);
+  vec3 col = sc.rgb;
   // the split only shows near the frame edge, so the middle skips the extra taps
   if (edge > .07) col.rb = vec2(texture(uScene, uv + ca).r, texture(uScene, uv - ca).b);
+  // SOFT FOCUS
+  // the frond seen through a hand of water: never pixel-sharp, and the sunlit blades bloom
+  vec2 k = uBlur / uRes;
+  vec4 sf = texture(uSoft, uv + k * vec2(1., .4)) + texture(uSoft, uv - k * vec2(1., .4)) + texture(uSoft, uv + k * vec2(-.4, 1.)) + texture(uSoft, uv - k * vec2(-.4, 1.));
+  sf *= .25;
+  vec2 k2 = k * 2.8;
+  vec4 hl = texture(uSoft, uv + k2 * vec2(.7, .7)) + texture(uSoft, uv - k2 * vec2(.7, .7)) + texture(uSoft, uv + k2 * vec2(-.95, .3)) + texture(uSoft, uv - k2 * vec2(-.95, .3));
+  hl *= .25;
+  float m = max(sc.a, sf.a);
+  col = mix(col, sf.rgb, .15 + ${glf(SOFT_MIX)} * m);
+  col += max(hl.rgb - .48, 0.) * vec3(1., .84, .58) * (.25 + .75 * hl.a) * ${glf(HALATION_MIX)};
   // SCATTER
   // the shafts bleed a little light into the water round them
   vec2 r = vec2(uRes.y / uRes.x, 1.) * .022;
@@ -652,7 +712,7 @@ void main() {
   // GRAIN
   // soft clumps like film, a little sharp speckle on top
   float g = (noise2(gl_FragCoord.xy / uGrain + fract(t * 7.31) * 613.) - .5) * 1.7 + (hash12(gl_FragCoord.xy + fract(t * 3.17) * 271.) - .5) * .5;
-  col += g * .042 * (.35 + lum); // change grain strength here
+  col += g * ${glf(GRAIN_MIX)} * (.35 + lum) * (1. + ${glf(GRAIN_FROND)} * m);
   o = vec4(col, 1.);
 }
 `;

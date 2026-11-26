@@ -36,6 +36,8 @@ uniform float uTime;
 uniform float uWave;   // surface wobble, metres
 uniform vec4  uSq;     // squash along x, along y, slosh, unused
 uniform int   uShape;  // 0 sphere, 1 drop, 2 cube
+uniform int   uFrom;   // the shape it is leaving
+uniform float uMorph;  // 0 at uFrom, 1 settled on uShape
 uniform float uBound;  // a sphere round C that holds the shape
 uniform vec3  uSun;    // unit, toward the sun
 uniform vec2  uWin;    // window centre on the window wall: z, y
@@ -72,15 +74,21 @@ float roundBox(vec3 p, vec3 b, float r) {
   return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - r;
 }
 
-float shape(vec3 q) {
-  if (uShape == 0) return length(q) - R;
-  if (uShape == 1) return roundCone(q - vec3(0.0, -R + 0.32, 0.0), 0.32, 0.035, 0.5);
+float form(int s, vec3 q) {
+  if (s == 0) return length(q) - R;
+  if (s == 1) return roundCone(q - vec3(0.0, -R + 0.32, 0.0), 0.32, 0.035, 0.5);
   // a soft cube, turned a little toward the sun
   vec3 b = q - vec3(0.0, -R + 0.27, 0.0);
   float cs = 0.8253;
   float sn = 0.5646;
   b.xz = mat2(cs, sn, -sn, cs) * b.xz;
   return roundBox(b, vec3(0.175), 0.095);
+}
+
+// blending the two distances melts one form into the next
+float shape(vec3 q) {
+  float d = form(uShape, q);
+  return uMorph < 1.0 ? mix(form(uFrom, q), d, uMorph) : d;
 }
 
 float sdf(vec3 p) {

@@ -13,6 +13,8 @@ import { aim, camera, project } from "./camera";
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
+const TINT_S = 0.22; // change tint fade here, time constant
+const MORPH_S = 0.6; // change shape melt here
 const MAP_PX = [1280, 2048] as const; // receiver map width, small and large canvases
 const MAP_BIG_PX = 1800; // canvas width from which the large map is used
 const GAIN = 0.25; // light is stored scaled down so hot cores stay within half floats
@@ -78,8 +80,12 @@ export class Gallery {
 
   // material
   private shape = 0;
+  private from = 0;
+  private morph = 1;
   private iors = new Float32Array(3);
   private absorb = new Float32Array(3);
+  private absorbTo = new Float32Array(3);
+  private tinted = false;
   private wave = 0.45;
   private flow = 0.5;
   private sunK = 0.4;
@@ -129,7 +135,19 @@ export class Gallery {
     this.trace = program(gl, QUAD_VS, TRACE_FS);
     this.caustic = program(gl, CAUSTIC_VS, CAUSTIC_FS);
     this.room = program(gl, QUAD_VS, ROOM_FS);
-    const shared = ["uTime", "uWave", "uSq", "uShape", "uBound", "uSun", "uWin", "uIor", "uAbsorb"];
+    const shared = [
+      "uTime",
+      "uWave",
+      "uSq",
+      "uShape",
+      "uFrom",
+      "uMorph",
+      "uBound",
+      "uSun",
+      "uWin",
+      "uIor",
+      "uAbsorb",
+    ];
     this.tu = locate(gl, this.trace, shared);
     this.cu = locate(gl, this.caustic, [
       "uPos",
@@ -206,6 +224,7 @@ export class Gallery {
     this.indices = idx.length;
 
     this.set(0, 1.33, "clear", 0.45, 0.5, 0.4);
+    this.tinted = false;
   }
 
   // HOST
@@ -233,14 +252,23 @@ export class Gallery {
   // MATERIAL
   // shape index, index of refraction, tint, and wave, flow and sun from 0 to 1
   set(shape: number, ior: number, tint: Tint, wave: number, flow: number, sun: number) {
-    this.shape = Math.max(0, Math.min(SHAPES.length - 1, shape | 0));
+    const next = Math.max(0, Math.min(SHAPES.length - 1, shape | 0));
+    if (next !== this.shape && this.tinted && !this.reducedMotion) {
+      this.from = this.shape;
+      this.morph = 0;
+      this.poke(0, -18);
+    }
+    this.shape = next;
     this.iors[0] = 1 + (ior - 1) * (1 - DISPERSION);
     this.iors[1] = ior;
     this.iors[2] = 1 + (ior - 1) * (1 + DISPERSION * 1.4);
     const a = TINTS[tint] ?? TINTS.clear;
-    this.absorb[0] = a[0];
-    this.absorb[1] = a[1];
-    this.absorb[2] = a[2];
+    this.absorbTo[0] = a[0];
+    this.absorbTo[1] = a[1];
+    this.absorbTo[2] = a[2];
+    // the first tint and reduced motion land at once
+    if (!this.tinted || this.reducedMotion) this.absorb.set(this.absorbTo);
+    this.tinted = true;
     this.wave = wave;
     this.flow = flow;
     this.sunK = sun;
@@ -330,14 +358,33 @@ export class Gallery {
     const flowing = !this.reducedMotion && this.flow > 0.001 && this.wave > 0.001;
     if (flowing) this.t += dt * this.flow * FLOW_MAX;
     const wobbling = this.settle(dt);
+    const fading = this.fade(dt);
     this.draw();
     if (!this.shown) {
       this.shown = true;
       this.onShown();
     }
-    if (flowing || wobbling || this.pointer !== -1) this.wake();
+    if (flowing || wobbling || fading || this.pointer !== -1) this.wake();
     else this.last = 0;
   };
+
+  // TINT AND SHAPE
+  // eases the absorption toward the new tint and melts the shape; true while still changing
+  private fade(dt: number) {
+    if (this.morph < 1) this.morph = Math.min(1, this.morph + dt / MORPH_S);
+    const k = 1 - Math.exp(-dt / TINT_S);
+    let e = 0;
+    for (let i = 0; i < 3; i++) {
+      const d = this.absorbTo[i] - this.absorb[i];
+      this.absorb[i] += d * k;
+      e += Math.abs(d);
+    }
+    if (e < 1e-3) {
+      this.absorb.set(this.absorbTo);
+      return this.morph < 1;
+    }
+    return true;
+  }
 
   // damped springs; true while still moving
   private settle(dt: number) {
@@ -438,7 +485,9 @@ export class Gallery {
   }
 
   private bound() {
-    return BOUND_M[this.shape] + this.wave * WAVE_MAX_M * 1.2 + WOBBLE_MAX_M * 1.1;
+    const b =
+      this.morph < 1 ? Math.max(BOUND_M[this.shape], BOUND_M[this.from]) : BOUND_M[this.shape];
+    return b + this.wave * WAVE_MAX_M * 1.2 + WOBBLE_MAX_M * 1.1;
   }
 
   private common(u: Uniforms) {
@@ -447,6 +496,9 @@ export class Gallery {
     gl.uniform1f(u.uWave, this.wave * WAVE_MAX_M);
     gl.uniform4fv(u.uSq, this.sq);
     gl.uniform1i(u.uShape, this.shape);
+    gl.uniform1i(u.uFrom, this.from);
+    const m = this.morph;
+    gl.uniform1f(u.uMorph, m * m * (3 - 2 * m));
     gl.uniform1f(u.uBound, this.bound());
     gl.uniform3fv(u.uSun, this.sun);
     gl.uniform2fv(u.uWin, this.win);

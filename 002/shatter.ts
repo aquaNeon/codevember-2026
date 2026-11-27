@@ -24,12 +24,12 @@ const POL_TAU_S = 0.35;
 const SEED = 11;
 // SNAP
 // only the thin tail snaps; bulb and neck shrug off a blow
-const SNAP_X = TIP_X + 3.0; // change default snap point here
+const SNAP_X = TIP_X + 0.08; // change default snap point here
 const SNAP_MAX_X = DROP.JOIN_X - 0.45 * DROP.TAIL_U;
 const TIP_ZONE_U = 0.7;
 const YAW = (DROP.YAW_DEG * Math.PI) / 180;
 
-const snapPoint = (lx: number) => (lx < TIP_X + TIP_ZONE_U ? TIP_X + 0.08 : lx);
+const snapPoint = (lx: number) => (lx < TIP_X + TIP_ZONE_U ? SNAP_X : lx);
 
 export type Phase = "whole" | "breaking" | "held" | "mending";
 const PHASES: Phase[] = ["whole", "breaking", "held", "mending"];

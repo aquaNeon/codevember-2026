@@ -11,7 +11,6 @@ void main() {
   gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
 }`;
 
-// starts compiling a program; nothing here waits on the driver
 export function pass(gl: WebGL2RenderingContext, fs: string, vs = FULLSCREEN_VS): Pass {
   const prog = gl.createProgram();
   if (!prog) throw new Error("no program");
@@ -31,11 +30,11 @@ export function pass(gl: WebGL2RenderingContext, fs: string, vs = FULLSCREEN_VS)
   return { prog, u: {}, shaders };
 }
 
+// PARALLEL COMPILE
 // COMPLETION_STATUS_KHR, polled so linking never blocks
 export const busy = (gl: WebGL2RenderingContext, p: Pass) =>
   !gl.getProgramParameter(p.prog, 0x91b1);
 
-// once linked: check it, free the shaders, look up every uniform it declares
 export function finish(gl: WebGL2RenderingContext, p: Pass) {
   if (!gl.getProgramParameter(p.prog, gl.LINK_STATUS)) {
     const log = p.shaders.map((sh) => gl.getShaderInfoLog(sh)).join("\n");
@@ -92,6 +91,7 @@ export function software(gl: WebGL2RenderingContext) {
   return /swiftshader|llvmpipe|software|basic render/i.test(name);
 }
 
+// RAF
 // workers without rAF fall back to a timer
 export const raf = (fn: (now: number) => void) =>
   typeof requestAnimationFrame === "function"

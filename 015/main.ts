@@ -4,7 +4,7 @@ import { mount } from "./host";
 import { placePlate } from "./plate";
 
 const DAY = 15;
-const IDLE_MS = 1200; // lower to start the scene sooner
+const IDLE_MS = 1200; // change to start the scene sooner
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 

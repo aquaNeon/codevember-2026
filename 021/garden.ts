@@ -1,10 +1,5 @@
 // GARDEN
-// the renderer, the clock and the loop. no dom in here, so it runs in a worker on an
-// offscreen canvas or on the page as a fallback. the summer runs on by itself; scrolling
-// hurries it, then it eases back. the sun crosses the sky over each cycle and leans a little
-// toward the pointer; the plants' soft shadows swing with it. at the end one seed drifts off
-// to the gap where the next plant is already coming up, and the camera goes with it. the
-// loop sleeps once nothing can change on screen
+// renderer, clock and loop; dom-free so it runs in a worker or on the page
 
 import { busy, finish, pass, raf, software, unraf, type Opts, type Pass } from "./gl";
 import {
@@ -52,42 +47,42 @@ import {
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
 const FOV_RAD = (26 * Math.PI) / 180;
-const AUTO_RATE_D = 0.6; // days per second, the summer's own pace
-const SPROUT_X = 1.8; // the seedling weeks run this much faster
-const RATE_TAU_S = 0.6; // the pace eases toward its goal over this
-const BOOST_MAX_D = 7; // the most scrolling can add, days per second
-const BOOST_TAU_S = 1.4; // and how long it takes to ease back
-const BOOST_PER_PX = 0.012; // days per second added per pixel scrolled
-const NEXT_D = 14; // how far the next seedling has come by the time the seed lands
-const AUTO_CYCLES = 3; // untouched cycles before it comes to rest in seed
-const ORBIT_RAD = 2 * Math.PI; // the camera turns this far round the plant over a cycle
-const AZ0_RAD = 0.2; // where the first cycle's orbit starts
-const SLOT_M = 0.72; // spacing of the bed
-const NEAR_SLOTS = 6; // neighbours kept either side; the outer ones are lost in the paper
-const GONE_M = 3.7; // past this from the plant in view, everything has faded to paper
-const POOL = 6; // the plant growing, the next, and the dried ones behind
+const AUTO_RATE_D = 0.6; // change summer pace here
+const SPROUT_X = 1.8;
+const RATE_TAU_S = 0.6;
+const BOOST_MAX_D = 7;
+const BOOST_TAU_S = 1.4;
+const BOOST_PER_PX = 0.012; // change scroll speed-up here
+const NEXT_D = 14;
+const AUTO_CYCLES = 3;
+const ORBIT_RAD = 2 * Math.PI;
+const AZ0_RAD = 0.2;
+const SLOT_M = 0.72;
+const NEAR_SLOTS = 6;
+const GONE_M = 3.7;
+const POOL = 6;
 const PREVS = 4;
 const NEIGHBOURS = 12;
-const FLY_S = 7; // the seed's drift to the soil
-const SHADOW_DIV = 2; // the shadow mask renders at half the size
-const LEAN_RAD = 0.35; // how far the pointer can lean the sun, about 20°
-const LEAN_S = 0.8; // and how gently
+const FLY_S = 7;
+const SHADOW_DIV = 2; // change shadow mask resolution here
+const LEAN_RAD = 0.35;
+const LEAN_S = 0.8;
 const HUD_MS = 120;
-const SLOW_MS = 24; // frames slower than this lower the resolution
+const SLOW_MS = 24;
 const MIN_SCALE = 0.6;
 const CAM = {
-  rosette: 0.7, // the rosette's frame, m, against 0.86 before
-  wide: 0.22, // how much wider the frame opens mid-climb
-  crown: 0.85, // how far it closes in on the crown, 0 to 1
-  crane: 0.12, // rise past the end of the bed, rad
+  rosette: 0.7,
+  wide: 0.22,
+  crown: 0.85,
+  crane: 0.12,
 };
-const DIE_S = 6; // the old stalk's going, once the seed is down
-const FALL_RAD = 1.45; // how far over it lies
+const DIE_S = 6;
+const FALL_RAD = 1.45;
 const SWAY_K = (2 * Math.PI * 0.55) ** 2;
 const SWAY_C = 2 * 0.16 * Math.sqrt(SWAY_K);
-const SHAKE_S = 0.22; // a click's push lasts this long, then the stalk rings on its spring
-const SHAKE_RAD = 0.24; // how far a shake leans it; less before seed
-const SWAY_MAX_RAD = 0.36; // repeated shakes never lean it further than this
+const SHAKE_S = 0.22;
+const SHAKE_RAD = 0.24;
+const SWAY_MAX_RAD = 0.36;
 
 export type Hud = {
   day: number;
@@ -97,14 +92,12 @@ export type Hud = {
   stage: Stage | "Drifting";
   resting: boolean;
   ripe: boolean;
-  // the plant's box on screen, css px
   x0: number;
   y0: number;
   x1: number;
   y1: number;
 };
 
-// one plant's buffers on the gpu
 type Slot = {
   tex: WebGLTexture;
   leafVao: WebGLVertexArrayObject;
@@ -153,8 +146,7 @@ export class Garden {
   private shB: Target | null = null;
 
   // PLANTS
-  // a pool: the one growing, the next one already up in its gap, the dried ones behind;
-  // and the calm rosettes of the bed. nothing is made or let go where it can be seen
+  // pooled: growing, next and dried; created and dropped only out of view
   private pool: Plant[] = [];
   private cur = 0;
   private next = -1;
@@ -166,12 +158,11 @@ export class Garden {
   private nbLeaves = new Float32Array(NEIGHBOURS * MAX_NODES * LEAF_STRIDE);
   private nbN = 0;
   private seed: number;
-  // the old stalk on its way out: drying to straw, lying down, going into the soil
   private dying = -1;
   private dieT = 0;
   private dieX = 1;
   private straw = 0;
-  private strawOn = 0; // straw for the plant being drawn
+  private strawOn = 0;
 
   private raf = 0;
   private last = 0;
@@ -199,10 +190,10 @@ export class Garden {
   private at: string;
   private cycAz = AZ0_RAD;
   private cycDir = 1;
-  private cycG0 = 0; // the day this cycle's orbit set out from
+  private cycG0 = 0;
 
   // DRIFT
-  // one seed carried from the old plant to the soil, the camera with it
+  // one seed flown from the old plant to the soil, camera following
   private flying = false;
   private flyT = 0;
   private path = new Float32Array(12);
@@ -215,14 +206,12 @@ export class Garden {
   private fromNear = 0;
 
   // SUN
-  // where the pointer last was; before any, high on the left
   private sunX = -1;
   private hover = false;
   private sun = new Float32Array([-0.62, 0.62, 0.32]);
   private heat = 0;
   private warm = 0;
   private lean = 0;
-  // screen fractions the type takes at the top and the bottom; the scene keeps clear of them
   private resT = 0;
   private resB = 0;
 
@@ -237,7 +226,7 @@ export class Garden {
   private vz = 0;
   private wx = 1;
   private wz = 0;
-  private kick = 0; // a shake's push still to run, s
+  private kick = 0;
   private kx = 0;
   private kz = 0;
   private kAcc = 0;
@@ -250,12 +239,12 @@ export class Garden {
   private eye = new Float32Array(3);
   private focus = new Float32Array(3);
   private focal = 1;
-  private top = 0; // the plant's top, eased so a gust never jolts the frame
+  private top = 0;
   private az = 0;
   private dist = 1;
   private frm = new Float32Array(6);
   private el = 0.4;
-  private near = 0; // how close in on the crown, for the depth of field
+  private near = 0;
 
   private hudAt = -1e9;
   private hud: Hud = {
@@ -298,7 +287,7 @@ export class Garden {
     this.gl = gl;
 
     // PROGRAMS
-    // all start compiling at once and are polled, never waited on
+    // all compile in parallel and are polled, never waited on
     this.parallel = !!gl.getExtension("KHR_parallel_shader_compile");
     this.bgP = pass(gl, BG_VS, BG_FS);
     this.groundP = pass(gl, GROUND_VS, GROUND_FS);
@@ -327,7 +316,6 @@ export class Garden {
     this.index(grid(SPINE_N, TUBE_SIDES + 1));
     gl.bindVertexArray(null);
     this.leafIdx = this.index(grid(LEAF_GV, LEAF_GU));
-    // a coarse leaf for the shaft mask, every fourth vertex along and every other across
     const lo = gridSub(LEAF_GV, LEAF_GU, 2, 4);
     this.leafLoN = lo.length;
     this.leafIdxLo = this.index(lo);
@@ -358,7 +346,7 @@ export class Garden {
       this.gpu.push({ tex, leafVao, leafBuf, headVao, floretVao, headBuf, seedVao, seedBuf });
     }
 
-    // NEIGHBOURS and the drifting seed
+    // NEIGHBOURS AND DRIFTING SEED
     this.nbVao = this.vao();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.leafIdx);
     this.nbBuf = this.buffer(this.nbLeaves.byteLength, gl.DYNAMIC_DRAW);
@@ -459,7 +447,6 @@ export class Garden {
     this.gl.deleteFramebuffer(t.fbo);
   }
 
-  // where the first frame begins: ?at, the flowers under reduced motion, else the rosette
   private start() {
     const p = this.pool[this.cur];
     if (this.at === "fly") this.g = END_D;
@@ -469,7 +456,7 @@ export class Garden {
   }
 
   // BED
-  // slot i of the long bed: two rosettes, then a gap where a seed can take
+  // slot i: two rosettes, then a gap a seed can land in
   private slotX(i: number) {
     return i * SLOT_M;
   }
@@ -489,10 +476,7 @@ export class Garden {
     return false;
   }
 
-  // the neighbours' leaves, posed once whenever the bed in view changes; those added or
-  // dropped are always past GONE_M, already lost in the paper
   private neighbours() {
-    // around both the plant in view and the gap its seed is bound for
     const lo = Math.min(this.curSlot, this.landSlot);
     const hi = Math.max(this.curSlot, this.landSlot);
     let n = 0;
@@ -513,8 +497,6 @@ export class Garden {
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.nbLeaves, 0, n * LEAF_STRIDE);
   }
 
-  // each cycle its own prevailing wind: along the bed toward the nearest free gap, away from
-  // where the camera ends up when there's a choice
   private weather() {
     const c = this.curSlot;
     const d = this.cycDir;
@@ -531,7 +513,6 @@ export class Garden {
     this.wz /= l;
   }
 
-  // the next plant comes up in the landing gap from the start of the cycle, from bare soil
   private sow() {
     let n = -1;
     for (let i = 0; i < POOL && n < 0; i++) if (!this.inUse(i)) n = i;
@@ -551,7 +532,6 @@ export class Garden {
     return false;
   }
 
-  // the dried stalk furthest from view gives up its place, by then long gone into the paper
   private dropFarthest() {
     let best = -1;
     let far = -1;
@@ -589,7 +569,6 @@ export class Garden {
     this.wake();
   }
 
-  // the title's and the hud's boxes, css px: the bed is framed in the band between them
   keepOut(
     _ax: number,
     ay: number,
@@ -614,7 +593,6 @@ export class Garden {
   }
 
   // INPUT
-  // the sun leans toward the pointer wherever it hovers; a touch leaves it leaning there
   press(x: number, _y: number) {
     this.sunX = x;
     this.hover = true;
@@ -636,7 +614,6 @@ export class Garden {
     this.wake();
   }
 
-  // scrolling hurries the summer; it never runs it back
   wheel(px: number) {
     if (this.hold) return;
     this.touch();
@@ -655,7 +632,6 @@ export class Garden {
   }
 
   // GUST
-  // a quick tap blows away from the side you tapped and takes ripe seed with it
   private blow(x: number) {
     const s = this.reduced ? 0.45 : 1;
     const side = x < this.cssW * 0.5 ? 1 : -1;
@@ -669,8 +645,7 @@ export class Garden {
   }
 
   // SHAKE
-  // a click pushes the stalk away from the side you clicked, briefly, and it rings on its
-  // spring; in seed each shake shakes a burst of seed loose. never leans past SWAY_MAX_RAD
+  // impulse away from the click, then it rings on a spring; capped at SWAY_MAX_RAD
   private shake(x: number) {
     const p = this.pool[this.cur];
     const ripe = !this.flying && p.loose > 0;
@@ -684,7 +659,6 @@ export class Garden {
       this.sx * this.sx + this.sz * this.sz + (this.vx * this.vx + this.vz * this.vz) / (w * w),
     );
     const amp = Math.min(SHAKE_RAD * (ripe ? 1 : 0.55) * s, Math.max(0, SWAY_MAX_RAD - now));
-    // the push whose impulse leans it by amp
     this.kAcc = (amp * w * Math.PI) / (2 * SHAKE_S);
     this.kick = SHAKE_S;
     this.gust = Math.max(this.gust, (ripe ? 0.45 : 0.12) * s);
@@ -720,7 +694,6 @@ export class Garden {
     }
 
     // CLOCK
-    // always on its way at the summer's pace; scrolling adds a push that eases back off
     const p = this.pool[this.cur];
     const auto = !this.reduced && !this.hold && !this.resting;
     this.boost *= Math.exp(-dt / BOOST_TAU_S);
@@ -737,14 +710,12 @@ export class Garden {
     }
 
     // SUN
-    // the light goes from cool to warm as the days lengthen, and a little warmer when hurried
     const heatGoal = Math.min(1, this.boost / 4);
     this.heat += (heatGoal - this.heat) * (1 - Math.exp(-dt / 1.2));
     this.warm = Math.min(1, 0.15 + 0.55 * smooth(-40, 40, this.g) + 0.2 * this.heat);
     const sunMoving = this.aimSun(dt);
 
     // WIND
-    // a light breeze while it lives, gusts on top; the plant leans on a spring
     const bGoal = auto
       ? 0.6 + 0.25 * Math.sin(this.t * 0.41) + 0.15 * Math.sin(this.t * 1.13 + 1)
       : 0;
@@ -773,12 +744,11 @@ export class Garden {
     // POSE
     const wind = this.breeze * 0.25 + this.gust;
     // NOD
-    // the tip's sweep runs on real time once hurried, so a fast summer never whips it round
+    // real time once hurried, so a fast summer never whips the tip round
     if (Number.isNaN(p.nutAt)) p.nutAt = nutOf(this.g);
     p.nutAt += nutOf(Math.min(this.rate, NUT_MAX_D) * dt);
     p.pose(this.g, this.sx, this.sz, this.t, wind);
     p.seeds(this.g, dt, this.t, this.wx, this.wz, this.breeze, this.gust);
-    // the next one, a seedling in its gap, a fortnight on by the time the seed comes down
     this.gNext = G0_D + NEXT_D * smooth(-20, END_D, this.g);
     const q = this.pool[this.next];
     q.pose(this.gNext, 0, 0, this.t, wind);
@@ -798,7 +768,6 @@ export class Garden {
     if (this.dying >= 0) this.wither(dt);
 
     this.adapt(rawMs, auto);
-    // the plant in view, which a landing this frame has just handed on
     const c = this.pool[this.cur];
     const top = Math.max(c.heightAt(this.g), c.top);
     const prevTop = this.top;
@@ -812,7 +781,7 @@ export class Garden {
     this.report(now);
 
     // SLEEP
-    // nothing running, swaying, drifting or settling: wait for input
+    // nothing moving or settling: stop the loop until input
     const busyNow =
       this.rate > 0 ||
       auto ||
@@ -838,8 +807,7 @@ export class Garden {
   };
 
   // SUN
-  // up in the sky behind the plant, out of frame: over a cycle it climbs as the days lengthen
-  // and swings from one side to the other; the pointer leans it by at most LEAN_RAD
+  // behind the plant; climbs and swings over a cycle, the pointer leans it by LEAN_RAD
   private aimSun(dt: number) {
     const prog = (this.g - G0_D) / (END_D - G0_D);
     const h0 = this.cycDir > 0 ? mix(-1.0, 0.85, prog) : mix(0.85, -1.0, prog);
@@ -850,7 +818,6 @@ export class Garden {
     const e = mix(0.42, 0.78, smooth(-40, 40, this.g));
     const az = this.az;
     const ce = Math.cos(e);
-    // across the frame by h, and back behind the plant, so leaves glow and shadows fall forward
     const a = Math.sin(h) * ce;
     const b = -Math.cos(h) * ce * 0.4;
     let x = Math.cos(az) * a + Math.sin(az) * b;
@@ -873,7 +840,6 @@ export class Garden {
   }
 
   // TAKE OFF
-  // the last seed leaves the crown for the gap where the next plant is coming up
   private takeOff() {
     const p = this.pool[this.cur];
     this.flying = true;
@@ -895,7 +861,6 @@ export class Garden {
     P[6] = lx - this.sign * 0.3;
     P[7] = 0.36;
     P[8] = lz + 0.1;
-    // it comes down just beside the seedling, a little toward the eye
     P[9] = lx - this.sign * 0.05;
     P[10] = 0.006;
     P[11] = lz + 0.07;
@@ -924,7 +889,6 @@ export class Garden {
     H[0] = a * P[0] + b * P[3] + c * P[6] + d * P[9] + 0.03 * fl * Math.sin(this.t * 2.9);
     H[1] = a * P[1] + b * P[4] + c * P[7] + d * P[10] + 0.025 * fl * Math.sin(this.t * 2.1 + 1);
     H[2] = a * P[2] + b * P[5] + c * P[8] + d * P[11] + 0.03 * fl * Math.sin(this.t * 1.7 + 2);
-    // pappus up, rocking as it floats; settled at a slant in the soil
     const r = 0.35 * fl;
     H[3] = Math.cos(this.t * 1.9) * r + 0.25 * (1 - fl) * this.sign;
     H[4] = 1;
@@ -941,11 +905,9 @@ export class Garden {
   }
 
   // LAND
-  // the seedling in the gap takes over; the old plant stays behind, dried
   private land() {
     this.flying = false;
     if (this.prev[PREVS - 1] >= 0) this.dropFarthest();
-    // keep the dried ones in order, newest first
     let w = 0;
     for (let k = 0; k < PREVS; k++) if (this.prev[k] >= 0) this.prev[w++] = this.prev[k];
     for (let k = w; k < PREVS; k++) this.prev[k] = -1;
@@ -954,14 +916,12 @@ export class Garden {
     if (this.dying >= 0) this.bury();
     this.dying = this.cur;
     this.dieT = 0;
-    // it lies down along the row, away from the seedling
     this.dieX = this.pool[this.cur].ox > this.slotX(this.landSlot) ? 1 : -1;
     this.cur = this.next;
     this.next = -1;
     this.curSlot = this.landSlot;
     this.g = this.gNext;
     this.seed = (this.seed * 1664525 + 1013904223) >>> 0;
-    // the next orbit sets out from exactly where the drift left the camera
     this.cycDir = -this.cycDir;
     this.cycAz = this.az;
     this.cycG0 = this.g;
@@ -972,16 +932,14 @@ export class Garden {
     this.top = this.pool[this.cur].top;
   }
 
-  // all the way round over a cycle, eased in from rest and out to rest at take-off, so it
-  // hands over to the drift and back without a jolt. the old stalk is gone long before the
-  // camera comes round its end of the bed
+  // ORBIT
+  // eased in and out at rest so it hands over to the drift without a jolt
   private azimuth() {
     const u = Math.min(1, Math.max(0, (this.g - this.cycG0) / Math.max(1, END_D - this.cycG0)));
     return this.cycAz - ORBIT_RAD * (0.5 - 0.5 * Math.cos(Math.PI * u));
   }
 
   // WITHER
-  // the old stalk dries to straw, bends, tips over and lies down, then settles into the soil
   private wither(dt: number) {
     this.dieT += dt;
     const u = this.dieT / DIE_S;
@@ -989,7 +947,6 @@ export class Garden {
     const p = this.pool[this.dying];
     this.straw = smooth(0, 0.35, u);
     const bend = 0.4 * smooth(0.05, 0.4, u) * this.dieX;
-    // a slow lean that gives way, then comes to rest on the ground
     const tip = smooth(0.15, 0.6, u);
     const fall = FALL_RAD * tip * tip * (3 - 2 * tip);
     const go = smooth(0.55, 1, u);
@@ -1038,13 +995,9 @@ export class Garden {
   }
 
   // CAMERA
-  // close over the rosette, pulled back wide and low while the stalk shoots up, then in again
-  // on the flowers and the seed heads; all the while turning round the plant. in the drift it
-  // rides along with the seed
   private camera() {
     const aspect = this.cssW / this.cssH;
     const tanH = Math.tan(FOV_RAD / 2);
-    // the band left free by the type: under the title on a phone, under the bar elsewhere
     const portrait = aspect < 0.8;
     const rt = Math.max(portrait ? 0.25 : 0.06, this.resT + 0.02);
     const rb = Math.max(portrait ? 0.09 : 0.01, this.resB + 0.01);
@@ -1060,8 +1013,6 @@ export class Garden {
     let el: number;
     let near: number;
     if (this.flying) {
-      // from the old framing, along with the seed, to exactly the framing the seedling
-      // takes over with when it lands, so the handover never jumps
       const q = this.pool[this.next];
       this.framing(q, this.gNext, q.top, 0, portrait, free, aspect, tanH);
       const s = Math.min(1, this.flyT / FLY_S);
@@ -1108,8 +1059,7 @@ export class Garden {
   }
 
   // FRAMING
-  // close over the rosette, wide while the stalk climbs, in on the crown; into frm as focus
-  // x y z, distance, elevation and how close in on the crown
+  // writes focus x y z, distance, elevation and crown closeness into frm
   private framing(
     p: Plant,
     g: number,
@@ -1122,21 +1072,17 @@ export class Garden {
   ) {
     const H = p.heightAt(g);
     const k = smooth(0.14, 0.75, H);
-    // headroom grows with the pace, so a fast climb never outruns the frame
     const tall = Math.max(0.18, top + 0.03 + 0.04 * k + Math.min(0.12, rate * 0.03));
     const climb = 4 * k * (1 - k);
-    // on a phone the hud runs right across the foot of the frame, so it only leans in
     const crown = CAM.crown * (portrait ? 0.3 : 1) * smooth(p.openD - 4, p.openD + 6, g);
     let span = Math.max(mix(CAM.rosette, 0.86, k), tall * (1.05 + 0.3 * (1 - k)));
     span *= 1 + CAM.wide * climb;
-    // in on the crown: its top third, the lower stalk running out of the frame
     const ty = mix(mix(0.24, tall * 0.45, k), top * 0.72, crown);
     span = mix(span, top * 0.62, crown);
     const halfW =
       (portrait ? 0.4 : 0.34) *
       mix(1, CAM.rosette / 0.86, 1 - k) *
       (portrait ? 1 : 1 - 0.3 * crown);
-    // up a little as it turns past the end of the bed, over the rosettes in front
     const end = Math.sin(this.az) ** 2;
     const F = this.frm;
     F[0] = p.ox;
@@ -1167,7 +1113,6 @@ export class Garden {
     if (u.uCast) gl.uniform1f(u.uCast, mask);
   }
 
-  // is a plant close enough to the view to be worth drawing at all
   private inView(i: number) {
     const p = this.pool[i];
     return Math.abs(p.ox - this.focus[0]) < GONE_M + 0.6;
@@ -1184,12 +1129,12 @@ export class Garden {
     gl.disable(gl.CULL_FACE);
 
     // UPLOAD
-    // the growing plants change every frame; the dried ones went up when they were left
+    // growing plants every frame; dried ones were uploaded when left
     this.upload(this.cur);
     this.upload(this.next);
 
     // SHADOWS
-    // every plant flattened onto the soil along the sun, coarse, then softened into a wash
+    // plants flattened onto the soil along the sun at low res, then blurred
     gl.bindFramebuffer(gl.FRAMEBUFFER, A.fbo);
     gl.viewport(0, 0, A.w, A.h);
     gl.disable(gl.DEPTH_TEST);
@@ -1229,7 +1174,7 @@ export class Garden {
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 
-    // NEIGHBOURS and PLANTS
+    // NEIGHBOURS AND PLANTS
     gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
     this.drawLeaves(this.nbVao, this.nbN, wind, 0);
     for (let i = PREVS - 1; i >= 0; i--) {
@@ -1266,7 +1211,6 @@ export class Garden {
     gl.bindVertexArray(null);
   }
 
-  // one blur pass from a to b, along the given step in texels
   private soften(a: Target, b: Target, sx: number, sy: number) {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, b.fbo);
@@ -1295,7 +1239,6 @@ export class Garden {
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, p.headData, 0, p.headN * HEAD_STRIDE);
   }
 
-  // leaves of one plant or of the whole bed; the shadow pass uses a coarse grid
   private drawLeaves(vao: WebGLVertexArrayObject, n: number, wind: number, mask: number) {
     if (!n) return;
     const gl = this.gl;
@@ -1355,7 +1298,7 @@ export class Garden {
     // LEAVES
     this.drawLeaves(G.leafVao, p.leafN, wind, mask);
 
-    // HEADS and FLORETS
+    // HEADS AND FLORETS
     if (p.headN) {
       this.common(this.headP, wind, mask);
       gl.bindVertexArray(G.headVao);
@@ -1379,7 +1322,6 @@ export class Garden {
   }
 
   // HUD
-  // the day since the seed went in, the heat, the length of the day
   private report(now: number) {
     if (now - this.hudAt < HUD_MS) return;
     this.hudAt = now;
@@ -1392,7 +1334,6 @@ export class Garden {
     const hours = Math.round((12.6 + 3.6 * smooth(-40, 40, g)) * 10) / 10;
     const stage = this.flying ? "Drifting" : p.stage(g);
     const ripe = !this.flying && p.loose > 0;
-    // the box round the plant: its base either side and its top, padded
     const rx = Math.cos(this.az) * 0.2;
     const rz = -Math.sin(this.az) * 0.2;
     this.project(p.ox - rx, 0, p.oz - rz);
@@ -1436,7 +1377,6 @@ export class Garden {
     this.onHud(h);
   }
 
-  // a world point to css px, into scr
   private project(x: number, y: number, z: number) {
     const m = this.viewProj;
     const w = m[3] * x + m[7] * y + m[11] * z + m[15] || 1e-6;
@@ -1464,7 +1404,8 @@ function hash(x: number) {
   return s - Math.floor(s);
 }
 
-// a coarser triangle grid over the same vertices: every sr-th row and sc-th column, ends kept
+// GRID
+// coarse grid over the same vertices: every sr-th row and sc-th column, ends kept
 function gridSub(rows: number, cols: number, sr: number, sc: number) {
   const rs: number[] = [];
   const cs: number[] = [];
@@ -1491,7 +1432,6 @@ function gridSub(rows: number, cols: number, sr: number, sc: number) {
   return out;
 }
 
-// a rows x cols vertex grid as triangles, rows along the first index
 function grid(rows: number, cols: number) {
   const out = new Uint16Array((rows - 1) * (cols - 1) * 6);
   let k = 0;
@@ -1536,7 +1476,6 @@ function lookAt(
   zx /= zl;
   zy /= zl;
   zz /= zl;
-  // x = up × z
   let xx = zz;
   let xy = 0;
   let xz = -zx;

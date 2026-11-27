@@ -16,14 +16,14 @@ import {
 } from "./layout";
 
 const DAY = 14;
-const IDLE_MS = 1200; // longest wait before the drawing starts anyway
-const GRAB_U = 14; // how close a press must land to catch a string
-const KNOB_HIT_PX = 22; // touch reach around a knob, at least
-const SLIP_U = 30; // a held string slips off the finger past this pull
-const TAP_U = 13; // a tap without a pull plucks this far
-const STRUM_U_PER_SPEED = 7; // pull per unit/ms of swipe
+const IDLE_MS = 1200;
+const GRAB_U = 14;
+const KNOB_HIT_PX = 22;
+const SLIP_U = 30;
+const TAP_U = 13;
+const STRUM_U_PER_SPEED = 7;
 const STRUM_RANGE_U = [7, 26] as const;
-const TUNE_N_PER_PX = 0.16; // drag a knob up to tighten
+const TUNE_N_PER_PX = 0.16;
 const WHEEL_N_PER_PX = 0.02;
 const KEY_N = 1;
 const KEY_FINE_N = 0.2;

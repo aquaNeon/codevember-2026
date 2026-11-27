@@ -13,17 +13,18 @@ import { aim, camera, project } from "./camera";
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
-const TINT_S = 0.22; // change tint fade here, time constant
+const TINT_S = 0.22; // change tint fade here
 const MORPH_S = 0.6; // change shape melt here
-const MAP_PX = [1280, 2048] as const; // receiver map width, small and large canvases
-const MAP_BIG_PX = 1800; // canvas width from which the large map is used
-const GAIN = 0.25; // light is stored scaled down so hot cores stay within half floats
-const DISPERSION = 0.012; // how much further blue bends than red, change for wider fringes
+const MAP_PX = [1280, 2048] as const;
+const MAP_BIG_PX = 1800;
+const GAIN = 0.25; // change gain here, keeps hot cores inside half-float range
+const DISPERSION = 0.012; // change fringe width here
 
 // LOOK
 export const SHAPES = ["sphere", "drop", "cube"] as const;
-const BOUND_M = [0.36, 0.51, 0.46] as const; // a sphere round each shape, before waves
-// what each tint drinks per metre of liquid, red green blue
+const BOUND_M = [0.36, 0.51, 0.46] as const;
+// TINTS
+// absorption per metre, rgb (Beer-Lambert)
 export const TINTS = {
   clear: [0.5, 0.14, 0.09],
   emerald: [2.6, 0.32, 1.5],
@@ -32,17 +33,16 @@ export const TINTS = {
   ink: [3.4, 2.4, 0.75],
 } as const;
 export type Tint = keyof typeof TINTS;
-const WAVE_MAX_M = 0.04; // surface wobble at full Wave
-const FLOW_MAX = 2.2; // time scale at full Flow
+const WAVE_MAX_M = 0.04;
+const FLOW_MAX = 2.2;
 
 // SUN
-// the knob sweeps from low across the side to higher from the front
 const SUN_AZ_DEG = [20, 56] as const;
 const SUN_EL_DEG = [22, 17] as const;
-const WIN_OFFSET_M = [0.05, 0.25] as const; // window centre from where the sculpture's light passes: z, y
+const WIN_OFFSET_M = [0.05, 0.25] as const;
 
 // WOBBLE
-// a drag squashes and sloshes the liquid; three damped springs
+// three damped springs driven by drag
 const WOBBLE_HZ = 1.5;
 const WOBBLE_DAMP = 0.11;
 const WOBBLE_MAX_M = 0.06;
@@ -78,7 +78,6 @@ export class Gallery {
   private rect = { width: 1, height: 1, dpr: 1 };
   private px = { w: 1, h: 1 };
 
-  // material
   private shape = 0;
   private from = 0;
   private morph = 1;
@@ -92,7 +91,6 @@ export class Gallery {
   private sun = new Float32Array(3);
   private win = new Float32Array(2);
 
-  // motion
   private t = 0;
   private sq = new Float32Array(4);
   private sqV = new Float32Array(3);
@@ -101,18 +99,15 @@ export class Gallery {
   private lastY = 0;
   private cursor = "";
 
-  // camera, and the sculpture on screen for grabbing
   private cam = camera();
   private aspect = 0;
-  private hit = new Float32Array(3); // css px: x, y, radius
+  private hit = new Float32Array(3);
 
   onCursor: (c: string) => void = () => {};
   onPerf: (ms: number) => void = () => {};
   onShown: () => void = () => {};
   private timer: { begin(): void; end(): void } | null = null;
 
-  // no dom in here: it runs in a worker on an offscreen canvas, or in the page as a
-  // fallback. the host feeds it size, visibility, input and the material
   constructor(canvas: HTMLCanvasElement | OffscreenCanvas, opts: Opts) {
     this.reducedMotion = opts.reducedMotion;
     const gl = canvas.getContext("webgl2", {
@@ -127,7 +122,6 @@ export class Gallery {
       gl.getExtension("WEBGL_lose_context")?.loseContext();
       throw new Error("software gl");
     }
-    // the rays and the light both live in float targets
     if (!gl.getExtension("EXT_color_buffer_float")) throw new Error("no float targets");
     this.gl = gl;
     if (opts.perf) this.timer = gpuTimer(gl, (ms) => this.onPerf(ms));
@@ -228,7 +222,6 @@ export class Gallery {
   }
 
   // HOST
-  // css px of the canvas and the page's pixel ratio
   size(w: number, h: number, dpr: number) {
     this.rect.width = w || 1;
     this.rect.height = h || 1;
@@ -237,7 +230,6 @@ export class Gallery {
     this.wake();
   }
 
-  // on screen and the tab visible
   show(v: boolean) {
     this.visible = v;
     this.last = 0;
@@ -250,7 +242,6 @@ export class Gallery {
   }
 
   // MATERIAL
-  // shape index, index of refraction, tint, and wave, flow and sun from 0 to 1
   set(shape: number, ior: number, tint: Tint, wave: number, flow: number, sun: number) {
     const next = Math.max(0, Math.min(SHAPES.length - 1, shape | 0));
     if (next !== this.shape && this.tinted && !this.reducedMotion) {
@@ -266,7 +257,6 @@ export class Gallery {
     this.absorbTo[0] = a[0];
     this.absorbTo[1] = a[1];
     this.absorbTo[2] = a[2];
-    // the first tint and reduced motion land at once
     if (!this.tinted || this.reducedMotion) this.absorb.set(this.absorbTo);
     this.tinted = true;
     this.wave = wave;
@@ -276,7 +266,6 @@ export class Gallery {
     this.wake();
   }
 
-  // the sun's direction, and the window placed so its light falls on the sculpture
   private aim() {
     const k = this.sunK;
     const az = ((SUN_AZ_DEG[0] + (SUN_AZ_DEG[1] - SUN_AZ_DEG[0]) * k) * Math.PI) / 180;
@@ -292,8 +281,6 @@ export class Gallery {
   }
 
   // INPUT
-  // pointer positions in css px from the canvas corner. a drag on the sculpture sets it
-  // wobbling
   down(x: number, y: number, id: number) {
     if (this.pointer !== -1 || !this.over(x, y)) return;
     this.pointer = id;
@@ -319,7 +306,6 @@ export class Gallery {
     this.point("grab");
   }
 
-  // Enter or space: a nudge
   key() {
     this.poke(30, -20);
   }
@@ -342,9 +328,7 @@ export class Gallery {
   }
 
   // LOOP
-  // runs only while shown: host.ts turns visible off when the canvas leaves the screen or
-  // the tab is hidden. it keeps running while the liquid flows, and otherwise stops once
-  // the wobble settles; under reduced motion the waves hold still
+  // stops once the wobble settles, unless flow is on
   private wake() {
     if (!this.raf && this.visible && !this.dead) this.raf = requestAnimationFrame(this.frame);
   }
@@ -369,7 +353,6 @@ export class Gallery {
   };
 
   // TINT AND SHAPE
-  // eases the absorption toward the new tint and melts the shape; true while still changing
   private fade(dt: number) {
     if (this.morph < 1) this.morph = Math.min(1, this.morph + dt / MORPH_S);
     const k = 1 - Math.exp(-dt / TINT_S);
@@ -386,7 +369,6 @@ export class Gallery {
     return true;
   }
 
-  // damped springs; true while still moving
   private settle(dt: number) {
     const w = 2 * Math.PI * WOBBLE_HZ;
     let e = 0;
@@ -422,7 +404,7 @@ export class Gallery {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
     // CAUSTIC
-    // per receiver, one pass per colour channel, added up
+    // one additive pass per receiver and colour channel
     gl.useProgram(this.caustic);
     const c = this.cu;
     gl.activeTexture(gl.TEXTURE1);
@@ -507,7 +489,7 @@ export class Gallery {
   }
 
   // RESIZE
-  // only right before a draw, resizing clears the canvas
+  // right before a draw, since resizing clears the canvas
   private resize() {
     const gl = this.gl;
     const canvas = gl.canvas;
@@ -548,7 +530,6 @@ export class Gallery {
   private frame3(aspect: number) {
     aim(this.cam, aspect);
     this.aspect = aspect;
-    // the sculpture on screen
     const [x, y, d] = project(
       this.cam,
       SCENE.PLINTH_X_M,
@@ -616,7 +597,7 @@ function software(gl: WebGL2RenderingContext) {
 }
 
 // PERF
-// one query in flight; reports the mean of the last PERF_FRAMES timed frames
+// one timer query in flight, mean of the last PERF_FRAMES frames
 const PERF_FRAMES = 120;
 function gpuTimer(gl: WebGL2RenderingContext, report: (ms: number) => void) {
   const ext = gl.getExtension("EXT_disjoint_timer_query_webgl2");

@@ -3,7 +3,7 @@ import type { FromWorker, ToWorker } from "./host";
 import { Veil } from "./veil";
 
 // WORKER
-// the cloth and its picture live here, so the simulation and a cold gpu never block the page
+// cloth and gpu live here so neither blocks the page
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 const send = (msg: FromWorker) => scope.postMessage(msg);

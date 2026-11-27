@@ -3,14 +3,12 @@ import { SCENE } from "./shaders";
 
 const NS = "http://www.w3.org/2000/svg";
 const NEAR_M = 0.1;
-const FLOOR_FAR_M = 8; // how far the floor seams run toward the viewer
+const FLOOR_FAR_M = 8;
 
 type P3 = readonly [number, number, number];
 
 // FIRST PAINT
-// the room drawn as lines through the renderer's own camera: the seams of the corner,
-// the plinth's visible edges, the sphere. each stroke draws itself in; the live picture
-// fades in over it once its first frame is ready
+// line drawing through the renderer's camera, shown until the first frame
 export function sketch(host: HTMLElement) {
   const svg = document.createElementNS(NS, "svg");
   svg.setAttribute("class", "sketch");
@@ -25,7 +23,6 @@ export function sketch(host: HTMLElement) {
     svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
     const lines: P3[][] = [];
     const X = SCENE.WALL_X_M;
-    // the corner: floor meets back wall, the two walls meet, floor meets the window wall
     lines.push([
       [X, 0, 0],
       [8, 0, 0],
@@ -38,7 +35,6 @@ export function sketch(host: HTMLElement) {
       [X, 0, 0],
       [X, 0, FLOOR_FAR_M],
     ]);
-    // the plinth: edges of the faces that look toward the eye
     const cx = SCENE.PLINTH_X_M;
     const cz = SCENE.PLINTH_Z_M;
     const s = SCENE.PLINTH_HALF_M;
@@ -88,7 +84,7 @@ export function sketch(host: HTMLElement) {
       if (toEye > 0) lines.push([...q, q[0]]);
     }
 
-    const ROOM = 3; // the first lines are the room, hidden behind the plinth and sphere
+    const ROOM = 3;
     let i = 0;
     const paths: Element[] = [];
     const room = document.createElementNS(NS, "g");
@@ -105,14 +101,13 @@ export function sketch(host: HTMLElement) {
       if (i <= ROOM) room.append(el);
       else paths.push(el);
     }
-    // the sphere: its outline, then a meridian and the equator, foreshortened
     const [sx, sy, sd] = project(cam, cx, t + SCENE.R_M, cz, w, h);
     const r = (SCENE.R_M / sd) * cam.focal * (h / 2);
     paths.push(ellipse(sx, sy, r, r, i++));
     paths.push(ellipse(sx, sy, r, r * 0.28, i++, "faint"));
     paths.push(ellipse(sx, sy, r * 0.42, r, i, "faint"));
     // MASK
-    // the plinth's outline (hull of its corners) and the sphere's disc cut the room lines
+    // the plinth hull and sphere disc hide the room lines behind them
     const pts: [number, number][] = [];
     for (const x of [cx - s, cx + s])
       for (const y of [0, t])
@@ -163,6 +158,7 @@ function ellipse(x: number, y: number, rx: number, ry: number, i: number, cls = 
   return e;
 }
 
+// HULL
 // monotone chain
 function hull(p: [number, number][]) {
   const q = [...p].sort((a, b) => a[0] - b[0] || a[1] - b[1]);

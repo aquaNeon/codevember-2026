@@ -16,14 +16,15 @@ import {
 export type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
 const FRAME_R_U = 38;
-const DEPTH_U = 13; // visible thickness of the frame below its face
+const DEPTH_U = 13;
 
-// light comes from the upper left; shadows fall this way
+// SHADOW OFFSET
+// light from the upper left
 export const SHADOW_DX_U = 5;
 export const SHADOW_DY_U = 7;
 
 // SHAPES
-// a rounded outline whose top edge follows the shoulder line
+// top edge follows shoulder()
 export function outline(ctx: Ctx, l: number, r: number, dTop: number, b: number, rad: number) {
   const tl = shoulder(l) + dTop;
   const tr = shoulder(r) + dTop;
@@ -70,7 +71,6 @@ function rng(seed: number) {
   };
 }
 
-// a shadow under a shape that is painted over afterwards
 function castShadow(
   ctx: Ctx,
   k: number,
@@ -125,9 +125,7 @@ function grain(
 }
 
 // STATIC LAYER
-// everything that never moves: the frame, the board, bridges, knobs and the dead lengths of
-// string beyond the bridges. ctx is in design units with the frame's corner at the origin,
-// k is device pixels per unit
+// frame, board, bridges, knobs, dead string lengths; ctx in design units, k = px per unit
 export function paintStatic(ctx: Ctx, k: number) {
   const rnd = rng(14);
   ctx.lineCap = "round";
@@ -171,7 +169,7 @@ export function paintStatic(ctx: Ctx, k: number) {
     0.3,
     2.2,
   );
-  // oiled sheen, a soft window reflection across the face
+  // SHEEN
   const sheen = ctx.createLinearGradient(0, 0, W_U, H_U * 0.9);
   sheen.addColorStop(0, "rgba(255, 232, 200, 0.2)");
   sheen.addColorStop(0.28, "rgba(255, 232, 200, 0.03)");
@@ -181,7 +179,7 @@ export function paintStatic(ctx: Ctx, k: number) {
   frame(ctx);
   ctx.fillStyle = sheen;
   ctx.fill();
-  // rounded edge: lit up-left, dark down-right
+  // BEVEL
   const bevel = ctx.createLinearGradient(0, 0, W_U, H_U);
   bevel.addColorStop(0, "rgba(255, 226, 190, 0.55)");
   bevel.addColorStop(0.5, "rgba(255, 226, 190, 0.12)");
@@ -219,7 +217,6 @@ export function paintStatic(ctx: Ctx, k: number) {
   ctx.save();
   board(ctx);
   ctx.clip();
-  // broad growth bands, then the fine grain
   grain(
     ctx,
     rnd,
@@ -249,7 +246,7 @@ export function paintStatic(ctx: Ctx, k: number) {
     0.3,
     1,
   );
-  // the rails stand proud of the board and shade it from the upper left
+  // RAIL SHADOW
   const hole = () => {
     ctx.beginPath();
     ctx.rect(-200, -200, W_U + 400, H_U + 400);
@@ -318,7 +315,6 @@ function rosette(ctx: Ctx) {
   ctx.arc(x, y, r, 0, Math.PI * 2);
   ctx.fillStyle = g;
   ctx.fill();
-  // the cut edge of the board, caught on the lit side
   ctx.beginPath();
   ctx.arc(x, y, r - 0.8, -0.2, 2.1);
   ctx.strokeStyle = "rgba(240, 212, 162, 0.5)";
@@ -432,7 +428,7 @@ function knob(ctx: Ctx, k: number, x: number, y: number) {
   ctx.strokeStyle = "rgba(255, 238, 220, 0.32)";
   ctx.lineWidth = 1.2;
   ctx.stroke();
-  // knurled ring
+  // KNURL
   ctx.strokeStyle = "rgba(255, 238, 220, 0.07)";
   ctx.lineWidth = 0.6;
   for (let i = 0; i < 36; i++) {

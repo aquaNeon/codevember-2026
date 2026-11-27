@@ -10,31 +10,33 @@ export type Hud = {
 
 const MAX_DPR = 2;
 const MAX_DT_S = 0.05;
-const LOOP_S = 48; // one full churn of the bands and bubbles
-const SPIN_S = 96; // one turn of the sphere, two loops
+const LOOP_S = 48;
+const SPIN_S = 96;
 const PITCH_RAD = 0.3;
 const PITCH_MAX_RAD = 0.95;
-const SPIN_TAU_S = 1.4; // how long a flick keeps turning it
+const SPIN_TAU_S = 1.4;
 const HEAT_TAU_S = 0.5;
-const PHONE_PX = 640; // under this the title moves to the top, see shared/style.css
-const TURN_PX = 6; // movement before a press becomes a turn
+const PHONE_PX = 640;
+const TURN_PX = 6;
 const HUD_MS = 250;
 const SCALE_MIN = 0.45;
 const SCALE_MAX = 1;
 const SCALE_START = 0.75;
-const SLOW_MS = 21; // frames slower than this shrink the render
+const SLOW_MS = 21;
 const FAST_MS = 17.5;
 const PROBE_N = 40;
 const CAM_Z = 5;
-const MARCH_ITER = 34; // 23 steps, 5 halvings, 4 normal taps, the hit; match shaders.ts
+// MARCH
+// 23 steps, 5 halvings, 4 normal taps, the hit; keep in sync with shaders.ts
+const MARCH_ITER = 34;
 
 // BUBBLES
 // each slot swells, bursts and skins over a whole number of times per loop
 const CYCLES = [4, 3, 5, 4, 3, 5];
-const LIFE = 0.72; // share of each cycle the bubble is alive
+const LIFE = 0.72;
 const OFFSET = [0.05, 0.4, 0.22, 0.71, 0.88, 0.55];
-const KEEP = 3; // cycles of sites each slot remembers, for the scars
-const SCAR_CYCLES = 2.2; // how long a scar lasts, in its slot's cycles
+const KEEP = 3;
+const SCAR_CYCLES = 2.2;
 
 export class Magma {
   onHud: (h: Hud) => void = () => {};
@@ -59,7 +61,7 @@ export class Magma {
   private cssH = 1;
   private dpr = 1;
   private scale = SCALE_START;
-  private k = 1; // backing px per css px
+  private k = 1;
   private probeMs = 0;
   private probeN = 0;
   private tunes = 0;
@@ -73,7 +75,7 @@ export class Magma {
   private vYaw = 0;
   private vPitch = 0;
   private dragging = false;
-  private turned = false; // a press that has moved; a still press warms instead
+  private turned = false;
   private downX = 0;
   private downY = 0;
   private px = 0;
@@ -88,14 +90,13 @@ export class Magma {
   private hz = 1;
 
   private rot = new Float32Array(9);
+  // UNIFORMS
   // live bubbles, then scars with w = 2 + age, as the shader reads them
   private bub = new Float32Array((BUBBLES + SCARS) * 4);
   private cyc = new Int32Array(BUBBLES).fill(-1);
-  // the last few sites per slot and which cycle each belongs to
   private sites = new Float32Array(BUBBLES * KEEP * 3);
   private siteC = new Int32Array(BUBBLES * KEEP).fill(-0x7fffffff);
   private scarN = 0;
-  // each live bubble's point on the sphere this frame, for its splash
   private spotObj = new Float32Array(BUBBLES * 4);
   private bursts = 0;
   private hudAt = -1e9;
@@ -150,7 +151,7 @@ export class Magma {
   }
 
   // INPUT
-  // drag turns it, with a little inertia; hover warms the crust under the pointer
+  // drag spins with inertia; hover heats the crust under the pointer
   press(x: number, y: number) {
     this.dragging = true;
     this.turned = false;
@@ -203,12 +204,10 @@ export class Magma {
     this.wake();
   }
 
-  // the pointer as a point on the unit sphere, world space
   private aim(x: number, y: number) {
     const k = this.k;
     const sx = (x * k - this.cx) / this.rad;
     const sy = (this.cssH * k - y * k - this.cy) / this.rad;
-    // ray from the camera through (sx, sy, 0)
     let dx = sx;
     let dy = sy;
     let dz = -CAM_Z;
@@ -267,7 +266,6 @@ export class Magma {
       this.vPitch *= decay;
       if (Math.abs(this.vYaw) < 1e-3) this.vYaw = 0;
       if (Math.abs(this.vPitch) < 1e-3) this.vPitch = 0;
-      // drift back toward the resting tilt
       if (live) this.pitch += (PITCH_RAD - this.pitch) * (1 - Math.exp(-dt / 6));
     }
     if (live) this.yaw += ((Math.PI * 2) / SPIN_S) * dt;
@@ -319,7 +317,6 @@ export class Magma {
   private schedule() {
     const b = this.bub;
     const r = this.rot;
-    // the pointer in object space: transpose of rot times the world point
     const ox = r[0] * this.hx + r[1] * this.hy + r[2] * this.hz;
     const oy = r[3] * this.hx + r[4] * this.hy + r[5] * this.hz;
     const oz = r[6] * this.hx + r[7] * this.hy + r[8] * this.hz;
@@ -371,7 +368,8 @@ export class Magma {
     this.scarN = sn;
   }
 
-  // where slot i bubbles in cycle c: remembered if a warm pointer placed it, else from the hash
+  // SITE
+  // remembered if a warm pointer placed it, else hashed from slot and cycle
   private site(i: number, c: number) {
     const slot = i * KEEP + (((c % KEEP) + KEEP) % KEEP);
     if (this.siteC[slot] !== c) {
@@ -418,13 +416,14 @@ export class Magma {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  // how wide the molten bands run: narrow cracks to wide rivers and back, once per loop
+  // BAND WIDTH
+  // narrow cracks to wide rivers and back, once per loop
   private state(tau: number) {
     return 0.5 + 0.5 * Math.sin(tau + 0.9);
   }
 
   // RESOLUTION
-  // the march is the cost; the render shrinks when frames run long and grows back when cheap
+  // dynamic resolution: shrink on slow frames, grow back when cheap
   private resize() {
     const k = Math.min(this.dpr, MAX_DPR) * this.scale;
     this.k = k;
@@ -435,7 +434,7 @@ export class Magma {
       this.canvas.height = h;
     }
     // LAYOUT
-    // centred; on a tall screen it sits a little high, clear of the title
+    // centred; raised on tall screens to clear the title
     const tall = this.cssH > this.cssW * 1.1;
     const r = tall
       ? Math.min(this.cssW * 0.4, this.cssH * 0.26)
@@ -489,8 +488,7 @@ export class Magma {
 }
 
 // CRUST FRAME
-// the shader's plate domain, mirrored here: a point on the sphere to where it sits in the crust
-// and back, so a warm pointer can seed a bubble under itself and each splash leaves its crater
+// cpu mirror of the shader's domain(), both ways, to seed bubbles and place craters
 const MAT = new Float64Array(3);
 const OBJ = new Float64Array(3);
 const TMP = new Float64Array(3);
@@ -524,7 +522,6 @@ function vn(x: number, y: number, z: number) {
   return lerp(lerp(a, b, fy), lerp(c, e, fy), fz);
 }
 
-// the crust direction of sphere point (x, y, z), into MAT
 function toMat(x: number, y: number, z: number, tau: number) {
   const l = Math.hypot(x, y, z) || 1;
   x /= l;
@@ -549,7 +546,8 @@ function toMat(x: number, y: number, z: number, tau: number) {
   MAT[2] = qz / k;
 }
 
-// and back: the sphere point whose crust direction is (x, y, z), into OBJ, by a few corrections
+// INVERSE
+// fixed-point iteration, MAT_ITER corrections, into OBJ
 function toObj(x: number, y: number, z: number, tau: number) {
   TMP[0] = x;
   TMP[1] = y;

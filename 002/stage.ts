@@ -1,8 +1,7 @@
 import type { Phase, Shatter } from "./shatter";
 
 // STAGE
-// the page side: watches size, visibility, the pointer and the wheel, and passes them on.
-// the scene runs in a worker on an offscreen canvas where it can, on this thread otherwise
+// page side: size, visibility, pointer, wheel; scene in a worker when OffscreenCanvas allows
 
 export type ToScene =
   | { t: "init"; canvas: OffscreenCanvas; reduced: boolean; at: number }
@@ -32,11 +31,10 @@ export type FromScene =
     };
 
 const TAP_PX = 8;
-const WHEEL_S_PER_PX = 0.004; // a long scroll covers the whole break
+const WHEEL_S_PER_PX = 0.004;
 const DRAG_S_PER_PX = 0.006;
 const LINE_PX = 16;
 
-// one message onto the scene, wherever it runs
 export function apply(c: Shatter, m: ToScene) {
   if (m.t === "size") c.size(m.w, m.h, m.dpr);
   else if (m.t === "show") c.show(m.v);
@@ -153,7 +151,7 @@ export class Stage {
   }
 
   // INPUT
-  // a tap breaks the glass where it lands; a drag up or down, like a scroll, moves time
+  // tap breaks at the hit point; vertical drag or wheel scrubs time
   private down = (e: PointerEvent) => {
     if (!e.isPrimary || this.pointer !== -1) return;
     this.pointer = e.pointerId;

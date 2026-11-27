@@ -1,61 +1,59 @@
 import { benchY } from "./bench";
 
 // SOFT BODY
-// small-step xpbd: shell particles from an icosphere plus an interior lattice,
-// distance links that yield plastically, one volume constraint over the shell,
-// floor friction and particle self-collision so folded flaps land on top
+// small-step xpbd: icosphere shell, lattice core, plastic links, volume, self-collision
 
-export const SHAPE = { rx: 1.4, ry: 0.26, rz: 1.18, drop: 0.03 }; // a slack round, folds read better than on a thick lump
+export const SHAPE = { rx: 1.4, ry: 0.26, rz: 1.18, drop: 0.03 }; // change dough proportions here
 
 const SUBSTEPS = 8;
 const GRAVITY = -16;
-const DAMP_PER_S = 4.2; // lower = more wobble; dough is heavy and lazy
+const DAMP_PER_S = 4.2; // change lower for more wobble
 const SHELL_COMPLIANCE = 6e-5;
 const CORE_COMPLIANCE = 2e-4;
 const VOLUME_COMPLIANCE = 0;
-const YIELD = 0.022; // strain before the dough keeps its new shape
+const YIELD = 0.022; // change plastic yield strain here
 const PLASTIC_TAU_S = 0.05;
 const REST_MIN = 0.45;
-const REST_MAX = 1.6; // longest a link may plastically grow
-const LIFT_MAX = 2.6; // highest a grab can lift, keeps the dough inside the surface grid
-const CEIL_Y = 3.0; // a fling stops here instead of leaving the grid
-const BACK_Z = -1.45; // invisible wall just behind the dough, it never drifts up the frame
-const TEAR_MAX = 2.8; // longest a link may stretch at any moment, relative to its rest length
-const SPAN_MAX = 2.6; // and relative to its original length, so stretching again never opens gaps the skin cannot cover
+const REST_MAX = 1.6;
+const LIFT_MAX = 2.6;
+const CEIL_Y = 3.0;
+const BACK_Z = -1.45;
+const TEAR_MAX = 2.8;
+const SPAN_MAX = 2.6;
 const LINK_SHELL_CORE = 0.32;
 const LINK_CORE = 0.34;
 const CORE_STEP = 0.2;
 const RADIUS = 0.055;
 const SKIP_COLLIDE = 0.4;
-const STICK = 0.6; // how hard the bench holds a touching particle down, per substep
-export const GRIP = { fold: 0.85, throw: 0.3, rest: 0.6 }; // sideways drag on the bench, per substep
+const STICK = 0.6;
+export const GRIP = { fold: 0.85, throw: 0.3, rest: 0.6 };
 const BREAK = 0.06;
-const BREAK_HELD = 0.3; // while folding the bottom clings this far before it peels, so a pull stretches instead of lifting a slab
-const PIN_SLIP = 0.22; // how far a pinned base particle stretches sideways before it slips
-const PIN_GIVE = 0.15; // share of the pull a pinned particle follows each substep // how far a stuck particle stretches before it lets go
-const GRAB = { along: 0.85, deep: 0.26, tall: 0.6 }; // half sizes of the grabbed strip
+const BREAK_HELD = 0.3;
+const PIN_SLIP = 0.22;
+const PIN_GIVE = 0.15;
+const GRAB = { along: 0.85, deep: 0.26, tall: 0.6 };
 const GRAB_PULL = 0.45;
 const SLEEP_SPEED = 0.06;
 const HASH_SIZE = 4096;
-const TENSION = 0.02; // surface tension per substep, irons out spikes and creases
-const FUSE_TAU_S = 4; // folded layers melt into each other once things slow down
+const TENSION = 0.02;
+const FUSE_TAU_S = 4;
 const FUSE_SPEED = 0.6;
-const SLUMP_S = 6; // after a release the dough creeps lower and wider for a few seconds
+const SLUMP_S = 6; // change post-release creep duration here
 const SLUMP_TAU_S = 1.6;
-const SLUMP_SOFT = 9; // how much softer the links are while it creeps, eases back to 1
-const CREEP_SLIDE = 0.85; // share of the bench grip let go while creeping
-const CREEP_TENSION = 0.002; // surface tension once let go, low or the lump balls up
-const SLUMP_DAMP = 9; // extra drag while creeping, slow and heavy
+const SLUMP_SOFT = 9;
+const CREEP_SLIDE = 0.85;
+const CREEP_TENSION = 0.002;
+const SLUMP_DAMP = 9;
 // VISCOSITY
-// neighbours share their velocity, so the inside moves as one mass and nothing rolls under the skin
-const VISC = 0.35; // per substep, let go
-const VISC_HELD = 0.05; // while held the strip stays quick to the hand
-const FREE_SPEED = 2.6; // cap on any particle's speed relative to the mass when nothing holds it
-const DAMP_HELD = 2.5; // drag inside the mass while a hand holds it, light so a fold starts easily
+// xsph velocity smoothing so the core moves as one mass
+const VISC = 0.35;
+const VISC_HELD = 0.05;
+const FREE_SPEED = 2.6;
+const DAMP_HELD = 2.5;
 const BULK_DAMP = 0.15;
-const FREE_S = 0.35; // how long the switch from held to let go takes // air drag on the whole lump
-const CORE_FALL = 0.9; // inner particles keep this share of vertical speed per substep when let go
-const COLLIDE_EVERY = 1; // less often is cheaper but layers jitter
+const FREE_S = 0.35;
+const CORE_FALL = 0.9;
+const COLLIDE_EVERY = 1; // change higher for cheaper collision, layers jitter
 
 export type Mesh = { pos: Float32Array; faces: Uint16Array };
 
@@ -182,9 +180,7 @@ export class DoughSim {
 
   damp = DAMP_PER_S;
   speed = 0;
-  // set by the gesture: heavy while folding, loose while throwing
   grip = GRIP.rest;
-  // true while folding: the part on the bench is pinned instead of only dragged
   pinned = false;
   private slump = 0;
   private soft = 1;
@@ -198,7 +194,6 @@ export class DoughSim {
 
     const pts: number[] = [];
     for (let i = 0; i < sN; i++) {
-      // hand-rolled, not a perfect disc
       const sx = shell.pos[i * 3],
         sy = shell.pos[i * 3 + 1],
         sz = shell.pos[i * 3 + 2];
@@ -303,12 +298,10 @@ export class DoughSim {
     const h = dt / SUBSTEPS;
     const n = this.n;
     const { x, p, v } = this;
-    // eases out slowly, so the creep keeps going for seconds and fades instead of stopping
     const creepK = this.slump > 0 ? Math.sqrt(this.slump / SLUMP_S) : 0;
-    // drag works on motion inside the mass only; the lump as a whole falls at full gravity
     const held = this.grabN > 0;
     // RELEASE RAMP
-    // everything that differs between held and let go eases over FREE_S, so nothing twitches on release
+    // held vs let-go parameters blend over FREE_S
     this.free = held ? 0 : Math.min(1, this.free + dt / FREE_S);
     const fr = this.free * this.free * (3 - 2 * this.free);
     const rate = DAMP_HELD + (this.damp + SLUMP_DAMP * creepK - DAMP_HELD) * fr;
@@ -384,7 +377,6 @@ export class DoughSim {
         dz = p[i + 2] - p[j + 2];
       const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (len < 1e-6) continue;
-      // past the hard limit the link stops being soft, so a fast yank can't tear bits off
       const lim = Math.min(rest[k] * TEAR_MAX, rest0[k] * SPAN_MAX);
       const hard = len > lim;
       const corr = hard
@@ -456,7 +448,7 @@ export class DoughSim {
   }
 
   // SELF COLLISION
-  // spatial hash, skips pairs that started close since links already hold those
+  // spatial hash; skips pairs that started close, links hold those
   private cell(ix: number, iy: number, iz: number) {
     return (
       (Math.imul(ix, 92837111) ^ Math.imul(iy, 689287499) ^ Math.imul(iz, 283923481)) &
@@ -526,14 +518,13 @@ export class DoughSim {
   }
 
   // STICKY BENCH
-  // a particle that touches the bench is pinned to that spot until pulled past BREAK, so lifting peels
+  // contact pins a particle until pulled past BREAK, so lifting peels
   private floor() {
     const { p, x, n, stuck, pin } = this;
     const keep = 1 - STICK;
     const holding = this.pinned;
     const slip2 = PIN_SLIP * PIN_SLIP;
     const brk = holding ? BREAK_HELD : BREAK;
-    // while it creeps the floured base slides out a little, so the lump can spread
     const grip = this.grip * (1 - CREEP_SLIDE * (this.slump > 0 ? this.slump / SLUMP_S : 0));
     for (let i = 0; i < n; i++) {
       const o = i * 3;
@@ -550,7 +541,6 @@ export class DoughSim {
       }
       if (!stuck[i]) continue;
       if (holding) {
-        // pinned to where it landed; pulled past PIN_SLIP it slips and grips again further on
         const dx = p[o] - pin[o],
           dz = p[o + 2] - pin[o + 2];
         if (dx * dx + dz * dz > slip2) {
@@ -566,7 +556,6 @@ export class DoughSim {
         pin[o] = p[o];
         pin[o + 2] = p[o + 2];
       }
-      // upward: held until pulled past BREAK
       const dy = p[o + 1] - fy;
       if (dy > brk) {
         stuck[i] = 0;
@@ -577,7 +566,7 @@ export class DoughSim {
   }
 
   // SURFACE TENSION
-  // each shell particle eases toward the mean of its neighbours
+  // laplacian smoothing on the shell
   private tension() {
     const { p, adjStart, adj, avg, shellN } = this;
     for (let i = 0; i < shellN; i++) {
@@ -597,13 +586,12 @@ export class DoughSim {
       avg[i * 3 + 1] = sy * inv;
       avg[i * 3 + 2] = sz * inv;
     }
-    // right after release it irons spikes; while creeping it barely holds, or the lump would ball up
     const k = TENSION + (CREEP_TENSION - TENSION) * this.fr;
     for (let i = 0; i < shellN * 3; i++) p[i] += (avg[i] - p[i]) * k;
   }
 
   // FUSE
-  // collision memory drifts to the current shape, so layers that touch stop repelling and merge
+  // collision rest positions drift to the current shape, so touching layers merge
   private fuse(dt: number) {
     if (this.grabN > 0 || this.speed > FUSE_SPEED) return;
     const k = 1 - Math.exp(-dt / FUSE_TAU_S);
@@ -612,7 +600,7 @@ export class DoughSim {
   }
 
   // PLASTICITY
-  // links stretched past the yield point move their rest length toward the current one
+  // past yield, rest length relaxes toward the current length
   private yieldRest(dt: number) {
     const { x, ca, cb, rest, rest0 } = this;
     const k = 1 - Math.exp(-dt / PLASTIC_TAU_S);
@@ -639,7 +627,7 @@ export class DoughSim {
   }
 
   // INPUT
-  // grabs a strip of the rim like a hand would: wide along the edge, shallow toward the middle
+  // grabs an anisotropic strip along the rim
   grab(hx: number, hy: number, hz: number) {
     const { x, n } = this;
     let cx = 0,
@@ -653,7 +641,6 @@ export class DoughSim {
     let ux = hx - cx,
       uz = hz - cz;
     const ul = Math.hypot(ux, uz);
-    // grabbed near the middle, fall back to a round patch
     const strip = ul > 0.3;
     if (strip) {
       ux /= ul;
@@ -663,8 +650,6 @@ export class DoughSim {
     const hx0 = hx,
       hz0 = hz;
     let g = 0;
-    // the skin sits a little outside the particles; a hit on the steep rim may miss the strip,
-    // so step once toward the middle before giving up
     for (let tryN = 0; tryN < 2 && g === 0; tryN++) {
       if (tryN) {
         if (!strip) break;
@@ -692,7 +677,6 @@ export class DoughSim {
         g++;
       }
     }
-    // offsets stay relative to where the hand actually is
     for (let k = 0; k < g; k++) {
       this.grabOff[k * 3] += hx - hx0;
       this.grabOff[k * 3 + 2] += hz - hz0;
@@ -742,7 +726,8 @@ export class DoughSim {
     this.slump = SLUMP_S;
   }
 
-  // XSPH style: each particle eases toward the mean velocity of its linked neighbours
+  // VISCOSITY
+  // xsph: ease toward the mean velocity of linked neighbours
   private viscous() {
     const { v, ca, cb, dv, vc, n, shellN } = this;
     dv.fill(0);
@@ -780,8 +765,6 @@ export class DoughSim {
         v[o + 2] += dv[o + 2] * k;
       }
       if (held) continue;
-      // settles by flowing, not by dropping: inner vertical motion and any one particle's
-      // speed are limited relative to the whole mass
       const rx = v[o] - mx,
         ry = v[o + 1] - my,
         rz = v[o + 2] - mz;
@@ -795,7 +778,6 @@ export class DoughSim {
   }
 
   // THUD
-  // a landing flap loses its speed at once: dough lands dead, it does not bounce
   deaden(cx: number, cz: number, r: number, keep: number) {
     const { x, v, n } = this;
     const r2 = r * r;
@@ -811,7 +793,7 @@ export class DoughSim {
   }
 
   // STRAIN
-  // how far each shell particle's skin is stretched from the fresh lump, mean link length over original
+  // per shell particle: mean link length / original
   strain(out: Float32Array) {
     const { x, ca, cb, rest0, cnt, shellN } = this;
     out.fill(0, 0, shellN);
@@ -833,7 +815,6 @@ export class DoughSim {
     for (let i = 0; i < shellN; i++) out[i] = cnt[i] ? out[i] / cnt[i] : 1;
   }
 
-  // mean particle position, written into out
   centroid(out: Float32Array) {
     const { x, n } = this;
     let cx = 0,

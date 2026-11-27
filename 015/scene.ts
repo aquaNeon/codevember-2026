@@ -1,12 +1,12 @@
 // SCENE
 
 export const SCENE = {
-  LENS: 0.2, // lower for a longer lens
+  LENS: 0.2, // change for a longer lens
   SKY_LENS: 0.5,
   CAM_H: 1.6,
   CAR_Z: 150,
   LANE_X: 1.25,
-  HEAT_K: 0.65, // raise for more shimmer
+  HEAT_K: 0.65, // change for more shimmer
   STEADY_M: 70,
   FLOAT_M: 190,
   ROAD_HALF: 2.5,
@@ -18,12 +18,12 @@ export const SCENE = {
   POLE_W: 0.3,
   ARM_Y: 7.7,
   ARM_HALF: 1.25,
-  SAG_M: 0.8, // raise for slacker wires
+  SAG_M: 0.8, // change for slacker wires
   POST_X: 3.9,
   POST_SPACING_M: 30,
   POST_H: 1.05,
   POST_W: 0.13,
-  SHADOW_K: 2.3, // raise for longer shadows
+  SHADOW_K: 2.3, // change for longer shadows
   FOG_PER_M: 0.0045,
   MIRROR_K: 1.5,
   MIRROR_H: 3.5,
@@ -34,7 +34,7 @@ export const SCENE = {
   HAWK_CYCLE_S: 80,
   HAWK_FLAP_S: 7,
   FIRST_WATER_K: 1.4,
-  LAKE_M: 320, // lower to bring the water over the sand nearer
+  LAKE_M: 320, // change to bring the water over the sand nearer
 };
 
 // PALETTE

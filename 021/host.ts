@@ -7,7 +7,6 @@ export type Sink = {
   fail: () => void;
 };
 
-// the calls the page makes on the garden, the same in a worker or on the page
 export const CALLS = [
   "size",
   "visibility",
@@ -34,14 +33,12 @@ const LINE_PX = 16;
 const BOX_PAD_PX = 12;
 
 // HOST
-// the dom side: size, visibility, pointer, wheel and keys in, the hud out. the garden runs in
-// a worker when the canvas can be handed over, so compiling and drawing never block the page
+// garden in a worker via OffscreenCanvas when available, else on the page
 export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");
   let driver: Driver | null = null;
   let dead = false;
-  // the plant's box on screen, from the last hud, for the pointer cursor
   let box: Hud | null = null;
   const hud = (h: Hud) => {
     box = h;
@@ -115,7 +112,6 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
     let lastY = 0;
     let hand = false;
     const show = () => d.visibility(onScreen && !document.hidden);
-    // the title's and the hud's boxes, so the bed's neighbours can keep clear of them
     const zones = () => {
       const a = document.querySelector(".cv-title")?.getBoundingClientRect();
       const b = document.querySelector(".cv-hud")?.getBoundingClientRect();
@@ -157,7 +153,6 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
       lastY = e.clientY;
       d.press(e.clientX - rect.left, e.clientY - rect.top);
     };
-    // the sun follows the pointer; dragging, like scrolling, hurries the summer
     const move = (e: PointerEvent) => {
       if (pointer !== -1 && e.pointerId !== pointer) return;
       const x = e.clientX - rect.left;
@@ -194,7 +189,6 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
         Math.hypot(e.clientX - downX, e.clientY - downY) < TAP_PX;
       d.lift(tap, e.clientX - rect.left);
     };
-    // arrows and Page Down hurry it too; Enter or Space shakes it
     const key = (e: KeyboardEvent) => {
       if (!KEYS.has(e.key)) return;
       e.preventDefault();

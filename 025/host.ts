@@ -7,7 +7,6 @@ export type Sink = {
   fail: () => void;
 };
 
-// the calls the page makes on the veil, the same in a worker or on the page
 export const CALLS = ["size", "visibility", "motion", "point", "leave"] as const;
 type Call = (typeof CALLS)[number];
 type Driver = Pick<Veil, Call | "dispose">;
@@ -17,8 +16,7 @@ export type ToWorker =
 export type FromWorker = { t: "hud"; h: Hud } | { t: "shown" } | { t: "fail" };
 
 // HOST
-// the dom side: size, visibility and the pointer in, the hud out. the veil runs in a worker
-// when the canvas can be handed over, so compiling and drawing never block the page
+// dom side: size, visibility, pointer in, hud out; the veil runs in a worker when it can
 export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");
@@ -97,7 +95,8 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
     io.observe(canvas);
     const onMotion = () => d.motion(mq.matches);
 
-    // the pointer is a breath of air; a finger drags it
+    // POINTER
+    // mouse moves the air on hover; touch drags it
     const move = (e: PointerEvent) => {
       if (e.pointerType !== "mouse" && e.buttons === 0) return;
       d.point(e.clientX - rect.left, e.clientY - rect.top, e.timeStamp);

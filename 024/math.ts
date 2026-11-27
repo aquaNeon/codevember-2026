@@ -25,7 +25,8 @@ export function ident(o: Float32Array, at = 0) {
   return o;
 }
 
-// o = a * b, all 4x4; o may not alias a or b
+// MUL
+// o = a * b, 4x4; o must not alias a or b
 export function mul(o: Float32Array, a: Float32Array, b: Float32Array, at = 0, bt = 0) {
   for (let c = 0; c < 4; c++) {
     const b0 = b[bt + c * 4];
@@ -39,7 +40,6 @@ export function mul(o: Float32Array, a: Float32Array, b: Float32Array, at = 0, b
   return o;
 }
 
-// view from an eye along a basis
 export function view(o: Float32Array, eye: V3, right: V3, up: V3, fwd: V3) {
   o[0] = right[0];
   o[4] = right[1];
@@ -60,7 +60,8 @@ export function view(o: Float32Array, eye: V3, right: V3, up: V3, fwd: V3) {
   return o;
 }
 
-// perspective with a lens shift in ndc, so the subject can sit off centre without a tilt
+// PERSPECTIVE
+// lens shift in NDC: subject off centre without tilting the camera
 export function persp(
   o: Float32Array,
   tanHalf: number,
@@ -91,7 +92,6 @@ export function ortho(o: Float32Array, r: number, near: number, far: number) {
   return o;
 }
 
-// rotation about a unit axis through a point, written at o[at]
 export function spin(
   o: Float32Array,
   at: number,

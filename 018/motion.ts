@@ -1,7 +1,8 @@
 // MOTION
-// closed-form, so the lean and turn are exactly as smooth at 30 fps as at 144
+// closed-form, so frame-rate independent
 
-// x(t) = e^(-g t) (a cos wt + b sin wt), seeded from a position and a velocity
+// OSC
+// x(t) = e^(-g t) (a cos wt + b sin wt), seeded from position and velocity
 export class Osc {
   private a = 0;
   private b = 0;
@@ -17,7 +18,6 @@ export class Osc {
     this.t0 = t;
     this.a = x;
     this.b = (v + this.g * x) / this.w;
-    // a hard flick keeps where it was let go and loses the extra speed
     const amp = Math.hypot(this.a, this.b);
     if (amp > this.max) {
       const room = Math.sqrt(Math.max(0, this.max * this.max - this.a * this.a));
@@ -44,7 +44,8 @@ export class Osc {
   }
 }
 
-// critically damped follow, exact for any dt: the dragged crystal trails the finger a touch
+// FOLLOW
+// critically damped, exact for any dt
 export class Follow {
   x = 0;
   v = 0;
@@ -61,14 +62,13 @@ export class Follow {
 }
 
 // ORIENT
-// the swing across the wall, then the lean toward it, then the twist about the chain. as
-// plain rotations one after another, so a swing over the top and round wraps cleanly.
-// r is column-major, local to world
+// swing, lean, then twist about the chain; r is column-major, local to world
 export function orient(r: Float32Array, ax: number, az: number, twist: number) {
   const cz = Math.cos(ax);
   const sz = Math.sin(ax);
   const cx = Math.cos(-az);
   const sx = Math.sin(-az);
+  // SWING AND LEAN
   // rz(ax) * rx(-az), row-major
   const m00 = cz;
   const m01 = -sz * cx;

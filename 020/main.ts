@@ -2,7 +2,7 @@ import "../shared/style.css";
 import { mountNav } from "../shared/nav";
 
 const DAY = 20;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200;
 const STILL_WIDE = new URL("./still-wide.webp", import.meta.url).href;
 const STILL_TALL = new URL("./still-tall.webp", import.meta.url).href;
 
@@ -19,7 +19,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
     if (root.hasAttribute("data-cv-still")) return;
     root.removeAttribute("data-cv-live");
     root.setAttribute("data-cv-still", "");
-    // a capture of the live cocoon, wide or tall to match the screen
     const frame = root.querySelector<HTMLElement>(".still");
     if (!frame) return;
     const img = document.createElement("img");
@@ -31,7 +30,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();
   else {
-    // after load and an idle moment; the scene itself starts the gpu off this thread
+    // SCENE
+    // after load and idle; the gpu starts off this thread
     afterLoad(() => import("./stage"))
       .then(({ Stage }) =>
         Stage.create(canvas, Number(params.get("at")) || 0, Number(params.get("bg")) || 0),
@@ -42,8 +42,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
         stage.onLight = (l) => {
           if (lightEl && lightEl.textContent !== l) lightEl.textContent = l;
         };
-        // the light slider: native, so keys and screen readers work; it is outside the canvas,
-        // so moving it never turns the cluster
+        // SLIDER
+        // native input for keys and screen readers; outside the canvas so it never turns it
         const slider = root.querySelector<HTMLInputElement>("[data-cv-angle]");
         const onAngle = () => slider && stage.angle(Number(slider.value) / 100);
         slider?.addEventListener("input", onAngle, { passive: true });

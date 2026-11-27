@@ -1,5 +1,5 @@
 // NOISE
-// integer-hashed value noise, cheap enough to sample a few hundred thousand points
+// integer-hashed value noise
 
 function hash(x: number, y: number, z: number) {
   let n = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(z, 1274126177)) | 0;
@@ -26,7 +26,6 @@ export function noise3(x: number, y: number, z: number) {
   return e + (f - e) * fz;
 }
 
-// -0.5..0.5, three octaves
 export function fbm3(x: number, y: number, z: number) {
   return (
     noise3(x, y, z) * 0.57 +
@@ -36,14 +35,14 @@ export function fbm3(x: number, y: number, z: number) {
   );
 }
 
-// 0..1 along one axis
 export function noise1(x: number, seed = 0) {
   const i = Math.floor(x);
   const f = fade(x - i);
   return hash(i, seed, 7) + (hash(i + 1, seed, 7) - hash(i, seed, 7)) * f;
 }
 
-// seeded random, so a chunk comes back the same every time it is built
+// RNG
+// mulberry32
 export function rng(seed: number) {
   let a = seed | 0;
   return () => {

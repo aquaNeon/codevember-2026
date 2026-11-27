@@ -1,11 +1,10 @@
 import { DAYS, READY, pad } from "./days";
 
-const ODO_COL_MS = 70; // stagger between digit columns
-const ODO_HEAD_MS = 250; // the top bar number turns this long after the fonts are in
-const ODO_TAG_MS = 450; // the title tag a beat later, once the title has risen
+const ODO_COL_MS = 70;
+const ODO_HEAD_MS = 250;
+const ODO_TAG_MS = 450;
 const DAY_PATH_RE = /\/(\d{3})\/?$/;
 
-// fills the prev / next links in the top bar
 export function mountNav(day: number) {
   turnDay(day);
   const nav = document.querySelector<HTMLElement>("[data-cv-nav]");
@@ -25,9 +24,7 @@ export function mountNav(day: number) {
 }
 
 // TURNING NUMBER
-// arriving from a neighbouring day, the digits that differ in the top bar and the title tag
-// turn one notch like a counter: 19 to 20 turns the 1 to 2 and the 9 to 0. A fresh load or
-// the index has nothing to turn from, so the numbers just sit there.
+// odometer on changed digits when the same-origin referrer is another day
 function turnDay(day: number) {
   let from: number;
   try {
@@ -44,11 +41,9 @@ function turnDay(day: number) {
   if (tag) turn(tag, day, from, ODO_TAG_MS);
 }
 
-// swaps the digits that differ for one-notch strips, keeping the plain text for screen readers
 function turn(el: HTMLElement, day: number, from: number, delayMs: number) {
   if (el.hasAttribute("data-cv-odo")) return;
 
-  // always two digits (01 to 30), so only the ones and tens can turn
   const text = el.textContent ?? "";
   const hit = /\d+/.exec(text);
   if (!hit || Number(hit[0]) !== day) return;
@@ -74,7 +69,6 @@ function turn(el: HTMLElement, day: number, from: number, delayMs: number) {
     wrap.className = "cv-odo";
     const strip = document.createElement("span");
     strip.className = up ? "cv-odo-strip" : "cv-odo-strip cv-odo-down";
-    // going up the old digit sits on top and slides away; going down the new one comes from above
     for (const d of up ? [was[i], now[i]] : [now[i], was[i]]) {
       const s = document.createElement("span");
       s.textContent = d;

@@ -27,8 +27,7 @@
     <meta name="theme-color" content="#16191c" />
     <style>
       /* STEEL ROOM */
-      /* this day only: a dark studio, so the type goes light.
-         doubled selector so it wins over the shared sheet that loads after it */
+      /* doubled selector beats the shared sheet that loads after it */
       :root:root {
         --bone: #16191c;
         --bone-hi: #1d2125;
@@ -46,8 +45,7 @@
         opacity: 0.1;
       }
       /* FIRST PAINT */
-      /* a render of the fresh block, placed by the same framing as the shader (FRAME in
-         specimen.ts); the live canvas fades in over it */
+      /* placed by FRAME in specimen.ts; the canvas fades in over it */
       .still {
         --focal: 1;
         --centre: 0.53;
@@ -109,13 +107,12 @@
         display: none;
       }
       /* STILL */
-      /* no webgl: the same block, forty years on */
+      /* no webgl: the block at 40 years */
       [data-cv-still] .still::before {
         background-image: url("/stills/011-rust.webp");
       }
 
       /* SLIDERS */
-      /* a hairline track and a dot, as on day 002 */
       input[type="range"] {
         -webkit-appearance: none;
         appearance: none;

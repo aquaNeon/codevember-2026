@@ -1,39 +1,36 @@
 // THREADS
-// a few long inked threads lying on the page. stirring winds the ones near the cursor
-// round each other; a slow straight drag combs them back toward lying straight.
-// each thread is a chain of points kept at fixed spacing, heavily damped, drawn on a 2d
-// canvas, the upper thread laid over the lower wherever they cross
+// damped verlet chains at fixed spacing; upper thread drawn over lower at crossings
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 30;
 const SUBSTEPS = 2;
-const ITERS = 6; // length passes per substep
-const DAMP = 0.86; // velocity kept per substep, lower is calmer
-const BEND = 0.08; // how much each point eases toward its neighbours' middle
-const ANCHOR = 0.006; // pull of a loose end back toward where it lay
-const SEG_PX = 7; // spacing between points along a thread
+const ITERS = 6;
+const DAMP = 0.86; // change lower for calmer threads
+const BEND = 0.08;
+const ANCHOR = 0.006;
+const SEG_PX = 7;
 const MIN_SPAN = 0.99;
-const MIN_SPAN_WIDE = 0.955; // four links apart, keeps curls from closing up small // a bend never sharper than this; 1 is dead straight
-const MAX_STEP_PX = 5; // most a point can be pushed in one substep
+const MIN_SPAN_WIDE = 0.955;
+const MAX_STEP_PX = 5;
 
 // HANDS
-const REACH_PX = 90; // how far the stir and the comb reach
-const STIR_R = 170; // reach of a stir round the middle of the loops
-const STIR_DRAG = 0.05; // share of the cursor's motion that carries the line with it
-const STIR_SPIN = 0.32; // how much the turning of the cursor winds the line round it
-const STIR_PULL = 0; // a stirred snarl draws itself in a little
+const REACH_PX = 90;
+const STIR_R = 170;
+const STIR_DRAG = 0.05;
+const STIR_SPIN = 0.32; // change for tighter winding
+const STIR_PULL = 0;
 const CENTRE_TAU_S = 0.35;
-const CORE = 0.6; // share of the stir that turns as one
+const CORE = 0.6;
 const COMB = 1.5;
-const COMB_ALONG = 0.6; // how far a comb also pulls the line back along itself
+const COMB_ALONG = 0.6;
 const END_COMB = 0.05;
-const SETTLE_K = 0.06; // pull toward lying flat for combed line, per substep
-const SETTLE_S = 1.4; // how long combed line keeps settling // ends are drawn home this much harder while combing // how hard a comb pass straightens what it passes over
-const END_PX = 26; // how close a press must be to grab an end
+const SETTLE_K = 0.06;
+const SETTLE_S = 1.4;
+const END_PX = 26;
 const TURN_TAU_S = 0.08;
 
 // INK
-const INKS = ["#161a2c", "#2d3a78", "#161a2c", "#8e3a2c", "#161a2c", "#2d3a78", "#5c4a3a"]; // ink, indigo, madder, sepia
+const INKS = ["#161a2c", "#2d3a78", "#161a2c", "#8e3a2c", "#161a2c", "#2d3a78", "#5c4a3a"];
 const WIDTH_PX = 1.6;
 const INTRO_S = 1.8;
 const MAX_CROSS = 800;
@@ -51,8 +48,8 @@ export class Threads {
   private hy = new Float32Array(0);
   private z = new Float32Array(0);
   private order = new Int32Array(0);
-  private settle = new Float32Array(0); // how much each point is still easing home after a comb
-  private rest = new Float32Array(0); // link length per thread
+  private settle = new Float32Array(0);
+  private rest = new Float32Array(0);
   private stirR = STIR_R;
   private x0 = 0;
   private span = 1;
@@ -81,10 +78,10 @@ export class Threads {
   private heading = 0;
   private sx = 0;
   private sy = 0;
-  private turn = 0; // radians per second the cursor's path is turning
+  private turn = 0;
   private moved = false;
-  private pin = -1; // point held by the hand
-  private auto = 0; // 1 stir, 2 comb, for keys and buttons
+  private pin = -1;
+  private auto = 0;
   private autoT = 0;
 
   private raf = 0;
@@ -144,14 +141,12 @@ export class Threads {
   }
 
   // PUBLIC
-  // a few slow turns round the middle of the page
   stir() {
     this.auto = 1;
     this.autoT = 0;
     this.wake();
   }
 
-  // one comb pass from left to right through everything
   comb() {
     this.auto = 2;
     this.autoT = 0;
@@ -159,7 +154,6 @@ export class Threads {
   }
 
   // LAYOUT
-  // threads lie roughly parallel across the middle, each with its own lazy meander
   private lay() {
     const w = this.w;
     const h = this.h;
@@ -171,10 +165,8 @@ export class Threads {
     const span = x1 - x0;
     this.x0 = x0;
     this.span = span;
-    // a small screen gets a smaller hand, or one stir would turn every thread at once
     this.stirR = Math.min(STIR_R, w * 0.36);
     this.reach = Math.min(REACH_PX, w * 0.14);
-    // each thread lies in slow s-curves, so a stir draws on that slack before the ends move
     const waves = narrow ? 2.6 : 1.8;
     const n = Math.max(80, Math.min(340, Math.round((span * 1.3) / SEG_PX)));
     this.n = n;
@@ -204,23 +196,19 @@ export class Threads {
         this.hx[o] = this.px[o] = this.ox[o] = x;
         this.hy[o] = this.py[o] = this.oy[o] = yy;
         if (i > 0) len += Math.hypot(x - this.hx[o - 1], yy - this.hy[o - 1]);
-        // over or under is a property of the thread itself, so a crossing keeps its order
         this.z[o] = Math.sin(i * 0.071 + s * 2.3) + 0.6 * Math.sin(i * 0.173 + s * 5.1);
       }
-      // every thread exactly as long as the curve it lies in, so the rest state is calm
       this.rest[s] = len / (n - 1);
     }
     this.gw = Math.ceil(w / CELL_PX) + 1;
     this.gh = Math.ceil(h / CELL_PX) + 1;
     this.head = new Int32Array(this.gw * this.gh);
     this.link = new Int32Array(total);
-    // back to front by height; height belongs to the thread, so this order never changes
     const order = Array.from({ length: total }, (_, i) => i);
     order.sort((a, b) => this.z[a] - this.z[b]);
     this.order = Int32Array.from(order);
   }
 
-  // height of thread i's lying curve at x
   private lineAt(i: number, x: number) {
     const n = this.n;
     const s = (i / n) | 0;
@@ -322,7 +310,6 @@ export class Threads {
     this.draw();
     this.report();
 
-    // keep going while anything moves; a still page costs nothing
     this.calm = motion < 0.02 * this.k ? this.calm + dt : 0;
     const busy = this.reveal < 1 || this.down || this.auto !== 0 || this.moved || this.calm < 0.25;
     this.moved = false;
@@ -331,14 +318,13 @@ export class Threads {
   };
 
   // HAND TRACKING
-  // velocity and how fast the path is turning, smoothed; a looping hand is a stir
+  // smoothed velocity and turn rate; a looping path reads as a stir
   private track(dt: number) {
     const k = 1 - Math.exp(-dt / TURN_TAU_S);
     const nvx = (this.cx - this.lx) / dt;
     const nvy = (this.cy - this.ly) / dt;
     this.lx = this.cx;
     this.ly = this.cy;
-    // the middle of the hand's loops
     const ks = 1 - Math.exp(-dt / CENTRE_TAU_S);
     this.sx += (this.cx - this.sx) * ks;
     this.sy += (this.cy - this.sy) * ks;
@@ -355,7 +341,7 @@ export class Threads {
     } else this.turn *= 1 - k;
   }
 
-  // scripted hands for the buttons
+  // AUTOPILOT
   private autopilot(dt: number) {
     if (this.auto === 0) return;
     this.autoT += dt;
@@ -369,7 +355,6 @@ export class Threads {
       this.down = true;
       if (this.autoT > 3.4) this.stopAuto();
     } else {
-      // sweep across, a little up and down so every thread gets combed
       const t = Math.min(1, this.autoT / 3);
       this.cx = this.w * (0.04 + 0.92 * t);
       this.cy = my + Math.sin(this.autoT * 5) * this.h * 0.09;
@@ -394,7 +379,6 @@ export class Threads {
     const oy = this.oy;
     const speed = Math.hypot(this.vx, this.vy);
     const turn = this.auto === 2 ? 0 : this.turn;
-    // a looping hand stirs; a slow straight pressed drag combs
     const loop = smooth((Math.abs(turn) - 1.5) / 3);
     const stir = loop * (this.down ? 1 : smooth((speed - 500) / 500));
     const comb = this.down && this.pin < 0 ? (1 - loop) * (1 - smooth((speed - 900) / 900)) : 0;
@@ -413,9 +397,7 @@ export class Threads {
       }
 
       // STIR
-      // the line round the middle of the hand's loops turns about it, faster near the middle,
-      // so it winds into a spiral; upper strands turn a little faster than lower ones,
-      // which is what lets them pass over each other instead of only bunching
+      // swirl about the loop centre; upper strands spin faster so they pass over lower
       if (stir > 0.01 && this.pin < 0) {
         const r2 = this.stirR * this.stirR;
         const base = turn * h * STIR_SPIN * stir;
@@ -424,7 +406,6 @@ export class Threads {
           const dy = py[i] - this.sy;
           const d2 = dx * dx + dy * dy;
           if (d2 > r2) continue;
-          // a core that turns as one, so loops keep their size, and a band round it that shears
           const r = Math.sqrt(d2) / this.stirR;
           const f = r < CORE ? 1 : smooth((1 - r) / (1 - CORE));
           this.settle[i] = 0;
@@ -447,7 +428,6 @@ export class Threads {
       }
 
       // COMB
-      // a slow straight pass eases what it passes over back toward lying flat
       if (comb > 0.01) {
         const r2 = this.reach * this.reach;
         const reach = Math.min(1, (speed * h) / this.reach);
@@ -458,12 +438,9 @@ export class Threads {
           if (d2 > r2) continue;
           const f = 1 - Math.sqrt(d2) / this.reach;
           const k = Math.min(0.5, COMB * comb * f * f * reach);
-          // toward the thread's own lying curve straight across from it
-          // most of the way back along the thread too, which unrolls a curl into a line
           if (f * comb > this.settle[i]) this.settle[i] = f * comb;
           px[i] += (this.hx[i] - px[i]) * k * COMB_ALONG;
           py[i] += (this.lineAt(i, px[i]) - py[i]) * k;
-          // and irons it, so curls it passes over open out
           const j = i % this.n;
           if (j > 0 && j < this.n - 1) {
             px[i] += ((px[i - 1] + px[i + 1]) * 0.5 - px[i]) * k;
@@ -473,8 +450,7 @@ export class Threads {
       }
 
       // SETTLE
-      // line the comb has been through keeps easing home for a moment after it passes,
-      // so a curl it loosened slips free instead of springing back
+      // combed points keep easing home after the pass, so loosened curls slip free
       const fade = Math.exp(-h / SETTLE_S);
       for (let i = 0; i < total; i++) {
         const st = this.settle[i];
@@ -489,7 +465,6 @@ export class Threads {
         for (let e = 0; e < 2; e++) {
           const o = s * n + (e ? n - 1 : 0);
           if (o === this.pin) continue;
-          // combing pays line back out to the ends, so nothing is left over to curl
           const pull = ANCHOR + comb * END_COMB;
           px[o] += (this.hx[o] - px[o]) * pull;
           py[o] += (this.hy[o] - py[o]) * pull;
@@ -501,7 +476,7 @@ export class Threads {
       }
 
       // LENGTH
-      // each link back to its rest length, sweeping both ways so neither end leads
+      // distance constraints, swept both directions so neither end leads
       for (let it = 0; it < ITERS; it++) {
         const fwd = (it & 1) === 0;
         for (let s = 0; s < this.k; s++) {
@@ -525,13 +500,10 @@ export class Threads {
             py[b] -= dy * c * (wb / sum);
           }
           // BEND LIMIT
-          // points two apart keep a minimum distance, which caps how sharply the thread
-          // can bend; compression then rolls into curves instead of crinkling
+          // minimum distance between points 2 and 4 apart caps curvature
           for (let reachK = 1; reachK <= 2; reachK++) {
-            // two apart caps each joint, four apart caps the wider curl
             const min = rest * 2 * reachK * (reachK === 1 ? MIN_SPAN : MIN_SPAN_WIDE);
             for (let j = reachK; j < n - reachK; j++) {
-              // a curl being combed out is let close up, or it could never slip free
               if (this.settle[base + j] > 0.12) continue;
               const a = base + j - reachK;
               const b = base + j + reachK;
@@ -552,7 +524,7 @@ export class Threads {
       }
 
       // BEND
-      // a light smoothing keeps every curve a curve
+      // laplacian smoothing
       for (let pass = 0; pass < 2; pass++)
         for (let s = 0; s < this.k; s++) {
           const base = s * n;
@@ -569,7 +541,7 @@ export class Threads {
   }
 
   // CROSSINGS
-  // segments go into a coarse grid and neighbours are tested pairwise, for the count
+  // uniform grid broad phase, segment pairs tested per cell
   private cross() {
     const n = this.n;
     const total = this.k * n;
@@ -602,7 +574,6 @@ export class Threads {
         for (let xx = gx - 1; xx <= gx + 1; xx++) {
           if (xx < 0 || xx >= gw) continue;
           for (let j = head[yy * gw + xx]; j !== -1; j = link[j]) {
-            // each pair once, and never a link with its own neighbours
             if (j <= i) continue;
             if (Math.floor(j / n) === Math.floor(i / n) && j - i < 3) continue;
             const t = hit(px[i], py[i], px[i + 1], py[i + 1], px[j], py[j], px[j + 1], py[j + 1]);
@@ -616,8 +587,7 @@ export class Threads {
   }
 
   // DRAW
-  // every short piece of every thread, back to front by its height, so the upper thread
-  // simply lies over the lower one where they cross
+  // segments sorted back to front by height, so upper threads overdraw lower
   private draw() {
     const c = this.ctx;
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -632,7 +602,6 @@ export class Threads {
       const o = order[q];
       const s = (o / n) | 0;
       const i = o - s * n;
-      // threads draw in one after another on the way in
       const lead = 0.06 * (this.k - 1);
       const shown = Math.min(1, Math.max(0, (this.reveal - s * 0.06) / (1 - lead))) * (n - 1);
       if (i > shown) continue;
@@ -674,7 +643,6 @@ export class Threads {
     this.dpr = Math.min(window.devicePixelRatio || 1, MAX_DPR);
     this.canvas.width = Math.round(w * this.dpr);
     this.canvas.height = Math.round(h * this.dpr);
-    // a new width lays the threads out again; a height change just moves them
     if (Math.abs(w - this.w) > 1 || this.n === 0) {
       this.w = w;
       this.h = h;
@@ -706,7 +674,8 @@ const smooth = (x: number) => {
   return t * t * (3 - 2 * t);
 };
 
-// where segment p crosses segment q, as a share along p, or -1
+// SEGMENT INTERSECTION
+// parameter along p, or -1
 function hit(
   ax: number,
   ay: number,

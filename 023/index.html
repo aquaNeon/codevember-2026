@@ -26,8 +26,7 @@
     <meta name="theme-color" content="#000000" />
     <style>
       /* DARK */
-      /* this day only: the sphere hangs in black, so the type goes light.
-         doubled selector so it wins over the shared sheet that loads after it */
+      /* light type on black; doubled selector wins over the shared sheet */
       :root:root {
         --bone: #000000;
         --bone-hi: #000000;
@@ -45,7 +44,8 @@
         mix-blend-mode: screen;
         opacity: 0.06;
       }
-      /* the g has a tail below the line; room so it clears the intro */
+      /* TITLE */
+      /* room for the descender to clear the intro */
       .cv-title.cv-title h1 {
         margin-bottom: 0.2em;
       }
@@ -82,12 +82,13 @@
         visibility: visible;
       }
       /* STILL */
-      /* the sphere, rendered: holds the place while the live one builds, and stays for no webgl */
+      /* pre-rendered sphere: placeholder while building, fallback without webgl */
       .cv-figure canvas {
         position: relative;
         z-index: 1;
       }
-      /* placed like resize() in magma.ts (its cy counts from the bottom); still cropped to 1.5r */
+      /* STILL LAYOUT */
+      /* mirrors resize() in magma.ts (cy from the bottom); cropped to 1.5r */
       .cv-figure {
         container-type: size;
       }
@@ -113,7 +114,6 @@
           --cy: 50cqh;
         }
       }
-      /* gone once the canvas has faded in over it */
       [data-cv-live] .still {
         visibility: hidden;
         transition: visibility 0s 1.2s;

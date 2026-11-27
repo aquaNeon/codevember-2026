@@ -2,7 +2,7 @@ import "../shared/style.css";
 import { mountNav } from "../shared/nav";
 
 const DAY = 18;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200;
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 
@@ -17,7 +17,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || params.has("still")) still();
   else {
-    // after load and an idle moment; the scene itself starts the gpu off this thread
+    // BOOT
+    // after load and idle; the scene starts the gpu off this thread
     afterLoad(() => import("./stage"))
       .then(({ Stage }) => Stage.create(canvas))
       .then((stage) => {

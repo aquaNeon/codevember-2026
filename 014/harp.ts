@@ -15,11 +15,11 @@ import { SHADOW_DX_U, SHADOW_DY_U, board, looks, paintStatic, type Ctx, type Loo
 const MAX_DPR = 2;
 const MODES = 8;
 const POINTS = 41;
-const GHOSTS = 7; // samples across the shutter
-const SHUTTER = 0.42; // share of a period the trail covers
-const VIS_PER_HZ = 1 / 15; // drawn vibration rate per hertz of pitch; change speed here
+const GHOSTS = 7;
+const SHUTTER = 0.42;
+const VIS_PER_HZ = 1 / 15; // change speed here
 const REDUCED_AMP = 0.28;
-const STILL_U = 0.04; // below this the string counts as at rest
+const STILL_U = 0.04;
 const MAX_DT_S = 1 / 30;
 const LN1000 = 6.9078;
 
@@ -45,9 +45,7 @@ function makeCanvas(w: number, h: number): Canvas {
 }
 
 // HARP
-// draws the instrument: a cached layer for the wood and brass, the speaking lengths of string
-// on top. each string is a sum of standing waves set by the pluck, so its shape, speed and decay
-// follow the same numbers as the sound. the loop only runs while a string still moves
+// cached wood layer, live strings; each string a sum of standing waves matching the audio
 export class Harp {
   onShown: (() => void) | null = null;
 
@@ -147,7 +145,8 @@ export class Harp {
     this.kick();
   }
 
-  // a finger holds string i at p (0 top, 1 bottom), pulled d units sideways
+  // FINGER
+  // p 0 top to 1 bottom, d units sideways
   hold(i: number, p: number, d: number) {
     this.held[i] = 1;
     this.holdP[i] = p;
@@ -161,7 +160,8 @@ export class Harp {
     this.kick();
   }
 
-  // let go from a triangle of height d at p: its standing-wave amplitudes
+  // PLUCK
+  // standing-wave amplitudes of a triangle of height d at p
   pluck(i: number, p: number, d: number) {
     this.held[i] = 0;
     const q = Math.min(0.95, Math.max(0.05, p));
@@ -239,7 +239,6 @@ export class Harp {
     return moving;
   }
 
-  // displacement along string i for trail copy g, into out
   private shape(i: number, g: number, out: Float32Array, o: number) {
     const scale = this.reduced ? REDUCED_AMP : 1;
     for (let j = 0; j < POINTS; j++) out[o + j] = 0;
@@ -301,7 +300,7 @@ export class Harp {
     const layer = this.layer;
     if (!layer) return;
     const k = this.k;
-    const px = 1 / k; // one device pixel, in units
+    const px = 1 / k;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(this.bx, this.by, layer.width, layer.height);
     ctx.drawImage(layer, this.bx, this.by);

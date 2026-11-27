@@ -7,7 +7,6 @@ export type Sink = {
   fail: () => void;
 };
 
-// the calls the page makes on the scene, the same in a worker or on the page
 export const CALLS = [
   "size",
   "visibility",
@@ -30,8 +29,7 @@ const KEYS = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp
 const LINE_PX = 16;
 
 // HOST
-// the dom side: size, visibility, pointer, wheel and keys in, the hud out. the scene runs in a worker
-// when the canvas can be handed over, so compiling and drawing never block the page
+// DOM side: input in, HUD out; scene in a worker when the canvas can be transferred
 export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");
@@ -118,7 +116,6 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
       canvas.setPointerCapture?.(e.pointerId);
       d.press(e.clientX - rect.left, e.clientY - rect.top);
     };
-    // pressed, it turns and runs the weaving; a mouse passing by is a breath of air
     const move = (e: PointerEvent) => {
       if (pointer !== -1 && e.pointerId !== pointer) return;
       if (pointer === -1 && e.pointerType !== "mouse") return;
@@ -132,7 +129,6 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
     const leave = (e: PointerEvent) => {
       if (pointer === -1 && e.pointerType === "mouse") d.leave();
     };
-    // scrolling down weaves on, up unweaves
     const wheel = (e: WheelEvent) => {
       const k = e.deltaMode === 1 ? LINE_PX : e.deltaMode === 2 ? innerHeight : 1;
       d.wheel(e.deltaY * k);

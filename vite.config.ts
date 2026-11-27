@@ -4,16 +4,14 @@ import { defineConfig, type Plugin } from "vite";
 
 const ROOT = import.meta.dirname;
 const DAY_RE = /^\d{3}$/;
-const FONT_WAIT_MS = 800; // keep under the 1s css fallback delay in shared/style.css
+const FONT_WAIT_MS = 800; // change only below the 1s css fallback in shared/style.css
 
-// one entry per day folder that has an index.html
 const days = readdirSync(ROOT).filter(
   (d) => DAY_RE.test(d) && existsSync(resolve(ROOT, d, "index.html")),
 );
 
 // SHIPPED DAYS
-// a day is ready once its folder and thumb exist; its accent is the --accent its page declares,
-// so each day ships in its own PR without touching shared files
+// ready = folder + thumb; accent read from the page's --accent, no shared edits per day
 const ACCENT_RE = /--accent:\s*(#[0-9a-fA-F]{3,8})/;
 const ready = days.filter((d) => existsSync(resolve(ROOT, "public/thumbs", `${d}.jpg`)));
 const accents = Object.fromEntries(
@@ -24,8 +22,7 @@ const accents = Object.fromEntries(
 );
 
 // REVEAL
-// every page flags <html> once the serif is in, so the fade starts on real glyphs;
-// a fresh load or reload also flags data-cv-enter, so the top bar only animates then
+// data-cv-fonts once the serif loads; data-cv-enter only on fresh load or reload
 const reveal: Plugin = {
   name: "cv-reveal",
   transformIndexHtml: () => [

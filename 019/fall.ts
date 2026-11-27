@@ -1,7 +1,5 @@
 // FALL
-// a stony meteoroid through the air, in km and seconds: drag, ablation, the curve of the
-// earth, fragments shed as the air pressure climbs past the rock's strength, and an airburst
-// when it climbs past it all at once. no dom and no gl, so it runs anywhere
+// meteoroid entry in km and s: drag, ablation, earth curvature, fragmentation, airburst
 
 const R_EARTH_KM = 6371;
 const H_SCALE_KM = 7.16;
@@ -9,59 +7,59 @@ const RHO0 = 1.225;
 const G_M_S2 = 9.81;
 const CD = 1;
 const RHO_ROCK = 3300;
-const ABLATE = 1.2e-7; // stylised, change for a faster burn
-const CURVE_GAIN = 2.5; // stylised lift, so grazers skip back out
+const ABLATE = 1.2e-7; // change for a faster burn
+const CURVE_GAIN = 2.5;
 const ENTRY_KM = 112;
 const ENTRY_V_KM_S = 19;
 export const MASS0_KG = 1800;
-const FRAG_Q_PA = 1.2e6; // first break-up
-const FRAG_STEP = 1.45; // each later one needs this much more pressure
-const FRAG_SHARE = 0.12; // mass a fragment takes
+const FRAG_Q_PA = 1.2e6;
+const FRAG_STEP = 1.45;
+const FRAG_SHARE = 0.12;
 const BURST_Q_PA = 2.6e6;
-const BURST_SHARE = 0.35; // a body worn down to this share of its mass breaks up
-export const VIS_KM = 0.005; // drawn radius of the full mass, km; stylised, change for a bigger rock
+const BURST_SHARE = 0.35;
+export const VIS_KM = 0.005; // change for a bigger rock
 const SHRINK_POW = 1.1;
-const LOOSEN_S = [0.15, 0.7] as const; // sim seconds between rips: least, mean of the rest
-const CRACK_S = 0.35; // the seam glows this long before the piece goes
-const CLOSE_PUSH_KM_S = 0.22; // how hard pieces are thrown clear in the chase
-const CLOSE_GAP_S = [0.3, 0.25] as const; // sim seconds between rips in the chase: least, spread
-// where seams open: across the path, along it; forward, on the hot face and its shoulders
+const LOOSEN_S = [0.15, 0.7] as const;
+const CRACK_S = 0.35;
+const CLOSE_PUSH_KM_S = 0.22;
+const CLOSE_GAP_S = [0.3, 0.25] as const;
 const SHOULDER = [0.6, 0.8] as const;
-const LOOSE_SHARE = 0.03; // a big chunk; the small ones are a fraction of it
+const LOOSE_SHARE = 0.03;
 const LOOSE_KICK_KM_S = 0.06;
-const BITE_S = 1.1; // the bite glows and wears smooth over this // drawn size against mass; above 1/3 so the wearing away shows
+const BITE_S = 1.1;
 
-// drawn radius of a body, km
+// SIZE
+// drawn radius, km; SHRINK_POW above 1/3 so wear shows, pieces by volume
 export const visR = (m: number) => VIS_KM * Math.pow(Math.max(0, m) / MASS0_KG, SHRINK_POW);
-// pieces are drawn by volume, so they read as real chunks of the rock
 export const pieceR = (m: number) => VIS_KM * 0.9 * Math.cbrt(Math.max(0, m) / MASS0_KG);
 const BURNT_KG = 0.5;
-const DARK_KM_S = 3.5; // slower than this it no longer glows
-const LUM_REF = 6e10; // light at which a body reads 1
+const DARK_KM_S = 3.5;
+const LUM_REF = 6e10;
 const STEP_S = 1 / 240;
 const PREDICT_S = 60;
 
-export const PATH_Z_KM = -90; // the path runs this far in front of the town
-const END_X_KM = 14; // where the end lands across the view
+export const PATH_Z_KM = -90;
+const END_X_KM = 14;
 
 export const MAX_BODIES = 24;
 export const HIST_N = 224;
 export const HIST_DT_S = 1 / 40;
 export const PATH_N = 96;
-export const ROWS = MAX_BODIES * 2; // two rows per body
+export const ROWS = MAX_BODIES * 2;
 export const MAX_SPARKS = 1100;
-// drawn size per kind: grain, drop, ember, melt sheet, chunk
+// SPARKS
+// kinds: grain, drop, ember, melt sheet, chunk; stride: xyz, v xyz, age, life, size, kind
 const SPARK_SIZE = [1, 1.6, 1.3, 2.8, 5] as const;
-export const SPARK_STRIDE = 10; // x y z, vx vy vz, age, life, size, kind
+export const SPARK_STRIDE = 10;
 
 export const OUT = { flying: 0, burst: 1, burnt: 2, skip: 3, dark: 4 } as const;
 
 // PREDICTION
-// one body, no fragments, from a state; what the director plans the shots on
+// single body, no fragments; the director plans shots on it
 export class Forecast {
   out: number = OUT.flying;
   tEnd = 0;
-  tLow = 0; // when it is lowest
+  tLow = 0;
   end = new Float32Array(3);
   low = new Float32Array(3);
   path = new Float32Array(PATH_N * 3);
@@ -79,16 +77,16 @@ export class Fall {
   readonly lum = new Float32Array(MAX_BODIES);
   readonly alive = new Uint8Array(MAX_BODIES);
   readonly seed = new Float32Array(MAX_BODIES);
-  readonly char = new Float32Array(MAX_BODIES); // fusion crust, 0 fresh to 1 charred
+  readonly char = new Float32Array(MAX_BODIES);
   readonly born = new Float32Array(MAX_BODIES);
-  readonly fuse = new Float32Array(MAX_BODIES); // sim seconds left of a vaporising piece
+  readonly fuse = new Float32Array(MAX_BODIES);
   readonly fuse0 = new Float32Array(MAX_BODIES);
   private qNext = new Float32Array(MAX_BODIES);
   private sparkAcc = new Float32Array(MAX_BODIES);
   private sampleAt = new Float32Array(MAX_BODIES);
 
   // HISTORY
-  // a ring per body, its newest slot always the live head; rows ready for a float texture
+  // ring per body, newest slot is the live head; rows upload as a float texture
   readonly hist = new Float32Array(HIST_N * ROWS * 4);
   readonly head = new Int32Array(MAX_BODIES);
   readonly count = new Int32Array(MAX_BODIES);
@@ -103,29 +101,28 @@ export class Fall {
   out: number = OUT.flying;
   active = false;
   burstQ = BURST_Q_PA;
-  gamma = 0.42; // entry angle below the horizon, rad
-  readonly burst = new Float32Array(8); // x y z, energy, time, direction
+  gamma = 0.42;
+  readonly burst = new Float32Array(8);
   readonly fc = new Forecast();
-  private low = false; // the main body has dropped into the air
-  readonly crack = new Float32Array(4); // seam opening on the main body: direction, progress
-  readonly bite = new Float32Array(4); // bite left where a piece came off: direction, glow
+  private low = false;
+  readonly crack = new Float32Array(4);
+  readonly bite = new Float32Array(4);
   private cut = new Float32Array(3);
   private crackA = 0;
   private loosenAt = 0;
-  private ripped = 0; // kg torn off in pieces, kept out of the burst timing so the plan holds
-  rate = 1; // sim seconds per screen second, from the host, so burn-ups read the same in slow motion
-  closeUp = 1; // the host raises this in the chase, so more pieces come off up close
+  private ripped = 0;
+  rate = 1;
+  closeUp = 1;
   private sheetAcc = 0;
   private chunkAcc = 0;
   onEvent: (kind: "frag" | "burst" | "end") => void = () => {};
 
-  // the chase starts: the first rip comes almost at once
   ripSoon() {
     this.loosenAt = Math.min(this.loosenAt, this.t + 0.06);
   }
 
   // LAUNCH
-  // place the entry so the end lands across the view whatever the angle
+  // entry placed so the end lands at END_X_KM for any angle
   launch(gamma: number) {
     this.gamma = gamma;
     this.burstQ = BURST_Q_PA * (0.88 + Math.random() * 0.3);
@@ -149,7 +146,6 @@ export class Fall {
     this.active = true;
   }
 
-  // the path the first one will take, so the opening frame is framed before it arrives
   aim(gamma: number) {
     this.gamma = gamma;
     if (this.active) return;
@@ -215,8 +211,8 @@ export class Fall {
         m *= 1 - FRAG_SHARE;
         q0 *= FRAG_STEP;
       }
-      // every pass ends in an airburst: the air crushes it, it wears too thin, or a
-      // grazer bursts at its lowest point
+      // AIRBURST
+      // ram pressure, mass left, grazer past its lowest point, or too slow to glow
       if (q > this.burstQ || m < BURST_SHARE * MASS0_KG || (descended && uy > 0) || v < DARK_KM_S)
         f.out = OUT.burst;
       if (f.out !== OUT.flying) break;
@@ -292,10 +288,8 @@ export class Fall {
       this.px[i] += this.vx[i] * dt;
       this.py[i] += this.vy[i] * dt;
       this.pz[i] += this.vz[i] * dt;
-      // a fresh fragment flares as it breaks away
       let flare = i ? 1.0 * Math.exp(-(this.t - this.born[i]) / 0.9) : 0.04;
       if (this.fuse[i] > 0) {
-        // a bright flare as it goes, fading with it
         this.fuse[i] -= dt;
         flare = 2.2 * Math.sqrt(Math.max(0, this.fuse[i] / this.fuse0[i]));
         if (this.fuse[i] <= 0) {
@@ -341,7 +335,6 @@ export class Fall {
     return -1;
   }
 
-  // a piece breaks off and goes its own way
   private shed(i: number) {
     this.qNext[i] *= FRAG_STEP;
     const n = i === 0 ? 1 + Math.floor(Math.random() * 2) : 1;
@@ -355,12 +348,10 @@ export class Fall {
     const m = this.mass[i] * share;
     this.mass[i] -= m;
     this.spawn(j, this.px[i], this.py[i], this.pz[i], 0, m);
-    // same velocity plus a sideways kick
     const ux = this.vx[i];
     const uy = this.vy[i];
     const uz = this.vz[i];
     const v = Math.hypot(ux, uy, uz) || 1;
-    // two axes across the path
     let nx = -uz;
     let nz = ux;
     const nl = Math.hypot(nx, nz) || 1;
@@ -376,7 +367,6 @@ export class Fall {
     this.vz[j] = uz + nz * c + bz * s;
     this.char[j] = this.char[i] * 0.4;
     this.qNext[j] = this.qNext[i] * 1.3;
-    // where on the body it came from, for the bite it leaves
     this.cut[0] = (nx * Math.cos(a) + bx * Math.sin(a)) * SHOULDER[0] + (ux / v) * SHOULDER[1];
     this.cut[1] = by * Math.sin(a) * SHOULDER[0] + (uy / v) * SHOULDER[1];
     this.cut[2] = (nz * Math.cos(a) + bz * Math.sin(a)) * SHOULDER[0] + (uz / v) * SHOULDER[1];
@@ -388,8 +378,7 @@ export class Fall {
   }
 
   // LOOSEN
-  // now and then a seam glows open on the hot face, where the heat and the ram pressure peak;
-  // the pieces break away, splay out and fall back past the body, leaving a glowing bite
+  // seam opens on the hot face; pieces splay back past the body and leave a bite
   private loosen(dt: number) {
     this.bite[3] *= Math.exp(-dt / BITE_S);
     if (!this.alive[0]) {
@@ -400,7 +389,6 @@ export class Fall {
       this.crack[3] += dt / CRACK_S;
       if (this.crack[3] < 1) return;
       this.crack[3] = 0;
-      // the seam rips: a cluster goes at once, a big chunk or two and a spray of small ones
       const n = 3 + Math.floor(Math.random() * 4);
       const r = visR(this.mass[0]);
       for (let k = 0; k < n; k++) {
@@ -420,10 +408,8 @@ export class Fall {
         this.px[j] += this.cut[0] * o;
         this.py[j] += this.cut[1] * o;
         this.pz[j] += this.cut[2] * o;
-        // up close they are thrown clear, out along the tear and back down the trail
         const close = this.closeUp > 1;
         const push = close ? CLOSE_PUSH_KM_S * (0.6 + Math.random() * 0.8) : 0;
-        // the push splays them sideways first, so they fall back past the body, not through it
         const vv = this.speed(0) || 1;
         const hx = this.vx[0] / vv;
         const hy = this.vy[0] / vv;
@@ -439,22 +425,18 @@ export class Fall {
         this.vx[j] += lx * push - hx * push * 0.7;
         this.vy[j] += ly * push - hy * push * 0.7;
         this.vz[j] += lz * push - hz * push * 0.7;
-        // then they flare and vaporise: a blink in a wide shot, long enough to follow up close
         const life = close ? (big ? 0.85 : 0.6) : big ? 0.3 : 0.18;
         this.fuse[j] = this.fuse0[j] = this.rate * life * (0.85 + Math.random() * 0.3);
       }
       return;
     }
     if (this.lum[0] < (this.closeUp > 1 ? 0.15 : 0.4) || this.t < this.loosenAt) return;
-    // calm, then a violent rip: irregular gaps that close up as the air thickens
     const v0 = this.speed(0);
     const q = RHO0 * Math.exp(-this.py[0] / H_SCALE_KM) * v0 * v0 * 1e6;
     const fury = 0.5 + 3 * Math.min(1, q / this.burstQ);
     const gap = LOOSEN_S[0] - Math.log(1 - Math.random() * 0.95) * LOOSEN_S[1];
-    // up close the rips come steadily, so the orbit always sees a few
     this.loosenAt =
       this.t + (this.closeUp > 1 ? CLOSE_GAP_S[0] + Math.random() * CLOSE_GAP_S[1] : gap / fury);
-    // the seam: aim where the piece will go, so the crack shows on the right side
     this.crackA = Math.random() * Math.PI * 2;
     const ux = this.vx[0];
     const uz = this.vz[0];
@@ -488,7 +470,6 @@ export class Fall {
     this.burst[0] = this.px[0];
     this.burst[1] = this.py[0];
     this.burst[2] = this.pz[0];
-    // steeper means more pressure and more mass left: a harder burst
     this.burst[3] = Math.min(1.9, 0.6 + 0.45 * Math.min(2, q / this.burstQ) + m / 2500 + v / 80);
     this.burst[4] = this.t;
     this.burst[5] = this.vx[0] / v;
@@ -506,7 +487,6 @@ export class Fall {
     const s = this.sparks;
     const o = this.nextSpark * SPARK_STRIDE;
     this.nextSpark = (this.nextSpark + 1) % MAX_SPARKS;
-    // melt sheets slide back along the body, chunks fall behind faster
     const lag =
       kind === 2
         ? 0.9
@@ -518,7 +498,6 @@ export class Fall {
     const u = Math.random() * 2 - 1;
     const a = Math.random() * Math.PI * 2;
     const w = Math.sqrt(1 - u * u);
-    // grains peel off the hot face and the rim behind it
     const v = this.speed(i) || 1;
     const vr = visR(this.mass[i]);
     const r = vr * (0.6 + Math.random() * 0.5);
@@ -545,7 +524,6 @@ export class Fall {
       }
     }
     // STRIPPING
-    // the main body sheds sheets of melt off its hot face and, now and then, a chunk
     if (this.alive[0]) {
       this.sheetAcc += dt * this.lum[0] * 45;
       this.chunkAcc += dt * this.lum[0] * 2.2;
@@ -596,7 +574,6 @@ export class Fall {
     this.dirty = true;
   }
 
-  // newest trail point still glowing, for the loop to know when the sky is quiet
   quiet() {
     if (this.active && this.out === OUT.flying) return false;
     for (let i = 0; i < MAX_BODIES; i++) {

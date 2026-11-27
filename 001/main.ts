@@ -2,7 +2,7 @@ import "../shared/style.css";
 import { mountNav } from "../shared/nav";
 
 const DAY = 1;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200; // change max wait before the scene starts
 const HINT = {
   fold: "Lift an edge, fold it over",
   rest: "Four folds. Let it rest",
@@ -23,8 +23,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || new URLSearchParams(location.search).has("still")) still();
   else {
-    // three is the heavy part; wait for load and an idle moment, and wake the gpu from a worker
-    // so the first webgl context on the page does not block on a cold gpu process
+    // LAZY SCENE
+    // after load + idle, with the gpu warmed in a worker so the first context does not stall
     afterLoad(() => Promise.all([import("./dough"), warmGpu()]).then(([m]) => m))
       .then(({ Dough }) => {
         const dough = new Dough(canvas);
@@ -58,8 +58,8 @@ function afterLoad<T>(fn: () => Promise<T>) {
 }
 
 // WARM UP
-// a throwaway context in a worker pays the gpu start-up off the main thread
-const WARM_MS = 2500; // give up waiting after this
+// throwaway webgl2 context in a worker pays gpu start-up off the main thread
+const WARM_MS = 2500; // change warm-up timeout here
 const WARM_SRC = `try{new OffscreenCanvas(1,1).getContext("webgl2")}catch(e){}postMessage(0)`;
 
 function warmGpu() {

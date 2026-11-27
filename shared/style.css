@@ -47,7 +47,6 @@ body {
 }
 
 /* GRAIN */
-/* static svg noise, multiplied over everything */
 body::after {
   content: "";
   position: fixed;
@@ -221,7 +220,7 @@ a {
 }
 
 /* REVEAL */
-/* text waits for the serif so titles never swap; the 1s delay is the fallback without js */
+/* hidden until data-cv-fonts; the 1s delay is the no-js fallback */
 @keyframes cv-fade {
   from {
     opacity: 0;
@@ -235,7 +234,8 @@ a {
   }
 }
 
-/* same frames under new names so the animation restarts when the font is in */
+/* RESTART */
+/* duplicate keyframes under a new name restart the animation on data-cv-fonts */
 @keyframes cv-fade-in {
   from {
     opacity: 0;
@@ -254,8 +254,7 @@ body > main {
 }
 
 /* TOP BAR */
-/* only on a fresh load or reload: the three slots drop in and the rule fades up;
-   moving between days leaves it still */
+/* animates only under data-cv-enter (fresh load or reload) */
 @keyframes cv-drop-in {
   from {
     opacity: 0;
@@ -269,7 +268,6 @@ body > main {
   }
 }
 
-/* waits for the fonts like the title, so the mono never swaps mid-drop */
 [data-cv-enter]:not([data-cv-fonts]) .cv-top {
   visibility: hidden;
 }
@@ -292,7 +290,6 @@ body > main {
 }
 
 /* TURNING NUMBER */
-/* the day number turns one notch from the day you came from, see nav.ts */
 .cv-odo {
   display: inline-block;
   height: 1lh;
@@ -312,7 +309,6 @@ body > main {
   }
 }
 
-/* one notch: rests on the new digit, animates from the old one */
 .cv-odo-strip {
   display: block;
   translate: 0 -1lh;
@@ -344,7 +340,6 @@ body > main {
   white-space: nowrap;
 }
 
-/* tag, title, line, then the caption, each a beat after the last */
 .cv-title > *,
 .mast > *,
 .fig {
@@ -378,8 +373,7 @@ body > main {
 }
 
 /* HUD ROWS */
-/* readout rows, hint and buttons rise one after another; rows waiting for the scene
-   start when it goes live */
+/* staggered rise; .live-only rows wait for data-cv-live */
 @keyframes cv-rise-live {
   from {
     opacity: 0;
@@ -399,7 +393,6 @@ body > main {
   animation-delay: calc(0.36s + var(--cv-row) * 70ms);
 }
 
-/* a hud with any row waiting for the scene holds all its rows, so they keep their order */
 .cv-hud.live-only > :not(dl),
 .cv-hud.live-only dl > *,
 .cv-hud:has(.live-only) > :not(dl),
@@ -407,7 +400,6 @@ body > main {
   animation: none;
 }
 
-/* until then those rows stay hidden, unless the page falls back to its still */
 [data-cv]:not([data-cv-live], [data-cv-still]) .cv-hud:has(.live-only) > * {
   opacity: 0;
 }
@@ -432,7 +424,8 @@ body > main {
 .cv-hud dl > :nth-child(n + 9) {
   --cv-row: 4;
 }
-/* rows after the readout follow on evenly: --cv-n is how many readout rows came first */
+/* STAGGER OFFSET */
+/* --cv-n = readout rows before the rest */
 .cv-hud {
   --cv-n: 1;
 }
@@ -462,7 +455,7 @@ body > main {
 }
 
 /* LIVE UI */
-/* panels that wait for the scene settle in when it goes live instead of popping */
+/* .live-only fades in on data-cv-live */
 .live-only {
   opacity: 0;
   translate: 0 10px;

@@ -1,21 +1,18 @@
 // SCENE
-// metres. the back wall is the plane z = 0, the floor y = 0, the left wall x = XW with a
-// window in it, off to the left of the view. a white plinth stands in front of the back
-// wall with the sculpture resting on it
+// metres; back wall z = 0, floor y = 0, window wall x = WALL_X_M
 
 export const SCENE = {
   PLINTH_X_M: -0.35,
   PLINTH_Z_M: 0.6,
   PLINTH_HALF_M: 0.38,
   PLINTH_H_M: 0.92,
-  R_M: 0.36, // the sphere, and the height every shape rests at
-  WALL_X_M: -2.6, // the window wall
+  R_M: 0.36,
+  WALL_X_M: -2.6,
   CEIL_M: 4.2,
 };
 
-export const RAYS_N = 256; // rays per side of the grid, change for finer filaments
+export const RAYS_N = 256; // change for finer filaments
 
-// the receiver maps, in metres: x and y on the back wall, x and z on the floor
 export const WALL_RECT = [-1.6, 0, 4.2, 2.1] as const;
 export const FLOOR_RECT = [-1.6, 0, 4.2, 2.1] as const;
 
@@ -30,21 +27,20 @@ const float PLINTH_H = ${f(SCENE.PLINTH_H_M)};
 const float R = ${f(SCENE.R_M)};
 const float XW = ${f(SCENE.WALL_X_M)};
 const float CEIL = ${f(SCENE.CEIL_M)};
-const vec4 WIN = vec4(1.6, 1.25, 0.62, 0.55); // window half width, half height, mullion and transom offsets
+const vec4 WIN = vec4(1.6, 1.25, 0.62, 0.55);
 
 uniform float uTime;
-uniform float uWave;   // surface wobble, metres
-uniform vec4  uSq;     // squash along x, along y, slosh, unused
-uniform int   uShape;  // 0 sphere, 1 drop, 2 cube
-uniform int   uFrom;   // the shape it is leaving
-uniform float uMorph;  // 0 at uFrom, 1 settled on uShape
-uniform float uBound;  // a sphere round C that holds the shape
-uniform vec3  uSun;    // unit, toward the sun
-uniform vec2  uWin;    // window centre on the window wall: z, y
+uniform float uWave;
+uniform vec4  uSq;
+uniform int   uShape;
+uniform int   uFrom;
+uniform float uMorph;
+uniform float uBound;
+uniform vec3  uSun;
+uniform vec2  uWin;
 
 // SURFACE
-// the shape's skin moves along its normal: a few crossing waves, and the squash and slosh
-// from a drag. the base stays put where it rests on the plinth
+// skin displaced along the normal by waves and drag; base stays fixed
 float disp(vec3 q) {
   vec3 n = q / max(length(q), 1e-4);
   float t = uTime;
@@ -77,7 +73,6 @@ float roundBox(vec3 p, vec3 b, float r) {
 float form(int s, vec3 q) {
   if (s == 0) return length(q) - R;
   if (s == 1) return roundCone(q - vec3(0.0, -R + 0.32, 0.0), 0.32, 0.035, 0.5);
-  // a soft cube, turned a little toward the sun
   vec3 b = q - vec3(0.0, -R + 0.27, 0.0);
   float cs = 0.8253;
   float sn = 0.5646;
@@ -85,7 +80,8 @@ float form(int s, vec3 q) {
   return roundBox(b, vec3(0.175), 0.095);
 }
 
-// blending the two distances melts one form into the next
+// MORPH
+// blend the two SDFs
 float shape(vec3 q) {
   float d = form(uShape, q);
   return uMorph < 1.0 ? mix(form(uFrom, q), d, uMorph) : d;
@@ -102,7 +98,6 @@ vec3 normal(vec3 p) {
                    e.yxy * sdf(p + e.yxy) + e.xxx * sdf(p + e.xxx));
 }
 
-// the bounding sphere along a ray: entry and exit, or a miss
 vec2 bound(vec3 ro, vec3 rd) {
   vec3 oc = ro - C;
   float b = dot(oc, rd);
@@ -126,7 +121,6 @@ bool hitShape(vec3 ro, vec3 rd, out float t) {
   return false;
 }
 
-// from just inside the skin to where the ray leaves
 vec3 exitShape(vec3 p, vec3 d) {
   float t = 0.0;
   for (int i = 0; i < 40; i++) {
@@ -142,8 +136,7 @@ float fresnel(float c, float f0) {
 }
 
 // WINDOW
-// sun through a tall window in the left wall: three panes across, a transom, soft edges
-// that widen with the distance the light travels from the glass
+// three panes and a transom, edges soften with distance from the glass
 float window(vec3 p) {
   float t = (XW - p.x) / uSun.x;
   vec3 w = p + uSun * t;
@@ -156,7 +149,7 @@ float window(vec3 p) {
 }
 
 // PLINTH
-// a ray against the box: entry distance and the face it crosses, or -1
+// ray-box: entry distance and face, or -1
 float boxRay(vec3 ro, vec3 rd, out vec3 n) {
   vec3 m = 1.0 / rd;
   vec3 o = ro - PLINTH_C;
@@ -173,11 +166,7 @@ float boxRay(vec3 ro, vec3 rd, out vec3 n) {
 `;
 
 // TRACE
-// one pixel per sun ray. the grid covers the shape's bounding disc as seen from the sun;
-// each ray refracts in, crosses the liquid, refracts out (once more after a total internal
-// reflection), then lands on the back wall, and on the floor or the plinth top. one target
-// per colour channel, each with its own index, so the lines fringe. a fourth packs the
-// light that got through and which receivers the ray reached
+// one pixel per sun ray, one target per colour channel for dispersion
 export const QUAD_VS = `#version 300 es
 void main() {
   vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
@@ -195,7 +184,6 @@ layout(location = 1) out vec4 o1;
 layout(location = 2) out vec4 o2;
 layout(location = 3) out vec4 o3;
 
-// where a ray leaving the liquid lands: wall x y, floor or plinth-top x z
 vec4 land(vec3 e, vec3 d, out float wallOk, out float flatOk, out float top) {
   vec3 bn;
   float tb = boxRay(e, d, bn);
@@ -268,19 +256,16 @@ void main() {
 }`;
 
 // CAUSTIC
-// one vertex per ray, read from the trace by gl_VertexID, placed on a receiver map. each
-// triangle carries the light that fell on its cell of the grid, so where landed triangles
-// shrink the light gathers into lines. triangles with a corner that missed, was blocked,
-// or landed on the other level of floor and plinth top are dropped, and kept from costing fill
+// ray-grid mesh splatted per receiver; shrinking triangles concentrate light
 export const CAUSTIC_VS = `#version 300 es
 precision highp float;
 precision highp int;
 uniform highp sampler2D uPos;
 uniform highp sampler2D uPack;
 uniform int  uChan;
-uniform int  uRecv;   // 0 back wall, 1 floor and plinth top
-uniform vec4 uRect;   // the receiver map: min, size, metres
-uniform float uCell;  // grid spacing, metres
+uniform int  uRecv;
+uniform vec4 uRect;
+uniform float uCell;
 out vec2 vOld;
 out vec2 vNew;
 out float vW;
@@ -302,8 +287,8 @@ void main() {
   vW = k;
   vOld = vec2(c) * uCell;
   vNew = at;
-  // a ray that missed, was blocked or lands far off the map is pushed past the far plane:
-  // triangles made only of those are clipped away whole, mixed ones shrink to a sliver
+  // CULL
+  // misses go past the far plane so their triangles clip
   vec2 uv = (at - uRect.xy) / uRect.zw;
   bool off = vOk < 0.5 || any(lessThan(uv, vec2(-0.25))) || any(greaterThan(uv, vec2(1.25)));
   gl_Position = vec4(uv * 2.0 - 1.0, off ? 1e3 : 0.0, 1.0);
@@ -331,9 +316,6 @@ void main() {
 }`;
 
 // ROOM
-// the whole picture in one pass: a camera ray into the gallery, the sculpture traced
-// through with refraction, reflection and absorption, every surface lit by sky, warm
-// bounce, the sun through the window, the sculpture's shadow and its caustic
 export const ROOM_FS = `#version 300 es
 precision highp float;
 precision highp int;
@@ -354,16 +336,16 @@ uniform float uGain;
 out vec4 outColor;
 
 const vec3 PLASTER = vec3(0.93, 0.915, 0.89);
-const float GAP_M = 0.01; // the shadow gap at the foot of both walls
+const float GAP_M = 0.01;
 const float GAP_DARK = 0.6;
 const vec3 CONCRETE = vec3(0.86, 0.82, 0.76);
 const vec3 STONE = vec3(0.93, 0.925, 0.91);
 const vec3 SUN = vec3(1.0, 0.77, 0.52) * 3.0; // change for a stronger sun
 const vec3 SKY = vec3(0.60, 0.63, 0.70) * 0.52;
 const vec3 BOUNCE = vec3(0.80, 0.66, 0.52) * 0.42;
-const vec3 GLASS = vec3(1.0, 0.95, 0.88) * 12.0; // the window seen in reflections
+const vec3 GLASS = vec3(1.0, 0.95, 0.88) * 12.0;
 const float EXPOSURE = 1.15;
-const float GLOSS = 0.55; // how much the floor mirrors, change for a matte floor
+const float GLOSS = 0.55; // change for a matte floor
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -374,7 +356,8 @@ float noise(vec2 p) {
              mix(hash(i + vec2(0.0, 1.0)), hash(i + 1.0), u.x), u.y);
 }
 
-// ids: 0 back wall, 1 floor, 2 plinth, 3 window wall, 4 ceiling, 5 the open room behind
+// SURFACE IDS
+// 0 back wall, 1 floor, 2 plinth, 3 window wall, 4 ceiling, 5 open room
 float room(vec3 ro, vec3 rd, out vec3 n, out int id) {
   float t = 1e4;
   id = 5;
@@ -390,7 +373,7 @@ float room(vec3 ro, vec3 rd, out vec3 n, out int id) {
 }
 
 // SHADOWS
-// the plinth, hard; the sculpture, soft from how close a ray toward the sun passes it
+// plinth hard; sculpture soft from ray miss distance
 float sunVis(vec3 p) {
   float v = window(p);
   if (v < 1e-3) return 0.0;
@@ -410,7 +393,7 @@ float sunVis(vec3 p) {
 }
 
 // CAUSTIC
-// the sharp map, plus two blurred levels for the glow round the hot lines
+// sharp map plus two blurred levels for glow
 vec3 caustic(sampler2D tex, vec4 rect, vec2 at, float lod) {
   vec2 uv = (at - rect.xy) / rect.zw;
   if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return vec3(0.0);
@@ -429,12 +412,10 @@ vec3 shade(vec3 p, vec3 n, int id, float lod, bool seen) {
     alb *= 0.975 + 0.035 * noise(p.xy * 9.0) + 0.02 * noise(p.xy * 1.3);
     ao *= 1.0 - 0.32 * exp(-p.y / 0.22);
     ao *= 1.0 - 0.3 * exp(-(p.x - XW) / 0.3);
-    // a shadow gap where the wall meets the floor
     alb *= 1.0 - GAP_DARK * smoothstep(GAP_M, GAP_M * 0.6, p.y);
   } else if (id == 1) {
     float m = noise(p.xz * 1.7) * 0.6 + noise(p.xz * 7.0) * 0.3 + noise(p.xz * 40.0) * 0.1;
     alb = CONCRETE * (0.9 + 0.16 * m);
-    // saw-cut joints in the concrete
     vec2 j = abs(fract(p.xz / vec2(1.6, 1.6) + 0.5) - 0.5) * 1.6;
     alb *= 1.0 - 0.18 * smoothstep(0.006, 0.0, min(j.x, j.y));
     ao *= 1.0 - 0.32 * exp(-p.z / 0.24);
@@ -454,7 +435,6 @@ vec3 shade(vec3 p, vec3 n, int id, float lod, bool seen) {
     alb *= 1.0 - GAP_DARK * smoothstep(GAP_M, GAP_M * 0.6, p.y);
     ao *= 1.0 - 0.3 * exp(-p.z / 0.3);
   }
-  // sky from the window side and above, warm light thrown up off the sunlit floor
   vec3 amb = mix(BOUNCE, SKY, n.y * 0.35 + 0.5);
   amb *= 0.8 + 0.55 * exp(-(p.x - XW) / 2.0) + 0.25 * max(-dot(n, vec3(1.0, 0.0, 0.0)), 0.0);
   float cs = max(dot(n, uSun), 0.0);
@@ -473,9 +453,6 @@ vec3 look(vec3 ro, vec3 rd, float lod) {
 }
 
 // SCULPTURE
-// a reflection of the room, the room bent through the liquid and tinted by how far the
-// light travelled in it, the sun's highlight, and the light the shape gathers glowing on
-// its far side
 vec3 sculpture(vec3 p, vec3 rd) {
   vec3 n = normal(p);
   float ior = uIor.g;
@@ -498,7 +475,6 @@ vec3 sculpture(vec3 p, vec3 rd) {
     thru[ch] = look(p2 + d2 * 2e-3, d2, 0.0)[ch];
   }
   vec3 tint = exp(-uAbsorb * len);
-  // gathered sun: a bright crescent where the light focuses on the shape's shaded side
   float gather = pow(max(dot(n2, -uSun), 0.0), 4.0) * 1.2 + pow(max(dot(n2, -uSun), 0.0), 24.0) * 4.0;
   vec3 glow = SUN * lit * gather * sqrt(tint);
   vec3 col = (thru * tint + glow) * (1.0 - fr) + refl * fr;
@@ -524,7 +500,6 @@ void main() {
     vec3 p = ro + rd * t;
     col = shade(p, n, id, 0.0, true);
     // FLOOR
-    // polished concrete: a soft mirror of the wall, the plinth and the sculpture
     if (id == 1) {
       vec3 r = reflect(rd, n);
       vec3 q = p + n * 1e-3;
@@ -543,7 +518,6 @@ void main() {
   }
   col = aces(col * EXPOSURE);
   col = pow(col, vec3(1.0 / 2.2));
-  // a faint vignette and dither against banding
   vec2 uv = gl_FragCoord.xy / uRes - 0.5;
   col *= 1.0 - 0.18 * dot(uv, uv);
   col += (hash(gl_FragCoord.xy) - 0.5) / 255.0;

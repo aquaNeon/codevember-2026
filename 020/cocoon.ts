@@ -15,19 +15,18 @@ import { FELT_FS, FELT_VS, FLOSS_VS, FULL_VS, FUZZ_VS, HAIR_FS, SILK_FS, WEB_VS 
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
-const REF_AREA_PX = 1440 * 900; // css px; smaller screens draw fewer strands
-const REF_PX = 0.0011; // world per device px the strand weights are tuned at
+const REF_AREA_PX = 1440 * 900;
+const REF_PX = 0.0011;
 const N = CLUSTER.length;
 
 // MOTION
-// the cluster sways as one about where its web gathers, the lower ones a beat behind;
-// each also twists a little on its silk
+// sways as one about the gather point, lower ones lag; each twists on its silk
 const SWING = { rad: 0.018, hz: 0.045, lagS: 0.7 };
 const TWIST = { rad: 0.35, hz: 0.018 };
-const DRIFT = 0.006; // world units the frame wanders
-const DIM_PER_Z = 0.5; // how fast cocoons further back sink toward the wall
-const Z_SPREAD = 0.35; // how deep the cluster really hangs, as a share of its depth values
-const WALL_Z = -0.85; // mirrors WALL_Z in shaders.ts
+const DRIFT = 0.006;
+const DIM_PER_Z = 0.5;
+const Z_SPREAD = 0.35;
+const WALL_Z = -0.85; // change together with WALL_Z in shaders.ts
 
 // STRANDS
 // weight per strand on the nearest cocoon
@@ -35,14 +34,13 @@ const WEIGHT = { felt: 0.3, floss: 0.7, fuzz: 0.85, web: 1.3 };
 const WIDE = { felt: 0.9, floss: 0.7, fuzz: 0.65, web: 0.85 };
 
 // LIGHT
-// one slider sweeps the light round the cluster: a soft key in front on the left, round to
-// the side, then fading over to a light held behind the cluster, grazing the wall
+// one slider: front-left key, round to the side, then a torch behind grazing the wall
 const CLUSTER_C = [0.0, 0.05] as const;
-const KEY_SWEEP = [0.85, 1.12] as const; // rad from facing you, front to side
-const KEY_LIFT = 0.42; // how high the key sits
+const KEY_SWEEP = [0.85, 1.12] as const;
+const KEY_LIFT = 0.42;
 const BACK_POWER = 1.6;
 const BACK_CONE = 0.6;
-const BACK_FROM = [-0.55, 0.15] as const; // where it is held behind, from the cluster's middle
+const BACK_FROM = [-0.55, 0.15] as const;
 const LIGHT_TAU_S = 0.35;
 const LIGHTS = ["Front", "Side", "Back"];
 
@@ -102,7 +100,7 @@ export class Cocoon {
   private yawTo = 0;
   private pitch = 0;
   private pitchTo = 0;
-  private spin = 0; // rad per s, left after a drag
+  private spin = 0;
   private pressed = false;
   private dragX = 0;
   private dragY = 0;
@@ -114,7 +112,7 @@ export class Cocoon {
   private torch = new Float32Array(4);
   private torchD = new Float32Array(4);
   private key = new Float32Array(3);
-  private light = 1; // opens backlit
+  private light = 1;
   private lightTo = 1;
   private reported = -1;
 
@@ -156,7 +154,8 @@ export class Cocoon {
     this.bg[0] = Math.pow(((c >> 16) & 255) / 255, 2.2);
     this.bg[1] = Math.pow(((c >> 8) & 255) / 255, 2.2);
     this.bg[2] = Math.pow((c & 255) / 255, 2.2);
-    // the web belongs to no cocoon: one run that never ends
+    // WEB RUN
+    // owned by no cocoon, so one run that never ends
     this.webRun.fill(1 << 30);
     this.webRun[0] = 0;
     this.webW[0] = 1;
@@ -191,13 +190,13 @@ export class Cocoon {
     this.wake();
   }
 
-  // 0 the soft key in front, 1 the light behind; the light glides there
+  // ANGLE
+  // 0 front key, 1 torch behind; eased
   angle(v: number) {
     this.lightTo = Math.min(1, Math.max(0, v));
     this.wake();
   }
 
-  // x, y in css px from the canvas corner: pressed and dragged, it turns the cluster
   down(x: number, y: number) {
     this.pressed = true;
     this.dragX = x;
@@ -212,7 +211,8 @@ export class Cocoon {
     const dy = (y - this.dragY) * TURN.radPerPx;
     this.yawTo = clamp(this.yawTo + dx, TURN.yawRad);
     this.pitchTo = clamp(this.pitchTo + dy * 0.4, TURN.pitchRad);
-    // a running estimate of how fast it was flung, for the glide after letting go
+    // FLING
+    // running velocity estimate for the glide after release
     this.spin = this.spin * 0.6 + dx * 0.4 * 60;
     this.dragX = x;
     this.dragY = y;
@@ -289,7 +289,7 @@ export class Cocoon {
     v[3] = f[3];
 
     // TURN
-    // eased toward where the drag left it; a flung drag glides on and settles
+    // eased toward the drag target; a fling glides on and settles
     if (!this.pressed && !rm) {
       this.yawTo = clamp(this.yawTo + this.spin * dt, TURN.yawRad);
       this.spin *= Math.exp(-dt / TURN.glideS);
@@ -302,18 +302,19 @@ export class Cocoon {
     const sy = Math.sin(this.yaw);
     const cp = Math.cos(this.pitch);
     const sp = Math.sin(this.pitch);
-    // the cluster turns about its middle in depth. it is shallower in space than its depth
-    // values: those drive how dim each one is, Z_SPREAD of them is where it really hangs
+    // DEPTH
+    // pivot at mid depth; depth values drive dim, Z_SPREAD of them the real z
     const mz = -0.55;
-    // where it really hangs: far enough off the wall that turning never pushes a cocoon
-    // behind it or past the lamp held behind the cluster
+    // WALL CLEARANCE
+    // far enough off the wall that turning never crosses it or the back torch
     const zc = -0.42;
     for (let i = 0; i < N; i++) {
       const c = CLUSTER[i];
       const z = (c[2] - mz) * Z_SPREAD;
       this.depth[i] = zc - c[0] * sy * cp + z * cy * cp + (c[1] - CLUSTER_C[1]) * sp;
     }
-    // far to near, sorted in place
+    // SORT
+    // insertion sort far to near, in place
     for (let i = 1; i < N; i++) {
       const v = this.order[i];
       let j = i - 1;
@@ -350,7 +351,8 @@ export class Cocoon {
       this.co[o + 2] = depth;
       const seen = mz + (depth - zc) / Z_SPREAD;
       this.co[o + 3] = c[3] * (1 + 0.12 * (seen - c[2]));
-      // seen from the side the lean shortens; each also turns on its own axis with the cluster
+      // LEAN
+      // projected tilt shortens side-on; each turns on its own axis too
       const tilt = Math.atan(Math.tan(c[4]) * Math.abs(cy)) + sw;
       this.cr[o] = Math.cos(tilt);
       this.cr[o + 1] = Math.sin(tilt);
@@ -372,7 +374,8 @@ export class Cocoon {
     this.key[1] = (KEY_LIFT / kl) * kd;
     this.key[2] = (kz / kl) * kd;
 
-    // behind: held just off the wall on the left, aimed back through the cluster
+    // BACK TORCH
+    // just off the wall on the left, aimed back through the cluster
     const tr = this.torch;
     tr[0] = CLUSTER_C[0] + BACK_FROM[0];
     tr[1] = CLUSTER_C[1] + BACK_FROM[1];
@@ -393,8 +396,7 @@ export class Cocoon {
   }
 
   // LOOP
-  // runs only while show(true): the stage turns it off when document.hidden or the
-  // IntersectionObserver says offscreen; reduced motion draws once per change and sleeps
+  // runs only while shown; reduced motion draws once per change
   private wake() {
     if (!this.raf && this.visible) this.raf = requestAnimationFrame(this.frame);
   }
@@ -435,8 +437,7 @@ export class Cocoon {
     gl.bindVertexArray(this.vao);
 
     // DENSITY
-    // every strand adds its coverage: felt in red and alpha, hair lit and unlit in green and
-    // blue. one draw per kind of strand, every cocoon's run in it
+    // additive coverage: felt in r and a, hair lit and unlit in g and b; one draw per kind
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.densFb);
     gl.viewport(0, 0, this.res[0], this.res[1]);
     gl.clearColor(0, 0, 0, 0);
@@ -477,7 +478,8 @@ export class Cocoon {
     this.sweep[1] = CLUSTER_C[1] + 0.15;
     gl.uniform2fv(si.u.uSweep, this.sweep);
     gl.uniform1f(si.u.uPx, this.px);
-    // strands per pixel grow with world per pixel; keep the look the same at any size
+    // DENSITY SCALE
+    // normalised by world per pixel so the look holds at any size
     gl.uniform1f(si.u.uDensK, (1 / out) * (REF_PX / this.px));
     gl.uniform1f(si.u.uSeed, this.reducedMotion ? 0 : (this.t * 60) % 997);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -525,8 +527,7 @@ export class Cocoon {
   }
 
   // BUDGET
-  // the nearest cocoon gets the full count; the rest share REST_SHARE of it by area. a run's
-  // weight makes up for fewer strands, so density per pixel stays about the same
+  // nearest gets the full count, the rest share REST_SHARE by area; weight compensates
   private runsFor = new Int32Array(N).fill(-1);
 
   private runsDirty() {

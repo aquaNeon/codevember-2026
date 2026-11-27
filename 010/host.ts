@@ -34,9 +34,7 @@ export type FromWorker =
   { t: "cursor"; c: string } | { t: "perf"; ms: number } | { t: "shown" } | { t: "fail" };
 
 // HOST
-// the dom side of the gallery: size, visibility, input and the material in. the scene runs
-// in a worker when the canvas can be handed over, so creating the gl context, compiling
-// and drawing never block the page
+// runs the scene in a worker on an OffscreenCanvas when supported
 export function mount(canvas: HTMLCanvasElement, sink: Sink, m: Material) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");

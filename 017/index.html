@@ -26,7 +26,7 @@
     <meta name="theme-color" content="#04181b" />
     <style>
       /* UNDERWATER */
-      /* this day only: the page is the water. doubled selector so it wins over the shared sheet */
+      /* doubled selector to win over the shared sheet */
       :root:root {
         --bone: #021013;
         --bone-hi: #0a3236;
@@ -60,12 +60,13 @@
         outline: 1px solid var(--ink);
         outline-offset: -8px;
       }
-      /* the descender of the p would sit on the line below; doubled class wins over the shared sheet */
+      /* TITLE */
+      /* room for the descender; doubled class wins over the shared sheet */
       .cv-title.cv-title h1 {
         margin-bottom: 0.2em;
       }
       /* SCRIM */
-      /* the frond reaches the top right; a little dark water keeps the bar and the label legible */
+      /* keeps the bar and label legible over the frond */
       .cv-figure::after {
         content: "";
         position: absolute;

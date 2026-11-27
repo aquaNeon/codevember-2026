@@ -1,12 +1,13 @@
 // SHADERS
 
-// the lamp's view of the cloth: light-space x, y and a depth through four slices
+// LAMP
+// light-space x, y and depth through four slices
 const LAMP = `
 uniform vec3 uLX;
 uniform vec3 uLY;
-uniform vec3 uLZ; // toward the lamp
-uniform vec4 uLRect; // centre x, y and half size in light space
-uniform vec2 uLDepth; // nearest and furthest from the lamp
+uniform vec3 uLZ;
+uniform vec4 uLRect;
+uniform vec2 uLDepth;
 vec3 lampSpace(vec3 p) {
   vec2 q = (vec2(dot(p, uLX), dot(p, uLY)) - uLRect.xy) / uLRect.zw;
   float s = (uLDepth.y - dot(p, uLZ)) / max(uLDepth.y - uLDepth.x, 1e-3);
@@ -14,10 +15,9 @@ vec3 lampSpace(vec3 p) {
 }`;
 
 // SURFACE
-// the sim grid is coarse; each vertex of a finer grid reads the particles round it and lays
-// a cubic b-spline over them, so folds and hems curve and grid-sized wrinkles iron out
+// cubic b-spline over the coarse sim grid per fine vertex, so folds curve smoothly
 const CLOTH_ATTR = `
-layout(location = 0) in vec2 aG; // grid coordinate, in particles
+layout(location = 0) in vec2 aG;
 uniform highp sampler2D uX;
 uniform highp sampler2D uN;
 uniform vec2 uSize;
@@ -73,12 +73,14 @@ void main() {
 const SHEER = `
 uniform float uSheer;
 uniform vec2  uSize;
-// a rolled hem all round, a few millimetres of doubled cloth
+// HEM
+// rolled hem, a few mm of doubled cloth
 float hem(vec2 uv) {
   float e = min(min(uv.x, uSize.x - uv.x), min(uv.y, uSize.y - uv.y));
   return 1.0 - smoothstep(0.004, 0.008, e);
 }
-// the cut edge itself, faded over about a pixel so the outline never steps
+// EDGE
+// cut edge faded over about a pixel so the outline never steps
 float edge(vec2 uv) {
   float e = min(min(uv.x, uSize.x - uv.x), min(uv.y, uSize.y - uv.y));
   return smoothstep(0.0, 1.5 * fwidth(e), e);
@@ -96,17 +98,13 @@ void main() {
   float c = max(abs(dot(normalize(vNor), uLZ)), 0.15);
   float a = mix(uSheer, 0.45, hem(vUv));
   float tau = -log(1.0 - a) / c;
-  // spread over the two nearest slices
   float k = clamp(vS * 4.0 - 0.5, 0.0, 3.0);
   vec4 w = max(1.0 - abs(vec4(0.0, 1.0, 2.0, 3.0) - k), 0.0);
   o = w * tau * 0.125;
 }`;
 
 // CLOTH
-// lit mostly from behind: a thin layer glows with what comes through it, forward
-// scattered toward the eye; where it faces the lamp it shows a silk sheen along its threads.
-// layers in front of the lamp shade the ones behind. weighted blended transparency, so the
-// order the folds are drawn in never shows
+// backlit sheer: forward scatter, silk sheen, lamp-space shadowing; weighted blended OIT
 export const CLOTH_VS = `#version 300 es
 ${CLOTH_ATTR}
 uniform mat4 uVP;
@@ -127,7 +125,7 @@ ${LAMP}
 ${SHEER}
 uniform sampler2D uOpac;
 uniform vec3  uEye;
-uniform vec3  uLight; // toward the lamp
+uniform vec3  uLight;
 uniform vec3  uLightC;
 uniform vec3  uFill;
 uniform vec3  uTint;
@@ -159,13 +157,11 @@ void main() {
   float cover = 1.0 - (1.0 - threads(g.x, fw.x, wx)) * (1.0 - threads(g.y, fw.y, wy));
   float weave = mix(0.85, 1.1, cover);
   // STREAKS
-  // the warp's long thread lines: a smooth stripe across the width, wandering slowly along
-  // the length, faded out by its own screen-space rate before it can alias
+  // warp lines: smooth stripe, faded by its screen-space rate before it aliases
   float sx = vUv.x * 64.0 + 1.6 * sin(vUv.y * 2.3 + vUv.x * 7.0) + 0.8 * sin(vUv.y * 5.1);
   float sfw = fwidth(sx);
   float st = 0.5 + 0.25 * sin(sx * 6.2832) * sin(sx * 0.37 + 1.1) + 0.25 * sin(sx * 2.618 * 6.2832 + 1.3) * sin(sx * 0.23);
   weave *= mix(1.0, mix(0.72, 1.28, st), (1.0 - smoothstep(0.12, 0.35, sfw)) * 0.6);
-  // and softer, longer gradients that survive any distance
   float sl = 0.5 + 0.5 * sin(vUv.x * 9.0 + 2.0 * sin(vUv.y * 1.3));
   weave *= mix(0.8, 1.2, sl);
 
@@ -173,7 +169,8 @@ void main() {
   float a0 = mix(uSheer * weave, 0.45, hm);
   float a = (1.0 - pow(1.0 - a0, 1.0 / max(c, 0.1))) * edge(vUv);
 
-  // SHADE: the cloth between this layer and the lamp
+  // SHADE
+  // cloth between this layer and the lamp
   vec3 l = lampSpace(vPos);
   vec4 tau = texture(uOpac, l.xy * 0.5 + 0.5) * 8.0;
   float k = l.z * 4.0 - 0.5;
@@ -183,11 +180,12 @@ void main() {
   // LIGHT
   vec3 L = uLight;
   float ndl = dot(nv, L);
-  // through: light from the far side, scattered forward toward the eye
+  // THROUGH
+  // forward scatter from the far side
   float fwd = pow(max(dot(-V, L), 0.0), 3.0);
-  // a sheer layer scatters some of the lamp whichever way it faces, so no fold goes dead
   vec3 through = uLightC * (0.22 + 0.78 * max(-ndl, 0.0)) * (0.55 + 1.6 * fwd) * shade;
-  // the near side: soft diffuse and a silk sheen along warp and weft
+  // NEAR SIDE
+  // soft diffuse and silk sheen along warp and weft
   vec3 dpdx = dFdx(vPos);
   vec3 dpdy = dFdy(vPos);
   vec2 dudx = dFdx(vUv);
@@ -198,12 +196,13 @@ void main() {
   float su = pow(sqrt(max(1.0 - pow(dot(tu, H), 2.0), 0.0)), 90.0);
   float sv = pow(sqrt(max(1.0 - pow(dot(tv, H), 2.0), 0.0)), 90.0);
   vec3 near = uLightC * max(ndl, 0.0) * (0.12 + 0.9 * (su * 0.7 + sv * 0.3)) * shade;
-  // a dim front fill so the near folds keep their shape
+  // FILL
   float fd = dot(nv, uFill);
   vec3 Hf = normalize(uFill + V);
   float sf = pow(sqrt(max(1.0 - pow(dot(tu, Hf), 2.0), 0.0)), 60.0);
   vec3 fill = vec3(0.55, 0.5, 0.48) * (max(fd, 0.0) * 0.05 + sf * 0.05);
-  // the rim: grazing layers carry more cloth in the line of sight and catch the lamp
+  // RIM
+  // grazing layers carry more cloth in the line of sight
   vec3 rim = uLightC * pow(1.0 - c, 4.0) * 0.35 * shade * (0.4 + 0.6 * fwd);
 
   vec3 col = through * mix(uTint, vec3(1.0), 0.25) + near * mix(uTint, vec3(1.0), 0.6) + fill + rim;
@@ -217,14 +216,13 @@ void main() {
 }`;
 
 // COMPOSITE
-// the studio: a warm dark ground with the lamp's soft falloff, the cloth over it, then a
-// soft shoulder and gamma
+// warm dark ground with lamp falloff, cloth over it, soft shoulder and gamma
 export const COMP_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uAccum;
 uniform sampler2D uWeight;
 uniform vec2 uRes;
-uniform vec2 uGlow; // where the lamp warms the backdrop, in screen uv
+uniform vec2 uGlow;
 uniform float uAspect;
 out vec4 o;
 float h21(vec2 p) {

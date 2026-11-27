@@ -23,39 +23,39 @@ import {
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
-const PERIOD_S = 2.8; // one full swing, change for a longer thread feel
+const PERIOD_S = 2.8; // change swing period here
 const TWIST_PERIOD_S = 7.5;
-const SWING_HALF_S = 14; // swing amplitude halves this often
+const SWING_HALF_S = 14;
 const TWIST_HALF_S = 9;
-const MAX_DEPTH_RAD = 0.22; // lean toward the wall, kept clear of it at any swing
-const MAX_W_RAD_S = 6.5; // fastest swing, change for wilder loops
-const STEP_S = 1 / 240; // swing integration step
-const POINTER_TAU_S = 0.035; // pointer speed smoothing
-const POINTER_STALE_MS = 80; // a pointer that stopped this long before letting go throws softly
-const PIVOT_CLEAR_M = 0.05; // how far above the view the pivot's shadow sits
-const TALL_REST_Y = 0.26; // on a tall screen the stone rests about mid-frame
-const SEEN_TAU_S = 0.07; // how fast the wall light follows the stone into and out of view
+const MAX_DEPTH_RAD = 0.22;
+const MAX_W_RAD_S = 6.5; // change for wilder loops
+const STEP_S = 1 / 240;
+const POINTER_TAU_S = 0.035;
+const POINTER_STALE_MS = 80;
+const PIVOT_CLEAR_M = 0.05;
+const TALL_REST_Y = 0.26;
+const SEEN_TAU_S = 0.07;
 const MAX_TWIST_RAD = 4;
-const FOLLOW_W = 16; // how tightly the held crystal follows, 1/s
-const TWIST_KICK = 0.25; // release swing speed that turns into spin
-const TAP_SPIN = 2.4; // rad/s a tap gives
-const KEY_PUSH = 0.45; // rad/s an arrow key gives
+const FOLLOW_W = 16;
+const TWIST_KICK = 0.25;
+const TAP_SPIN = 2.4;
+const KEY_PUSH = 0.45;
 const RING_R = 0.014;
-const LINK_M = 0.011; // chain link length
-const DOTS = 7; // small glints bounced onto the wall
+const LINK_M = 0.011;
+const DOTS = 7;
 const SETTLE = 1e-4;
-const BOUNCES = 3; // inside the crystal, per pixel
+const BOUNCES = 3;
 
 // IDLE
-// air in the room: a faint sway and a slow turn that never quite repeat
+// faint sway and slow turn that never quite repeat
 const IDLE = { x: 0.014, z: 0.01, twist: 0.32 };
 
 const W_SWING = (Math.PI * 2) / PERIOD_S;
-const W2 = W_SWING * W_SWING; // g over l
+const W2 = W_SWING * W_SWING;
 const DAMP = Math.LN2 / SWING_HALF_S;
 const W_TWIST = (Math.PI * 2) / TWIST_PERIOD_S;
 
-// attribute slots shared by every program
+// ATTRIBUTE SLOTS
 const SLOTS: Record<string, number> = {
   aPos: 0,
   aNormal: 1,
@@ -71,12 +71,12 @@ const SLOTS: Record<string, number> = {
 
 const LINE_FLOATS = 11;
 const GLINTS = 5;
-const GLINT_COS = Math.cos((14 * Math.PI) / 180); // how far off the sun a face still glints
-const GLINT_PX = 34; // star size, css px
+const GLINT_COS = Math.cos((14 * Math.PI) / 180);
+const GLINT_PX = 34;
 const RING_SEGS = 14;
-const SHADOW_QUADS = 2 + RING_SEGS; // chain, bail and ring shadows, drawn under the light
+const SHADOW_QUADS = 2 + RING_SEGS;
 const LINE_QUADS = SHADOW_QUADS * 2;
-const PENUMBRA_PX = 1.3; // soft shadow edge, css px
+const PENUMBRA_PX = 1.3;
 
 export class Pendulum {
   private gl: WebGL2RenderingContext;
@@ -101,7 +101,7 @@ export class Pendulum {
   private glintVao: WebGLVertexArrayObject;
   private glintBuf: WebGLBuffer;
   private glintP: WebGLProgram;
-  private glints = new Float32Array(GLINTS * 4); // world xyz, strength
+  private glints = new Float32Array(GLINTS * 4);
   private glintN = 0;
   private lineVao: WebGLVertexArrayObject;
   private spotBuf: WebGLBuffer;
@@ -128,13 +128,13 @@ export class Pendulum {
   // POSE
   private t = 0;
   // SWING
-  // the swing across the wall is the full pendulum, stepped, so a hard throw goes over the top
+  // full pendulum, stepped, so a hard throw goes over the top
   private th = 0.05;
   private om = 0;
-  private seen = 0; // how much of the stone's light reaches the wall: in view, hanging, in sun
+  private seen = 0;
   private shadowX = 0;
   private shadowY = 0;
-  private sz = new Osc(W_SWING * 1.012, DAMP, MAX_DEPTH_RAD); // a hair off, so ellipses turn slowly
+  private sz = new Osc(W_SWING * 1.012, DAMP, MAX_DEPTH_RAD);
   private len: number = SCENE.length;
   private pivotY = SCENE.restY + SCENE.length;
   private tw = new Osc(W_TWIST, Math.LN2 / TWIST_HALF_S, MAX_TWIST_RAD);
@@ -147,14 +147,14 @@ export class Pendulum {
   private at = new Float32Array(3);
   private eye = new Float32Array(3);
   private lines: Float32Array;
-  private ink = new Float32Array(2); // half width, kind
+  private ink = new Float32Array(2);
 
   // GESTURE
   private held = false;
   private targetX = 0;
   private lastA = 0;
   private lastMs = 0;
-  private pw = 0; // smoothed pointer angular speed
+  private pw = 0;
 
   onShown: () => void = () => {};
   onLost: () => void = () => {};
@@ -175,7 +175,7 @@ export class Pendulum {
     this.reducedMotion = reduced;
 
     // PROGRAMS
-    // linked in parallel where the driver allows, checked once before the first frame
+    // KHR_parallel_shader_compile where available; status checked before the first frame
     this.parallel = !!gl.getExtension("KHR_parallel_shader_compile");
     this.c = crystal();
     this.beams = new Beams(this.c, DOTS);
@@ -238,17 +238,18 @@ export class Pendulum {
     gl.bindVertexArray(null);
 
     // WALL TEXTURE
-    // sized and drawn on resize, read by everything that sits on or looks at the wall
+    // drawn on resize; read by everything on or looking at the wall
     this.wallTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.wallTex);
-    // mipmapped, so the stone can see the wall through it blurred for the price of one read
+    // MIPS
+    // blurred wall through the stone in one texture read
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     this.wallFb = gl.createFramebuffer();
     // SHADOW MASK
-    // every occluder's shadow, drawn with max blending so they join as one
+    // all occluders, max blending so they join as one
     this.maskTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.maskTex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
@@ -262,7 +263,8 @@ export class Pendulum {
     gl.enable(gl.CULL_FACE);
     gl.clearColor(0, 0, 0, 0);
 
-    // start mid-turn, so the first frame already has light on the wall
+    // FIRST FRAME
+    // start mid-turn so light is already on the wall
     this.tw.set(0, 0.35, 0.4);
     this.sz.set(0, 0, 0.04);
 
@@ -277,7 +279,6 @@ export class Pendulum {
   }
 
   // PUBLIC
-  // the host owns the page: it says how big, whether anyone can see it, and where the pointer is
   spin(dir = 1) {
     this.kick(0, 0, TAP_SPIN * dir);
   }
@@ -327,7 +328,8 @@ export class Pendulum {
     return p;
   }
 
-  // lazily, once linking is done: status check and uniform lookups
+  // LINK
+  // lazy, after parallel compile: status check and uniform lookups
   private link() {
     const gl = this.gl;
     for (const p of this.progs) {
@@ -358,7 +360,8 @@ export class Pendulum {
     find("lVP", this.lineP, "uVP");
     gl.useProgram(this.lineP);
     gl.uniform1f(gl.getUniformLocation(this.lineP, "uLink"), LINK_M);
-    // every sampler reads the wall from unit 0, which never holds anything else
+    // SAMPLERS
+    // wall on unit 0, mask on unit 1
     for (const p of [this.blitP, this.shadeP, this.causticP, this.crystalP]) {
       gl.useProgram(p);
       gl.uniform1i(gl.getUniformLocation(p, "uWall"), 0);
@@ -401,7 +404,7 @@ export class Pendulum {
   }
 
   // INPUT
-  // the pointer lands on the plane the crystal hangs in
+  // pointer projected onto the plane the crystal hangs in
   private worldX(cx: number) {
     const r = this.rect;
     return (((cx / r.width) * 2 - 1) * this.half[0] * (this.dist - SCENE.crystalZ)) / this.dist;
@@ -412,14 +415,11 @@ export class Pendulum {
     return ((1 - (cy / r.height) * 2) * this.half[1] * (this.dist - SCENE.crystalZ)) / this.dist;
   }
 
-  // the pointer's angle round the pivot
   private angle(x: number, y: number) {
     return Math.atan2(this.worldX(x), this.pivotY - this.worldY(y));
   }
 
-  // x, y in css px from the canvas corner, ms the event's time
   down(x: number, y: number, ms: number) {
-    // pick up the crystal where it is, moving as it moves
     const t = this.t;
     const rm = this.reducedMotion;
     this.fx.x = this.ax;
@@ -434,7 +434,8 @@ export class Pendulum {
     this.wake();
   }
 
-  // the held stone turns round the pivot with the pointer, as many times as it is taken round
+  // DRAG
+  // held stone follows the pointer angle round the pivot, any number of turns
   move(x: number, y: number, ms: number) {
     if (!this.held) return;
     const a = this.angle(x, y);
@@ -458,7 +459,7 @@ export class Pendulum {
       return;
     }
     // LET GO
-    // the swing carries on from where the hand left it, as fast as the hand was going
+    // swing resumes from the release pose at the hand's speed
     const idleMs = ms - this.lastMs;
     const pw = idleMs > 0 ? this.pw * Math.exp(-idleMs / POINTER_STALE_MS) : this.pw;
     const w = Math.abs(pw) > Math.abs(this.fx.v) ? pw : this.fx.v;
@@ -467,14 +468,12 @@ export class Pendulum {
     this.sz.set(t, this.fz.x - idle(t, IDLE.z, 1), this.fz.v - idleV(t, IDLE.z, 1));
     let spin = clamp(w * TWIST_KICK, TAP_SPIN);
     if (tap) {
-      // tap right of the crystal turns it one way, left the other
       const side = this.worldX(x) - this.at[0];
       spin += TAP_SPIN * (side >= 0 ? 1 : -1);
     }
     this.kick(0, 0, spin);
   }
 
-  // true when the key did something
   key(k: string) {
     if (k === "ArrowLeft" || k === "ArrowRight")
       this.kick(k === "ArrowLeft" ? -KEY_PUSH : KEY_PUSH, 0, 0);
@@ -485,7 +484,6 @@ export class Pendulum {
     return true;
   }
 
-  // adds speed to the free swing without moving it
   private kick(vx: number, vz: number, vt: number) {
     if (this.held || this.reducedMotion) return;
     const t = this.t;
@@ -495,7 +493,8 @@ export class Pendulum {
     this.wake();
   }
 
-  // the full pendulum, in small fixed steps so it stays true at any frame rate
+  // SWING STEP
+  // full pendulum in fixed substeps, stable at any frame rate
   private swing(dt: number) {
     const n = Math.ceil(dt / STEP_S);
     const h = n ? dt / n : 0;
@@ -507,7 +506,6 @@ export class Pendulum {
       else if (om < -MAX_W_RAD_S) om = -MAX_W_RAD_S;
       th += om * h;
     }
-    // over the top: fold back
     if (th > Math.PI) th -= Math.PI * 2;
     else if (th < -Math.PI) th += Math.PI * 2;
     this.th = th;
@@ -541,7 +539,7 @@ export class Pendulum {
   };
 
   // POSE
-  // returns whether anything will still move
+  // true while anything still moves
   private pose(dt: number) {
     const rm = this.reducedMotion;
     if (!rm) this.t += dt;
@@ -554,7 +552,6 @@ export class Pendulum {
       this.az = this.fz.x;
       moving = true;
     } else if (rm) {
-      // no swinging: let go and it eases back to hanging still
       this.fx.step(0, dt || 1 / 60);
       this.fz.step(0, dt || 1 / 60);
       this.ax = this.fx.x;
@@ -577,6 +574,7 @@ export class Pendulum {
     this.at[1] = py - r[4] * L;
     this.at[2] = SCENE.crystalZ - r[5] * L;
 
+    // EYE
     // camera in the crystal's frame
     const ex = -this.at[0];
     const ey = -this.at[1];
@@ -587,7 +585,6 @@ export class Pendulum {
 
     this.see(dt);
     this.beams.trace(this.ax, this.az, this.twist, this.at, dt);
-    // flecks only while the stone is there to throw them
     const bd = this.beams.data;
     for (let i = 0; i < this.beams.count; i++) bd[i * STRIDE + 5] *= this.seen;
     this.thread(py);
@@ -596,7 +593,7 @@ export class Pendulum {
   }
 
   // GLINTS
-  // the few faces that mirror the sun straight at you get a star; kept brightest first
+  // faces mirroring the sun at the viewer get a star, sorted brightest first
   private sparkle() {
     const r = this.rot;
     const at = this.at;
@@ -633,7 +630,6 @@ export class Pendulum {
       if (a <= GLINT_COS) continue;
       const t = (a - GLINT_COS) / (1 - GLINT_COS);
       const s = Math.sqrt(t * t * (3 - 2 * t)) * Math.min(1, -vn * 3);
-      // insert by strength, the weakest falls off the end
       let k = Math.min(this.glintN, GLINTS - 1);
       if (this.glintN === GLINTS && g[k * 4 + 3] >= s) continue;
       while (k > 0 && g[(k - 1) * 4 + 3] < s) {
@@ -652,8 +648,7 @@ export class Pendulum {
   }
 
   // SEEN
-  // the wall light belongs to the stone: it is there only while the stone is in view, hangs
-  // below its pivot and stands in the sun, and follows it out within a fraction of a second
+  // wall light gated on the stone being in view, below its pivot and in sun; eased
   private see(dt: number) {
     const r = this.rot;
     const h = this.c.height * 0.45;
@@ -673,8 +668,7 @@ export class Pendulum {
   }
 
   // SPARKS
-  // small glints the stone's faces throw round its shadow: each sits at its own distance and
-  // turns with the stone, and shows while its face takes the sun
+  // glints round the shadow at fixed radii, turning with the stone, lit by their face
   private sparks(d: Float32Array, at: number) {
     const r = this.rot;
     const pl = this.c.planes;
@@ -691,7 +685,6 @@ export class Pendulum {
       const a = SPARKS[s + 1] + tw * drift * 0.35 + this.ax * drift * 0.5;
       const x = this.shadowX + rho * Math.cos(a);
       const y = this.shadowY + rho * 0.8 * Math.sin(a);
-      // the face this glint comes off, turned into the world
       const f = ((i * 5) % this.c.faces) * 4;
       const nx = r[0] * pl[f] + r[3] * pl[f + 1] + r[6] * pl[f + 2];
       const ny = r[1] * pl[f] + r[4] * pl[f + 1] + r[7] * pl[f + 2];
@@ -710,8 +703,7 @@ export class Pendulum {
   }
 
   // CHAIN
-  // pivot to the top of the bail ring, the bail stem and the ring, and the shadow of each
-  // thrown along the sun. shadows fill the first quads, metal the rest
+  // pivot to bail, bail stem, ring, each with a sun-cast shadow; shadow quads first
   private thread(py: number) {
     const r = this.rot;
     const at = this.at;
@@ -730,7 +722,7 @@ export class Pendulum {
     q = this.quad(q, 0, py, pz, tx, ty, tz, 0.95 * dpr, 0, len, 2);
     this.paint(q - 1, INK.chain);
 
-    // the bail: a short stem into the table
+    // BAIL
     const b0 = -0.002;
     const b1 = ringC - RING_R * 0.9;
     const ax = at[0] + r[3] * b0;
@@ -758,7 +750,6 @@ export class Pendulum {
       const vz = at[2] + r[2] * x1 + r[5] * y1;
       s = this.cast(s, ux, uy, uz, vx, vy, vz, 0.75 * dpr, 0);
       q = this.quad(q, ux, uy, uz, vx, vy, vz, 0.85 * dpr, 0, 0, 0);
-      // the ring catches light on its upper right, where the sun comes from
       const lit = 0.75 + 0.45 * Math.max(0, Math.cos(a0 - 0.8));
       INK.ring[0] = INK.metal[0] * lit;
       INK.ring[1] = INK.metal[1] * lit;
@@ -767,7 +758,8 @@ export class Pendulum {
     }
   }
 
-  // a segment's shadow on the wall, along the sun; a chain keeps its links
+  // CAST
+  // segment shadow on the wall along the sun; the chain keeps its links
   private cast(
     q: number,
     ax: number,
@@ -790,7 +782,8 @@ export class Pendulum {
     return next;
   }
 
-  // one line segment as two triangles, widened square to the view
+  // QUAD
+  // segment as two triangles, widened square to the view
   private quad(
     q: number,
     ax: number,
@@ -806,7 +799,8 @@ export class Pendulum {
   ) {
     const sx = bx - ax;
     const sy = by - ay;
-    // view direction is close enough to +z for a few-pixel-wide line
+    // SCREEN NORMAL
+    // assumes a view along +z, close enough for few-pixel lines
     let nx = -sy;
     let ny = sx;
     const nl = Math.hypot(nx, ny) || 1;
@@ -840,7 +834,6 @@ export class Pendulum {
     l[o + 10] = along;
   }
 
-  // premultiplied colour onto all six corners of quad q
   private paint(q: number, c: Float32Array) {
     const l = this.lines;
     const a = c[3];
@@ -887,7 +880,7 @@ export class Pendulum {
     gl.enable(gl.BLEND);
 
     // SHADOW
-    // only over the box the shadow can reach
+    // scissored to the box the shadow can reach
     gl.useProgram(this.shadeP);
     const tap = PENUMBRA_PX * this.rect.dpr;
     gl.uniform2f(u.hStep, tap / this.canvas.width, tap / this.canvas.height);
@@ -896,7 +889,8 @@ export class Pendulum {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disable(gl.SCISSOR_TEST);
 
-    // the sun let through, bent face by face, once per colour
+    // CAUSTIC
+    // refracted sun per face, instanced once per colour
     gl.useProgram(this.causticP);
     gl.uniformMatrix4fv(u.kVP, false, this.vp);
     gl.uniformMatrix3fv(u.kRot, false, this.rot);
@@ -906,7 +900,7 @@ export class Pendulum {
     gl.bindVertexArray(this.crystalVao);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, this.c.tris * 3, 3);
 
-    // the flecks, then the glints
+    // FLECKS AND GLINTS
     const n = this.beams.count;
     const d = this.beams.data;
     this.sparks(d, n * STRIDE);
@@ -960,7 +954,8 @@ export class Pendulum {
     }
     this.gl.viewport(0, 0, w, h);
 
-    // keep the whole of fitH by fitW of wall in view
+    // FIT
+    // keep fitH by fitW of wall in view
     const aspect = this.rect.width / this.rect.height;
     const hh = Math.max(SCENE.fitH / 2, SCENE.fitW / 2 / aspect);
     this.half[0] = hh * aspect;
@@ -975,14 +970,10 @@ export class Pendulum {
     m[5] = f;
     m[10] = (far + near) / (near - far);
     m[11] = -1;
-    // projection times a step back of dist
     m[14] = (2 * far * near) / (near - far) - m[10] * this.dist;
     m[15] = this.dist;
-    // the pivot just out of view on every screen, so a big swing keeps its arc on screen
     // PIVOT
-    // high enough that the pivot and its shadow are both above the view, so chain and shadow
-    // run straight off the top at any angle. on narrow screens the stone hangs a little
-    // higher, so a swing keeps more of its arc in frame
+    // pivot and its shadow above the view, so the chain runs straight off the top
     const rest = aspect < 0.8 ? TALL_REST_Y : SCENE.restY;
     this.pivotY = hh + (SCENE.crystalZ * -SUN[1]) / -SUN[2] + PIVOT_CLEAR_M;
     this.len = this.pivotY - rest;
@@ -992,7 +983,7 @@ export class Pendulum {
   }
 
   // SHADOW BOX
-  // the chain's shadow from the top of the view down, and the stone's, in canvas pixels
+  // chain and stone shadow bounds in canvas px, for the scissor
   private box() {
     const r = this.rot;
     const at = this.at;
@@ -1019,7 +1010,8 @@ export class Pendulum {
     this.gl.scissor(l, b, Math.max(0, rt - l), Math.max(0, t - b));
   }
 
-  // the wall, once per size, into the texture the frame starts from
+  // BAKE
+  // wall into its texture once per size
   private bake(w: number, h: number) {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.maskTex);
@@ -1062,8 +1054,7 @@ export class Pendulum {
 }
 
 // SPARKS
-// the glints the stone throws round its shadow: distance, angle, drift rate, twinkle rate,
-// phase, size
+// per spark: distance, angle, drift rate, twinkle rate, phase, size
 const SPARKS = new Float32Array([
   0.35, -0.6, 1.3, 2.1, 0.4, 0.016, 0.55, -1.0, 0.8, 3.3, 2.2, 0.013, 0.42, -1.6, 1.7, 1.6, 4.1,
   0.011, 0.7, -0.3, 1.1, 2.7, 1.3, 0.015, 0.62, -1.3, 0.6, 3.9, 5.2, 0.012, 0.3, 2.2, 1.5, 2.4, 3.0,
@@ -1093,7 +1084,7 @@ function clamp(x: number, max: number) {
 }
 
 // IDLE CURVES
-// two slow sines each, so the sway breathes instead of ticking
+// two slow sines each, so the sway does not read as periodic
 function idle(t: number, amp: number, phase: number) {
   return (
     amp * Math.sin(W_SWING * t + phase * 1.7) * (0.65 + 0.35 * Math.sin(0.23 * t + phase * 2.1))

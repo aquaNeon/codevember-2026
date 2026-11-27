@@ -4,7 +4,7 @@ import type { Hud } from "./magma";
 import { mount } from "./host";
 
 const DAY = 23;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200;
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 
@@ -20,7 +20,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   };
   const params = new URLSearchParams(location.search);
   const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  // touch has no hover; a held finger warms it instead
+  // TOUCH
+  // no hover, so a held finger warms instead
   if (matchMedia("(pointer: coarse)").matches) text(q("hint"), "Hold to warm the crust");
   const still = () => {
     root.removeAttribute("data-cv-live");
@@ -36,7 +37,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();
   else {
-    // after load and an idle moment; the sphere itself starts the gpu off this thread
+    // LIVE
+    // after load and idle; the worker starts the gpu off this thread
     afterLoad().then(() => {
       const magma = mount(
         canvas,

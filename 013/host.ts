@@ -19,8 +19,7 @@ export type FromWorker =
 const ARROWS = new Set(["ArrowRight", "ArrowUp", "ArrowLeft", "ArrowDown"]);
 
 // HOST
-// dom side of the garden: events, size and visibility in, state out. the scene runs in a
-// worker when the canvas can be handed over, so compiling and drawing never block the page
+// dom side: events, size, visibility in, state out; runs in a worker when it can
 export function mount(canvas: HTMLCanvasElement, sink: Sink) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");

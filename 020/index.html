@@ -26,8 +26,7 @@
     <meta name="theme-color" content="#958474" />
     <style>
       /* WALL */
-      /* this day only: the page is the plaster wall the cocoons hang in front of, matched to
-         where the canvas meets it. doubled selector wins over the shared sheet */
+      /* page is the plaster wall; doubled selector beats the shared sheet */
       :root:root {
         --bone: #958474;
         --bone-hi: #958474;
@@ -41,7 +40,6 @@
         background: #958474;
       }
       [data-cv-canvas] {
-        /* a finger drags sideways to turn it; up and down still scroll the page */
         touch-action: pan-y;
         user-select: none;
         -webkit-touch-callout: none;
@@ -51,7 +49,6 @@
       [data-cv-canvas][data-cv-shown] {
         opacity: 1;
       }
-      /* drag to turn */
       @media (hover: hover) {
         [data-cv-live] [data-cv-canvas] {
           cursor: grab;
@@ -60,7 +57,8 @@
           cursor: grabbing;
         }
       }
-      /* the descender of the p would sit on the line below; doubled class wins over the shared sheet */
+      /* TITLE */
+      /* room for the p descender; doubled class beats the shared sheet */
       .cv-title.cv-title h1 {
         margin-bottom: 0.2em;
       }
@@ -83,7 +81,6 @@
         display: none;
       }
       /* SLIDER */
-      /* the light, from in front round to behind: a thin track and a small thumb in ink */
       .slide {
         display: grid;
         gap: 6px;
@@ -133,7 +130,8 @@
         border: 3px solid var(--bone);
         box-shadow: 0 0 0 1px var(--ink);
       }
-      /* no box: mouse focus shows nothing, keyboard focus rings the thumb */
+      /* FOCUS */
+      /* keyboard focus rings the thumb only */
       .slide input:focus {
         outline: none;
       }
@@ -150,7 +148,7 @@
           0 0 0 6px var(--ink);
       }
       /* STILL */
-      /* a capture of the cocoon, for no webgl */
+      /* fallback without webgl */
       [data-cv-still] .still {
         visibility: visible;
       }

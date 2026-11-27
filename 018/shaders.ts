@@ -3,7 +3,8 @@ import { SCENE, SHAFTS, SUN } from "./scene";
 const f = (x: number) => x.toFixed(5);
 const v3 = (a: readonly number[]) => `vec3(${f(a[0])}, ${f(a[1])}, ${f(a[2])})`;
 
-// window basis around the sun, for the room the crystal reflects
+// WINDOW BASIS
+// frame around the sun for the reflected room
 const W = [-SUN[0], -SUN[1], -SUN[2]];
 const ul = Math.hypot(W[2], W[0]);
 const U = [W[2] / ul, 0, -W[0] / ul];
@@ -26,8 +27,7 @@ void main() {
 }`;
 
 // WALL
-// drawn once per resize into a texture: warm plaster raked by soft sun shafts, cool in the
-// shade. alpha keeps how sunlit each point is, for the shadows drawn over it
+// baked per resize: plaster raked by sun shafts; alpha stores sunlit amount for shadows
 const bands = SHAFTS.bands
   .map(([a, b, s, k]) => `lit += ${f(k)} * band(u, ${f(a)}, ${f(b)}, ${f(s)} * pen);`)
   .join("\n  ");
@@ -63,11 +63,13 @@ float band(float u, float a, float b, float s) {
 }
 void main() {
   vec2 p = vWall;
-  // a little waver in the edges, the way light reads on an uneven wall
+  // WAVER
+  // edge jitter, as on an uneven wall
   float wob = (fbm(p * 2.2) - 0.5) * 0.035;
   float u = dot(p, vec2(${f(ACROSS[0])}, ${f(ACROSS[1])})) + wob;
   float v = dot(p, vec2(${f(ALONG[0])}, ${f(ALONG[1])}));
-  // penumbra widens further from the window
+  // PENUMBRA
+  // widens further from the window
   float pen = 1.0 + 0.6 * smoothstep(1.5, -2.0, v);
   float lit = 0.0;
   ${bands}
@@ -81,7 +83,6 @@ void main() {
   float tex = (blot - 0.5) * 0.05 + (skim - 0.5) * 0.035 + (grain - 0.5) * 0.03;
   vec3 shade = vec3(0.805, 0.8, 0.795);
   vec3 sun = vec3(0.985, 0.95, 0.885);
-  // relief catches the raking light more than the flat shade
   vec3 c = mix(shade, sun, lit) * (1.0 + tex * (1.0 + 1.6 * lit));
   o = vec4(c, lit);
 }`;
@@ -96,8 +97,7 @@ void main() {
 }`;
 
 // SHADOW
-// the crystal flattened onto the wall along the sun. only faces that see the sun survive the
-// cull, and on a convex solid they tile the outline exactly once
+// crystal projected onto the wall along the sun; sun-facing faces tile the outline once
 export const SHADOW_VS = `${HEAD}
 const vec3 SUN = ${v3(SUN)};
 uniform mat4 uVP;
@@ -109,7 +109,8 @@ void main() {
   gl_Position = uVP * vec4(w.xy + SUN.xy * (-w.z / SUN.z), 0.0, 1.0);
 }`;
 
-// into the shadow mask: red is anything in the sun's way, green only the metal
+// SHADOW MASK
+// red: anything in the sun's way, green: metal only
 export const SHADOW_FS = `${HEAD}
 out vec4 o;
 void main() {
@@ -117,12 +118,11 @@ void main() {
 }`;
 
 // SHADE
-// the mask, blurred a touch for the penumbra, laid on the sunlit wall as one shadow. the mask
-// was drawn with max blending, so chain, ring and stone join with no darker overlaps
+// blurred max-blended mask, so chain, ring and stone shadow with no darker overlaps
 export const SHADE_FS = `${HEAD}
 uniform sampler2D uWall;
 uniform sampler2D uMask;
-uniform vec2 uStep; // penumbra tap spacing, in uv
+uniform vec2 uStep;
 out vec4 o;
 void main() {
   vec2 uv = gl_FragCoord.xy / vec2(textureSize(uMask, 0));
@@ -133,22 +133,20 @@ void main() {
     + texture(uMask, uv + vec2(uStep.x, -uStep.y)).r + texture(uMask, uv + vec2(-uStep.x, uStep.y)).r) * 0.0625;
   float sun = texelFetch(uWall, ivec2(gl_FragCoord.xy), 0).a;
   float a = 0.36 * m * sun; // change shadow depth here
-  // a little of the light the milky stone scatters fills it evenly
+  // SCATTER FILL
+  // milky stone scatters some light evenly into the shadow
   vec3 fill = vec3(1.0, 0.95, 0.86) * 0.015 * m * sun;
   o = vec4(vec3(0.14, 0.14, 0.15) * a + fill, a);
 }`;
 
 // CAUSTICS
-// the sun through the stone, face by face: each sunlit face is traced to the face it leaves
-// by and moved to where its light lands. faces that bunch up brighten, faces that spread or
-// cannot leave stay dark, so the shadow fills with angular patches and a bright streak where
-// the point focuses. drawn once per colour, a hair apart, for a faint spectral rim
+// each sunlit face traced through the stone and moved to where it lands, once per colour
 export const causticVs = (faces: number, height: number) => `${HEAD}
 #define FACES ${faces}
 const vec3 SUN = ${v3(SUN)};
 const float IOR = ${f(SCENE.ior)};
 const float SPLIT = ${f(SCENE.spread * 0.25)};
-const float BEND = 0.32; // how far the light walks off its own shadow, change for a thinner stone
+const float BEND = 0.32; // change for a thinner stone
 const vec3 MIDDLE = vec3(0.0, ${f(-height * 0.45)}, 0.0);
 uniform mat4 uVP;
 uniform mat3 uRot;
@@ -174,7 +172,8 @@ void main() {
   vGain = 0.0;
   if (c > 0.02) {
     vec3 d = refract(s, n, 1.0 / ior);
-    // start a hair inside, so the corner the ray starts on is not its way out
+    // NUDGE
+    // start a hair inside so the entry corner is not taken as the exit
     vec3 p = mix(aPos, MIDDLE, 0.03);
     float tmin = 1e3;
     vec3 m = n;
@@ -206,19 +205,20 @@ void main() {
 export const CAUSTIC_FS = `${HEAD}
 uniform sampler2D uWall;
 uniform sampler2D uMask;
-uniform float uPx2; // wall area of one pixel
+uniform float uPx2;
 in vec2 vStraight;
 in float vGain;
 flat in vec3 vTint;
 out vec4 o;
 void main() {
-  // how much of the face's own shadow got squeezed into this pixel
+  // SQUEEZE
+  // face area compressed into this pixel, from screen derivatives
   vec2 dx = dFdx(vStraight);
   vec2 dy = dFdy(vStraight);
   float squeeze = min(abs(dx.x * dy.y - dx.y * dy.x) / uPx2, 4.0);
   float sun = texelFetch(uWall, ivec2(gl_FragCoord.xy), 0).a;
-  // through milky stone only part of the sun goes straight
-  // chain and ring still stand in the way of the light that made it through
+  // METAL
+  // chain and ring still block the light that made it through
   float metal = texelFetch(uMask, ivec2(gl_FragCoord.xy), 0).g;
   float l = squeeze * vGain * sun * (1.0 - metal) * 0.1; // change caustic strength here
   o = vec4(vec3(1.0, 0.95, 0.86) * vTint * l, 0.0);
@@ -228,7 +228,7 @@ void main() {
 // a small hard star where a face mirrors the sun, drawn over the crystal
 export const GLINT_VS = `${HEAD}
 uniform mat4 uVP;
-uniform vec2 uSize; // star half size in clip units
+uniform vec2 uSize;
 in vec2 aCorner;
 in vec4 aGlint;
 out vec2 vQ;
@@ -250,7 +250,7 @@ void main() {
   float core = exp(-dot(q, q) * 90.0);
   float rays = exp(-q.x * 60.0) * pow(1.0 - q.y, 3.0) + exp(-q.y * 60.0) * pow(1.0 - q.x, 3.0);
   float l = (core * 2.0 + rays * 0.9) * vS;
-  // the long ray breaks into colour toward its tip
+  // SPECTRAL TIP
   float r = max(q.x, q.y);
   vec3 tint = mix(vec3(1.0, 0.99, 0.96), 0.55 + 0.45 * cos(6.2831 * (r * 2.0 + vec3(0.0, 0.33, 0.67))), smoothstep(0.12, 0.5, r));
   o = vec4(tint * l, clamp(l * 0.5, 0.0, 0.8));
@@ -262,9 +262,11 @@ export const SPOT_VS = `${HEAD}
 uniform mat4 uVP;
 in vec2 aCorner;
 in vec4 aEnds;
-in vec3 aLight; // radius, gain, seed
-out vec2 vQ; // along, across, in radii from the middle
-flat out float vHalf; // half the run, in radii
+// LIGHT
+// aLight: radius, gain, seed; vQ and vHalf in radii
+in vec3 aLight;
+out vec2 vQ;
+flat out float vHalf;
 flat out float vGain;
 flat out float vSeed;
 void main() {
@@ -291,7 +293,8 @@ flat in float vGain;
 flat in float vSeed;
 out vec4 o;
 const vec3 WARM = vec3(1.0, 0.95, 0.86);
-// red to violet as three soft bumps, so the colours run into each other with no stripes
+// HUE
+// red to violet as three overlapping bumps, no stripes
 vec3 hue(float x) {
   vec3 d = (x - vec3(0.16, 0.47, 0.8)) / vec3(0.27, 0.22, 0.22);
   vec3 c = exp(-d * d);
@@ -299,7 +302,6 @@ vec3 hue(float x) {
   return c * vec3(1.05, 0.95, 1.1);
 }
 void main() {
-  // soft across, and dimming toward the red and violet ends the way a real spectrum does
   if (vSeed < -0.5) {
     // GLINT
     // plain warm light bounced off the stone or the chain
@@ -308,7 +310,7 @@ void main() {
     return;
   }
   // FLECK
-  // an irregular soft blot of sunlight, frayed at the edge, with a hint of colour at one end
+  // irregular soft blot, frayed edge, colour hint at one end
   float x = clamp(vQ.x, -vHalf, vHalf);
   float d = length(vec2(vQ.x - x, vQ.y));
   float ang = atan(vQ.y, vQ.x / (vHalf + 1.0));
@@ -317,7 +319,6 @@ void main() {
   float m = 1.0 - smoothstep(0.0, 1.0, d / wob);
   m *= m * (0.75 + 0.25 * sin(vQ.x * 2.3 + k * 1.7) * sin(vQ.y * 3.1 + k * 3.3));
   float s = clamp((vQ.x + vHalf + 1.0) / (2.0 * vHalf + 2.0), 0.0, 1.0);
-  // only the brighter flecks show their colour, and only at one edge
   float hint = smoothstep(0.55, 0.95, s) * 0.3 * smoothstep(0.1, 0.5, vGain); // change how much colour shows here
   vec3 c = mix(WARM, hue(0.15 + 0.8 * (s - 0.55) / 0.45), hint);
   float a = clamp(m * vGain, 0.0, 0.4); // change fleck strength here
@@ -329,7 +330,9 @@ void main() {
 export const LINE_VS = `${HEAD}
 uniform mat4 uVP;
 in vec3 aPos;
-in vec3 aLine; // side, half width px, kind: 0 metal, 1 chain shadow, 2 chain, 3 shadow
+// KINDS
+// aLine: side, half width px, kind (0 metal, 1 chain shadow, 2 chain, 3 shadow)
+in vec3 aLine;
 in vec4 aColor;
 in float aAlong;
 out vec3 vLine;
@@ -343,7 +346,7 @@ void main() {
 }`;
 
 export const LINE_FS = `${HEAD}
-uniform float uLink; // link length, metres
+uniform float uLink;
 in vec3 vLine;
 in vec4 vColor;
 in float vAlong;
@@ -360,7 +363,8 @@ void main() {
     float w = mix(hw * 0.55, hw, face) * (0.75 + 0.25 * sin(t * 3.1416));
     float shine = mix(0.75, 1.25, face) * (0.85 + 0.3 * sin(t * 6.2832));
     float cov = clamp(w + 0.5 - d, 0.0, 1.0);
-    // shadows go to the mask, as coverage
+    // SHADOWS
+    // written to the mask as coverage
     o = vLine.z > 1.5 ? c * shine * cov : vec4(cov, cov, 0.0, 1.0);
     return;
   }
@@ -369,9 +373,7 @@ void main() {
 }`;
 
 // CRYSTAL
-// the view ray refracts in, bounces off the inside of the real faces until it can leave,
-// then leaves once per colour channel at a slightly different angle. what it finds outside
-// is the baked wall behind, or the bright room behind you with the window and the sun in it
+// view ray refracts in, bounces off the real faces, exits per channel at its own angle
 export const CRYSTAL_VS = `${HEAD}
 uniform mat4 uVP;
 uniform mat3 uRot;
@@ -404,8 +406,9 @@ uniform vec2 uHalf;
 uniform vec4 uPlanes[FACES];
 uniform mat3 uRot;
 uniform vec3 uPos;
-uniform vec3 uEye; // camera, in the crystal's frame
-// loop bounds from uniforms, so the d3d compiler keeps the loops instead of unrolling them
+uniform vec3 uEye;
+// LOOP BOUNDS
+// from uniforms so the d3d compiler keeps the loops instead of unrolling
 uniform int uFaces;
 uniform int uBounces;
 in vec3 vLocal;
@@ -417,10 +420,12 @@ float box(float x, float a, float b, float s) {
   return smoothstep(a - s, a + s, x) * (1.0 - smoothstep(b - s, b + s, x));
 }
 
-// the room behind you: pale walls, a darker floor, the window and the sun in it
+// ROOM
+// reflected room behind the viewer: walls, floor, window, sun
 vec3 room(vec3 d) {
   vec3 c = mix(vec3(0.33, 0.325, 0.32), vec3(0.86, 0.84, 0.8), smoothstep(-0.45, 0.45, d.y));
-  // a dark doorway and a bright far wall, so turning faces always have something to find
+  // DOORWAY
+  // dark doorway and bright far wall, so turning faces always find contrast
   c *= 1.0 - 0.55 * box(d.x, -0.75, -0.5, 0.01) * step(d.y, 0.35);
   c += vec3(0.25, 0.24, 0.22) * smoothstep(0.3, 0.9, d.x);
   float a = dot(d, WIN_W);
@@ -435,7 +440,8 @@ vec3 room(vec3 d) {
   return c;
 }
 
-// the wall behind the crystal, frosted to a blur, blended into the room across its far edge
+// ENV
+// frosted wall behind the crystal, blended into the room across its far edge
 vec3 env(vec3 p, vec3 d, float blur) {
   vec3 r = room(d);
   if (d.z > 0.1) return r;
@@ -445,8 +451,7 @@ vec3 env(vec3 p, vec3 d, float blur) {
 }
 
 // MILK
-// natural quartz: clouds of tiny inclusions and thin fracture veils, thick toward the top
-// and in patches, thinning out to a clear tip
+// inclusion clouds and fracture veils, dense at the top and in patches, clear at the tip
 float hash3(vec3 p) {
   p = fract(p * 0.3183099 + 0.1);
   p *= 17.0;
@@ -463,9 +468,9 @@ float noise3(vec3 p) {
       mix(hash3(i + vec3(0, 1, 1)), hash3(i + vec3(1, 1, 1)), f.x), f.y),
     f.z);
 }
-// density and how much of it is bright fracture
 float sheet(vec3 p, vec3 dir, float k, float w) {
-  // a crack: a thin warped plane, broken up so it only runs part way through
+  // CRACK
+  // thin warped plane, broken so it runs only part way
   float x = dot(p, dir) * k + (noise3(p * 18.0) - 0.5) * 1.6;
   float l = 1.0 - smoothstep(0.0, w, abs(fract(x) - 0.5));
   return l * smoothstep(0.45, 0.7, noise3(p * 11.0 + dir * 5.0));
@@ -474,12 +479,13 @@ vec2 milk(vec3 p) {
   float h = clamp(-p.y / HEIGHT, 0.0, 1.0);
   float grain = noise3(p * 140.0) * 0.5 + noise3(p * 60.0 + 4.0) * 0.5;
   float cloud = smoothstep(0.45, 0.75, noise3(p * 20.0) * 0.6 + grain * 0.4);
-  // feathery veils: wide soft cracks frayed by the grain
+  // VEILS
+  // wide soft cracks frayed by the grain
   float veil = sheet(p, vec3(0.6, 0.55, 0.58), 9.0, 0.17) + sheet(p, vec3(-0.7, 0.3, 0.65), 7.0, 0.14);
   veil *= 0.35 + grain;
   float patchy = smoothstep(0.3, 0.75, noise3(p * 7.0 + 2.0));
   float body = max(1.0 - smoothstep(0.05, 0.45, h), patchy * 0.8);
-  body *= 1.0 - 0.9 * smoothstep(0.6, 0.95, h); // the tip runs clear
+  body *= 1.0 - 0.9 * smoothstep(0.6, 0.95, h);
   return vec2((cloud * 0.9 + veil * 2.2) * body, min(veil, 1.0) * body);
 }
 
@@ -492,8 +498,7 @@ void main() {
   vec3 col = env(pw, uRot * reflect(i, n), 0.0) * fr;
 
   // INSIDE
-  // the view ray refracts in and crosses the stone once through the milk, then leaves for the
-  // frosted wall, or bounces once more where it cannot
+  // refract in, one crossing through the milk, exit to the frosted wall or bounce once more
   float near = 1.0 - smoothstep(0.0, 0.45, vEdge);
   vec3 IORS = IOR + vec3(-1.0, 0.0, 1.0) * SPREAD * (1.0 + near);
   vec3 d = refract(i, n, 1.0 / IOR);
@@ -517,7 +522,8 @@ void main() {
     }
     tmin = max(tmin, 0.0);
     if (b == 0) {
-      // march the first crossing through the milk, light scattered toward you as you go
+      // MARCH
+      // first crossing through the milk, in-scattering toward the eye
       float dt = tmin / float(MILK_STEPS);
       for (int k = 0; k < MILK_STEPS; k++) {
         vec2 mk = milk(p + d * dt * (float(k) + 0.5));
@@ -543,19 +549,22 @@ void main() {
     }
     d = reflect(d, m);
   }
-  // the clear stone shows the wall bent and a shade darker, never brighter than the milk
+  // CLEAR PATH
+  // wall seen bent and a shade darker, never brighter than the milk
   through = mix(through, vec3(dot(through, vec3(0.3, 0.5, 0.2))), 0.3) * 0.72;
-  // the milk is lit by the sun from inside: brighter on the faces that see it
+  // MILK LIGHT
+  // sun from inside, brighter on faces that see it
   float sunny = 0.8 + 0.35 * max(dot(uRot * n, -SUN), 0.0);
   vec3 milkC = vec3(1.04, 1.03, 1.01) * sunny;
   float h = fract(sin(dot(n, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
   vec3 inner = through * exp(-tau) * mix(0.88, 1.04, h) + milkC * glow;
   col += inner * (1.0 - fr);
 
-  // a polished bright line where two faces meet
+  // EDGE LINE
   float e = 1.0 - smoothstep(0.0, fwidth(vEdge) * 0.9, vEdge);
   col += e * (0.1 + 0.45 * fr);
-  // photo contrast without crushing: mids stay clear, highlights roll off
+  // TONE
+  // soft s-curve: mids stay clear, highlights roll off
   vec3 cc = clamp(col, 0.0, 1.0);
   col = mix(col, cc * cc * (3.0 - 2.0 * cc), 0.55);
   col = col / (1.0 + 0.18 * max(col - 0.85, 0.0));

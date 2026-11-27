@@ -1,8 +1,8 @@
 import "./style.css";
 import { ACCENT, DAYS, READY, pad } from "./days";
 
-const PEEK_GAP_PX = 28; // distance between cursor and preview
-const IDLE_MS = 1500; // longest wait before the thumbs start preloading anyway
+const PEEK_GAP_PX = 28;
+const IDLE_MS = 1500; // change max wait before thumbs preload
 
 const list = document.querySelector<HTMLOListElement>("[data-cv-days]");
 const peek = document.querySelector<HTMLElement>("[data-cv-peek]");
@@ -40,7 +40,7 @@ if (list && !list.hasAttribute("data-cv-mounted")) {
   });
 
   // PEEK
-  // follows the mouse over shipped rows; one rAF per batch of moves, nothing runs when idle
+  // one rAF per batch of pointer moves, idle otherwise
   const reel = peek?.querySelector<HTMLElement>("[data-cv-reel]");
   if (peek && reel && matchMedia("(hover: hover) and (pointer: fine)").matches) {
     let raf = 0;
@@ -51,7 +51,6 @@ if (list && !list.hasAttribute("data-cv-mounted")) {
 
     const place = () => {
       raf = 0;
-      // flip to the left of the cursor near the right edge
       const x = px + PEEK_GAP_PX + w > innerWidth ? px - PEEK_GAP_PX - w : px + PEEK_GAP_PX;
       const y = Math.min(Math.max(8, py - h / 2), innerHeight - h - 8);
       peek.style.setProperty("--x", `${x}px`);
@@ -72,8 +71,7 @@ if (list && !list.hasAttribute("data-cv-mounted")) {
     );
 
     // REEL
-    // every thumb sits in one column that slides to the hovered row, so a fast sweep
-    // rolls through them and turns mid-way instead of cutting
+    // all thumbs in one translated column, so row changes roll instead of cut
     const rows = Array.from(list.querySelectorAll<HTMLAnchorElement>("a.row"));
     const imgs = rows.map(() => {
       const img = document.createElement("img");
@@ -106,15 +104,12 @@ if (list && !list.hasAttribute("data-cv-mounted")) {
         load();
         const i = rows.indexOf(row);
         if (i !== at) {
-          // arriving from outside the list jumps straight to the row, only moves between rows roll
           if (!on) reel.setAttribute("data-cv-snap", "");
           reel.style.setProperty("--i", String(i));
           at = i;
           if (!on) requestAnimationFrame(() => reel.removeAttribute("data-cv-snap"));
         }
         if (!on) {
-          // appear right at the pointer and rise into place, never glide in from the last spot
-          // (or from the corner after a reload with the mouse already over a row)
           const r = peek.getBoundingClientRect();
           w = r.width || w;
           h = r.height || h;

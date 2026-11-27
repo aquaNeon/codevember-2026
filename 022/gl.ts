@@ -1,4 +1,5 @@
-// workers without rAF fall back to a timer
+// RAF
+// timer fallback for workers without rAF
 export const raf = (fn: (now: number) => void) =>
   typeof requestAnimationFrame === "function"
     ? requestAnimationFrame(fn)

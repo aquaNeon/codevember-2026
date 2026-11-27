@@ -19,7 +19,8 @@ float h21(ivec2 i) {
   uvec2 u = uvec2(i + 4096);
   return float(pcg(u.x + pcg(u.y))) * INV_U;
 }
-// value noise; the corners are a loop (uTap.w is 1) so each call site stays one hash long
+// VALUE NOISE
+// corners in a loop (uTap.w is 1) so each call site stays one hash long
 float vnoise2(vec2 p) {
   ivec2 i = ivec2(floor(p));
   vec2 f = fract(p);
@@ -56,7 +57,8 @@ float fbm3(vec3 p, int octaves) {
   }
   return s / n;
 }
-// f1, f2 and the nearest cell's hash
+// WORLEY
+// f1, f2, nearest cell hash
 vec3 worley(vec2 p) {
   int r = uTap.w;
   ivec2 ip = ivec2(floor(p));
@@ -81,11 +83,7 @@ vec3 worley(vec2 p) {
 `;
 
 // SCENE
-// one raymarched specimen: a bolted steel cube on a turned stone pedestal. only the cube turns;
-// the pedestal, the lights and the room stay put. rust is a function of the cube's own frame
-// and one age, so it sticks to the steel as it turns; runs go down the cube's y, which is world
-// down. loop counts come in as uniforms so the compiler keeps each loop body once instead of
-// unrolling it, which keeps the link short
+// raymarched; rust lives in the cube's frame so it turns with the steel
 export const SCENE_FS = `#version 300 es
 precision highp float;
 precision highp int;
@@ -123,24 +121,23 @@ const vec3  BC     = vec3(0.0, 0.8, 0.0);
 const float BR     = 1.12;
 
 // LIGHTS
-// world space, fixed to the room
 const vec3 KEY = vec3(-0.62, 0.62, 0.48);
 const vec3 KEY_COL = vec3(3.1, 2.95, 2.75);
 const vec3 RIM = vec3(0.78, 0.3, -0.55);
 const vec3 RIM_COL = vec3(1.1, 1.25, 1.5);
-const vec3 OCHRE = vec3(0.22, 0.13, 0.035); // the second oxide over red rust
-const vec3 SIENNA = vec3(0.2, 0.06, 0.022); // and over ochre rust
-const vec3 MAGNETITE = vec3(0.02, 0.016, 0.013); // black scale
-const vec3 STONE = vec3(0.04, 0.04, 0.043); // the pedestal, a dark honed basalt
-const float BRUSH_ROUGH = 0.36; // the cube's brushed steel, change for a duller or brighter finish
-const float BRUSH_ANISO = 0.95; // how far the highlights stretch along the grain
-const float RUST_ROUGH = 0.9; // loose oxide, matte
-const float SCALE_ROUGH = 0.74; // packed scale, a dull sheen; humidity lowers it
+// MATERIALS
+const vec3 OCHRE = vec3(0.22, 0.13, 0.035);
+const vec3 SIENNA = vec3(0.2, 0.06, 0.022);
+const vec3 MAGNETITE = vec3(0.02, 0.016, 0.013);
+const vec3 STONE = vec3(0.04, 0.04, 0.043);
+const float BRUSH_ROUGH = 0.36; // change brushed finish here
+const float BRUSH_ANISO = 0.95; // change highlight stretch here
+const float RUST_ROUGH = 0.9;
+const float SCALE_ROUGH = 0.74;
 
 vec3 yaw(vec3 v, vec2 cs) {
   return vec3(cs.x * v.x + cs.y * v.z, v.y, -cs.y * v.x + cs.x * v.z);
 }
-// world to the cube's frame and back
 vec3 toCube(vec3 v) {
   return yaw(v, vec2(uYaw.x, -uYaw.y));
 }
@@ -170,8 +167,8 @@ float sdHex(vec2 p, float r) {
   return length(p) * sign(p.y);
 }
 
-// a cube local point folded onto one face: xy in the face, z along its normal.
-// one bolt stands for all four on a face; the bottom face has none
+// FACE FOLD
+// cube point folded onto one face; one bolt stands for all four
 vec3 faceLocal(vec3 c, out float bottom) {
   vec3 a = abs(c);
   bottom = 0.0;
@@ -183,7 +180,8 @@ vec3 faceLocal(vec3 c, out float bottom) {
   return a;
 }
 
-// x: cube body, y: bolt head and washer. c in the cube's frame
+// CUBE SDF
+// x: body, y: bolt head and washer
 vec2 cubeSd(vec3 c) {
   float body = sdRoundBox(c, vec3(HB), RB);
   float bottom;
@@ -216,6 +214,7 @@ float map(vec3 p) {
   return min(min(c.x, c.y), pedSd(p));
 }
 
+// NORMAL
 // tetrahedral taps in one loop body
 vec3 normal(vec3 p) {
   vec3 n = vec3(0.0);
@@ -234,8 +233,8 @@ float march(vec3 ro, vec3 rd, float t, float t1) {
     t += d * 0.92;
     if (t > t1) return -1.0;
   }
-  // out of steps while still hugging a surface (a grazing ray into a bolt recess): call it a
-  // hit rather than let the backdrop show through as a dark speck
+  // GRAZING HIT
+  // out of steps but hugging a surface counts as a hit, no dark specks in bolt recesses
   return abs(d) < 0.01 ? t : -1.0;
 }
 
@@ -252,7 +251,8 @@ float softShadow(vec3 ro, vec3 rd, float k) {
   return res * res * (3.0 - 2.0 * res);
 }
 
-// x: ambient occlusion, y: cavity, how tucked into a crevice the point is
+// OCCLUSION
+// x: ambient occlusion, y: cavity
 vec2 occlusion(vec3 p, vec3 n) {
   float o = 0.0;
   float s = 1.0;
@@ -292,7 +292,6 @@ vec3 env(vec3 d, float rough) {
   float s = 0.012 + rough * rough * 1.6;
   float dim = 1.0 / (1.0 + rough * rough * 5.0);
   vec3 col = mix(vec3(0.05, 0.052, 0.056), vec3(0.12, 0.125, 0.13), smoothstep(0.0, 0.8, d.y));
-  // the studio floor: lit grey near the horizon, darker straight down
   vec3 floorCol = mix(vec3(0.05, 0.048, 0.046), vec3(0.2, 0.19, 0.18), smoothstep(-0.9, -0.04, d.y));
   col = mix(floorCol, col, smoothstep(-0.06, 0.02, d.y));
   vec3 key = normalize(KEY);
@@ -301,7 +300,6 @@ vec3 env(vec3 d, float rough) {
   col += vec3(4.2, 4.7, 5.6) * dim * softbox(d, rim, normalize(cross(vec3(0, 1, 0), rim)), vec2(0.12, 1.1), s);
   vec3 top = normalize(vec3(0.1, 0.32, -0.95));
   col += vec3(2.2) * dim * softbox(d, top, vec3(1, 0, 0), vec2(1.3, 0.16), s);
-  // a bounce card low in front, a soft band across the lower half of the side faces
   vec3 card = normalize(vec3(-0.2, -0.3, 1.0));
   col += vec3(1.3, 1.27, 1.22) * dim * softbox(d, card, normalize(cross(vec3(0, 1, 0), card)), vec2(1.9, 0.3), s * 1.4 + 0.1);
   vec3 fill = normalize(vec3(0.25, 0.18, 1.0));
@@ -310,20 +308,20 @@ vec3 env(vec3 d, float rough) {
 }
 
 // RUST
-// everything the relief and the colour share, in the cube's frame
+// fields shared by relief and colour, in the cube's frame
 struct Field {
-  float m;     // rust cover, crisp at its rim
-  float depth; // how long it has been rusting there, 0 to 1
-  float rim;   // the newest edge of a patch
-  float halo;  // the thin brown film just ahead of a front
-  float crust; // thick scale
-  float crack; // 0 in the cracks between plates
-  float chip;  // a plate that has flaked off
-  float bare;  // flaked deep, dark under the scale
+  float m;
+  float depth;
+  float rim;
+  float halo;
+  float crust;
+  float crack;
+  float chip;
+  float bare;
   float pit;
-  float id;    // plate hash
-  float g;     // fine grain
-  float h;     // relief
+  float id;
+  float g;
+  float h;
 };
 
 vec2 faceUv(vec3 c, vec3 n) {
@@ -340,16 +338,13 @@ Field field(vec3 c, vec3 n, float cav, float bolt) {
   vec3 a = abs(c);
   float mid = a.x + a.y + a.z - max(a.x, max(a.y, a.z)) - min(a.x, min(a.y, a.z));
   // EXPOSURE
-  // rust starts where water sits: edges, bolts, crevices, the foot of the sides, the top
   float edge = smoothstep(HB - 0.09, HB - 0.008, mid);
   float low = smoothstep(0.1, -HB, c.y) * (1.0 - abs(n.y));
   float expo = 0.5 * edge + 0.6 * cav + 0.45 * bolt + 0.22 * low + 0.12 * max(n.y, 0.0);
 
   // COVER
-  // broad warped patches stretched down the sides, ragged at the rim, with a crisp front
   vec3 q = c * vec3(3.0, 1.6, 3.0) + 2.0;
   q.xz += 0.9 * vec2(vnoise3(q * 0.9 + 3.1), vnoise3(q * 0.9 + 7.7)) - 0.45;
-  // stretched so the cover grows steadily over the years instead of all at once
   float nz = clamp((fbm3(q, uLoop.w) - 0.5) * 2.1 + 0.5, 0.0, 1.0);
   float seed = nz + 0.55 * expo;
   float p = age * mix(0.78, 1.4, hum);
@@ -360,7 +355,6 @@ Field field(vec3 c, vec3 n, float cav, float bolt) {
   f.halo = smoothstep(-0.14, 0.0, s) * step(0.04, age);
 
   // FLASH SPOTS
-  // early on, scattered orange specks that grow and run together
   vec2 uv = faceUv(c, n);
   vec3 sp = worley(uv * 24.0);
   f.g = vnoise3(c * 150.0);
@@ -372,13 +366,11 @@ Field field(vec3 c, vec3 n, float cav, float bolt) {
   f.m = max(f.m, spot);
 
   // SCALE
-  // plates split by uneven cracks; some curl up at the rim, some have flaked away
   f.crust = smoothstep(0.12, 0.5, f.depth) * smoothstep(0.3, 0.68, age);
   vec2 fu = uv * 13.0 + 3.0;
   fu += (vec2(vnoise2(fu * 0.9), vnoise2(fu * 0.9 + 7.0)) - 0.5) * 1.0;
   vec3 pl = worley(fu);
   float gap = pl.y - pl.x;
-  // only the oldest, thickest scale cracks into plates
   float laminar = smoothstep(0.3, 0.7, f.depth) * smoothstep(0.55, 0.75, nz + 0.35 * edge + 0.25 * flake);
   f.crack = mix(1.0, smoothstep(0.01, 0.05 + 0.04 * flake, gap), laminar);
   f.id = pl.z;
@@ -387,14 +379,13 @@ Field field(vec3 c, vec3 n, float cav, float bolt) {
   f.bare = f.chip * step(0.6, fract(pl.z * 3.9)) * (1.0 - edge);
 
   // PITS
-  // salt pits in clusters, never smaller than a few pixels
   vec3 pt = worley(uv * 32.0 + 9.0);
   float cluster = smoothstep(0.3, 0.75, vnoise3(c * 5.0 + 17.0));
   float pr = (0.14 + 0.16 * salt) * (0.7 + 0.6 * fract(pt.z * 37.0));
   f.pit = step(pt.z, (0.03 + salt * 0.45) * cluster) * smoothstep(pr, pr * 0.3, pt.x);
   f.pit *= max(f.m * smoothstep(0.1, 0.4, f.depth + 0.2 * salt), f.chip);
 
-  // blisters: low lumps in the oxide, larger than the grain
+  // BLISTERS
   float blister = smoothstep(0.35, 0.85, vnoise3(c * 38.0 + 21.0));
   float plate = f.crust * (0.55 + 0.25 * fract(pl.z * 17.0) + 0.7 * curl * (0.4 + flake)) * f.crack;
   f.h = 0.3 * f.m * smoothstep(0.0, 0.35, f.depth) + plate * (1.0 - f.chip) + f.m * ((f.g - 0.5) * (0.12 + 0.12 * (1.0 - f.crust)) + 0.22 * blister);
@@ -402,7 +393,7 @@ Field field(vec3 c, vec3 n, float cav, float bolt) {
   return f;
 }
 
-// runs: water gathers under each bolt head and along the top rim and runs down the sides
+// RUNS
 float runs(vec3 c, float len) {
   vec3 a = abs(c);
   if (a.y > max(a.x, a.z) - 0.02) return 0.0;
@@ -424,7 +415,7 @@ float runs(vec3 c, float len) {
     float k = exp(-lat * lat) * exp(-max(dy, 0.0) / max(l, 1e-3));
     s += k * smoothstep(-0.02, 0.03, dy) * step(0.0, len);
   }
-  // tea stains: thin streaks off the top rim
+  // TEA STAINS
   float dyTop = HB - y;
   float tear = vnoise2(vec2(u * 9.0 + face * 7.3, 0.5)) * 0.6 + rivulet * 0.4;
   tear = smoothstep(0.5, 0.85, tear);
@@ -433,6 +424,7 @@ float runs(vec3 c, float len) {
 }
 
 vec3 tonemap(vec3 c) {
+  // TONEMAP
   // khronos pbr neutral
   const float start = 0.8 - 0.04;
   const float desat = 0.15;
@@ -467,7 +459,6 @@ vec3 shade(vec3 p, vec3 rd, vec3 n, float sh) {
     vec3 nl = toCube(n);
 
     // BRUSHING
-    // the cube faces are brushed straight, the grain in the cube's frame
     vec3 an = abs(nl);
     vec3 tl = an.y > max(an.x, an.z) ? vec3(1.0, 0.0, 0.0) : normalize(cross(vec3(0.0, 1.0, 0.0), nl));
     float across = dot(c, normalize(cross(nl, tl)));
@@ -481,7 +472,7 @@ vec3 shade(vec3 p, vec3 rd, vec3 n, float sh) {
     rough += (lines - 0.5) * 0.16 * grain;
 
     // RELIEF
-    // the field at the point and two taps along the surface, in one loop body
+    // field at the point plus two surface taps, in one loop body
     float bolt = id;
     vec3 t1 = normalize(cross(nl, abs(nl.y) > 0.9 ? vec3(1, 0, 0) : vec3(0, 1, 0)));
     vec3 t2 = cross(nl, t1);
@@ -499,7 +490,8 @@ vec3 shade(vec3 p, vec3 rd, vec3 n, float sh) {
     float amp = (0.006 + 0.01 * uKnobs.w) * smoothstep(0.0, 0.1, f.m + f.pit);
     nl = normalize(nl - (t1 * (hx - f.h) + t2 * (hy - f.h)) * (amp / E));
     n = fromCube(nl);
-    // a steep bump can tip the normal away from the eye, which shades as a black speck
+    // NORMAL CLAMP
+    // a bump tipping the normal away from the eye shades as a black speck
     float nv = dot(n, -rd);
     if (nv < 0.05) n = normalize(n - rd * (0.05 - nv));
 
@@ -511,7 +503,6 @@ vec3 shade(vec3 p, vec3 rd, vec3 n, float sh) {
     float z3 = vnoise3(c * vec3(26.0, 14.0, 26.0) + 3.0);
 
     // TARNISH
-    // bare steel dulls and warms before it rusts, with faint tide marks where water dried
     float tarn = smoothstep(0.0, 0.3, age) * (0.6 + 0.4 * z);
     float blot = vnoise3(c * vec3(4.0, 2.5, 4.0) + 40.0);
     float tide = smoothstep(0.52, 0.6, blot) * (0.5 + 0.5 * smoothstep(0.62, 0.56, blot));
@@ -521,55 +512,48 @@ vec3 shade(vec3 p, vec3 rd, vec3 n, float sh) {
     aniso *= 1.0 - 0.6 * min(tarn, 1.0);
 
     // RUST COLOUR
-    // orange where it is new, through sienna to umber where it is old, in broad zones
     vec3 fresh = uRustA;
     vec3 old = uRustB;
     vec3 umber = old * 0.4;
     float d = f.depth + (z - 0.5) * 0.6 + (g - 0.5) * 0.12 + 0.25 * smoothstep(0.5, 1.0, age);
     vec3 rc = mix(fresh, old, smoothstep(-0.15, 0.4, d));
     rc = mix(rc, umber, smoothstep(0.35, 0.9, d) * 0.8);
-    // mottling: crisp blotches of darker and brighter oxide at two sizes
+    // MOTTLING
     rc *= 0.7 + 0.45 * smoothstep(0.3, 0.7, z2) + 0.25 * smoothstep(0.45, 0.6, z3);
     rc *= 0.82 + 0.36 * g;
-    // granules of brighter oxide caught in the brown
     float gran = smoothstep(0.56, 0.74, g) * smoothstep(0.3, 0.55, z3);
-    // the newest edge of a patch: a dark tide line
     rc = mix(rc, umber * 0.6, f.rim * 0.55 * step(0.12, age));
 
     // SCALE
-    // packed, near black where damp, cracked dark, rims catching light from the relief
     float damp = smoothstep(0.5, 0.6, z2 + 0.3 * hum - 0.15 + 0.3 * z3 + 0.1 * g);
     vec3 scale = mix(mix(umber, old * 0.75, smoothstep(0.4, 0.7, z3)), MAGNETITE * 1.6, damp) * (0.7 + 0.6 * g);
     float plateOn = f.crust * (1.0 - f.chip);
     rc = mix(rc, scale, plateOn * smoothstep(0.2, 0.7, fract(f.id * 23.0) * 0.5 + 0.5 * z));
     rc *= mix(1.0, 0.18, f.crust * (1.0 - f.crack));
-    // under a fallen flake: bright powdery orange, or where it went deep, dark umber; never
-    // shiny steel again, rust does not turn back into metal
+    // FLAKED
     rc = mix(rc, mix(fresh, old, 0.35) * (0.8 + 0.4 * g), f.chip * (1.0 - f.bare));
     rc = mix(rc, old * (0.3 + 0.25 * g), f.bare);
     rc = mix(rc, mix(fresh, old, 0.4) * 1.1, gran * 0.55 * f.crust);
     rc = mix(rc, MAGNETITE, f.pit * 0.9);
 
     // SECOND OXIDE
-    // a powdery bloom of the other oxide in tall patches where water ran and dried; matte
     float run = vnoise3(c * vec3(2.6, 0.9, 2.6) + 11.0) * 0.7 + vnoise3(c * vec3(9.0, 3.0, 9.0)) * 0.3;
     float bloom = smoothstep(0.58, 0.76, run) * smoothstep(0.22, 0.6, age) * f.m * (1.0 - plateOn * 0.7);
     bloom *= 0.55 + 0.45 * g;
     vec3 other = uRustA.r - uRustA.g > 0.2 ? OCHRE : SIENNA;
     rc = mix(rc, other * (0.75 + 0.5 * z2), bloom * 0.75);
     // BLACK SCALE
-    // late, in other patches: thick dark magnetite, a little glossy
     float black = smoothstep(0.6, 0.66, vnoise3(c * 3.7 + 29.0) + 0.25 * (z3 - 0.5) + 0.1 * g) * smoothstep(0.5, 0.9, age) * plateOn;
     rc = mix(rc, MAGNETITE * (0.7 + 0.6 * g), black * 0.9);
 
     // STAINS
-    // a thin brown film on the steel: ahead of each front and in runs below bolts and the rim
     float len = age * mix(0.18, 0.75, hum);
     float st = max(runs(c, len) * smoothstep(0.0, 0.1, age) * (0.6 + 0.4 * g), f.halo * 0.55);
     st *= 1.0 - f.m;
     vec3 stainCol = mix(old * 1.4, fresh * 0.8, 0.35 + 0.3 * z2);
 
-    // the film browns the steel's own reflection rather than painting over it
+    // FILM
+    // tints F0 instead of painting over the reflection
     F0 = mix(F0, vec3(0.24, 0.15, 0.1), st);
     float cover = f.m;
     albedo = mix(stainCol, rc, cover);
@@ -584,7 +568,6 @@ vec3 shade(vec3 p, vec3 rd, vec3 n, float sh) {
     ao *= 1.0 - 0.3 * f.crust * (1.0 - f.crack);
   } else {
     // STONE
-    // dark honed basalt with a fine pale speck; stone does not rust, so it stays clean
     float cloud = vnoise3(p * 4.0) * 0.7 + vnoise3(p * 15.0) * 0.3;
     float speck = smoothstep(0.78, 0.9, vnoise3(p * 140.0));
     albedo = STONE * (0.85 + 0.3 * cloud) + vec3(0.02) * speck;
@@ -601,7 +584,8 @@ vec3 shade(vec3 p, vec3 rd, vec3 n, float sh) {
   amb += vec3(0.05) * max(n.z, 0.0);
   vec3 irr = KEY_COL * max(dot(n, key), 0.0) * sh + RIM_COL * max(dot(n, normalize(RIM)), 0.0) * ao + amb * ao;
 
-  // one env loop body: a smear of taps across the grain, or a single tap
+  // ENV
+  // one loop body: taps smeared across the grain, or a single tap
   vec3 R = reflect(rd, n);
   vec3 B = normalize(cross(n, tng));
   int taps = aniso > 0.02 ? uTap.z : 1;
@@ -635,8 +619,7 @@ void main() {
   if (hit.y > 0.0) t = march(ro, rd, max(hit.x, 0.0), hit.y);
 
   // BACKDROP
-  // in display space so it meets the page colour exactly: a pool of light on the floor with
-  // the key's soft shadow and a contact darkening at the foot, fading to the page colour
+  // in display space so it meets the page colour exactly
   vec2 hv = uv - vec2(0.0, 0.06);
   float halo = exp(-dot(hv, hv) * 5.0) * 0.12;
   vec3 P = ro + rd * (-ro.y / min(rd.y, -1e-4));
@@ -644,7 +627,6 @@ void main() {
   bool floorHit = t <= 0.0 && rd.y < -0.001;
   bool shadowed = t > 0.0 || (floorHit && r2 < 7.0);
 
-  // one shadow call for the specimen or the floor under it
   vec3 n = vec3(0.0, 1.0, 0.0);
   vec3 sp0 = P + vec3(0.0, 0.003, 0.0);
   if (t > 0.0) {
@@ -666,8 +648,6 @@ void main() {
     float lift = 1.0;
     if (r2 < 7.0) {
       float near = map(P + vec3(0.0, 0.06, 0.0));
-      // the contact darkening is deep on the shadow side; toward the key, light fills it in
-      // and only a thin rim stays
       float lit = dot(normalize(P.xz + 1e-4), normalize(KEY.xz));
       float toward = smoothstep(-0.3, 0.7, lit);
       float ao = clamp(0.35 + near * mix(6.0, 14.0, toward), 0.0, 1.0);

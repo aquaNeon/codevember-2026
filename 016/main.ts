@@ -3,7 +3,7 @@ import { mountNav } from "../shared/nav";
 import { mount } from "./host";
 
 const DAY = 16;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200; // change max idle wait here
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 
@@ -25,7 +25,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || params.has("still")) still();
   else {
-    // wait for load and an idle moment so the scene never competes with first paint
     afterLoad().then(() => {
       const spore = mount(
         canvas,
@@ -34,7 +33,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
           puff: (n) => {
             if (puffs) puffs.textContent = String(n);
           },
-          // each plate figure gets its number under its foot
           labels: (xy) => {
             for (let i = 0; i < labels.length && i * 2 < xy.length; i++)
               labels[i].style.transform =

@@ -8,7 +8,6 @@ const VIEW_KEY = "cv:008-view";
 
 type View = "plate" | "unfold";
 
-// what each view calls its two readouts, its hint and its caption
 const TEXT: Record<View, [string, string, string, string]> = {
   plate: ["XW", "YW", "Drag to rotate", "Octachoron, in projection"],
   unfold: ["Fold", "Turn", "Drag sideways to unfold", "Octachoron, unfolded"],
@@ -29,7 +28,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || params.has("still")) still();
   else {
-    // the corner letters are set in the serif, wait for it so they never swap mid-spin
+    // FONT
+    // load the serif first so corner letters never swap mid-spin
     document.fonts
       .load('italic 15px "Instrument Serif"')
       .catch(() => {})
@@ -37,7 +37,7 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
         let current: Net | Tesseract | null = null;
 
         // VIEWS
-        // both draw on the same 2d canvas; switching tears one down and starts the other
+        // shared 2d canvas; switching disposes one and starts the other
         const show = (view: View) => {
           current?.dispose();
           const [k1, k2, hint, caption] = TEXT[view];
@@ -80,7 +80,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   }
 }
 
-// ?v=b or ?v=a wins, then the last choice, then the unfolding view
+// VIEW
+// ?v=b or ?v=a, then the stored choice, then unfold
 function initial(params: URLSearchParams): View {
   const v = params.get("v");
   if (v === "b") return "unfold";
@@ -88,7 +89,7 @@ function initial(params: URLSearchParams): View {
   try {
     if (localStorage.getItem(VIEW_KEY) === "plate") return "plate";
   } catch {
-    // storage blocked: fall through to the default
+    // STORAGE BLOCKED
   }
   return "unfold";
 }
@@ -97,7 +98,7 @@ function remember(view: View) {
   try {
     localStorage.setItem(VIEW_KEY, view);
   } catch {
-    // storage blocked: the choice lasts for this visit only
+    // STORAGE BLOCKED
   }
 }
 

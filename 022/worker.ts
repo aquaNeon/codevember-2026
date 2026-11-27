@@ -3,7 +3,7 @@ import { Cave } from "./cave";
 import type { FromWorker, ToWorker } from "./host";
 
 // WORKER
-// the whole cave lives here, so waking a cold gpu never blocks the page
+// keeps gpu warm-up off the main thread
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 const send = (msg: FromWorker) => scope.postMessage(msg);

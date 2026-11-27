@@ -3,9 +3,10 @@ import { mountNav } from "../shared/nav";
 import { mount } from "./host";
 
 const DAY = 5;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200; // change max idle wait here
 const MAX_COLONIES = 32;
-// first colonies: x, y from the top left, species
+// START
+// x, y from top left, species
 const START = [
   [0.62, 0.38, 0],
   [0.4, 0.56, 1],
@@ -40,7 +41,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();
   else {
-    // wait for load and an idle moment; the scene itself runs off the main thread
     afterLoad().then(() => {
       const avoid = [".cv-title", ".cv-hud"]
         .map((q) => root.querySelector<HTMLElement>(q))
@@ -55,7 +55,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
             if (status) status.textContent = growing ? "Growing" : "Settled";
             root.setAttribute("data-cv-live", "");
           },
-          // the first frame is up: fade it in over the still, then seed the first colonies
           shown: () => {
             canvas.setAttribute("data-cv-shown", "");
             if (started) return;

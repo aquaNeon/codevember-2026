@@ -26,30 +26,31 @@ import { PLANETS, PLANET_Y, RATIO, build, pose, type Kind, type Rig } from "./pa
 const MAX_DT_S = 1 / 20;
 const FOV_DEG = 26;
 const PITCH_RAD = 0.36;
-const FIT_W = 6.7; // world width kept in frame
+const FIT_W = 6.7;
 const FIT_W_NARROW = 4.1;
-const FIT_H = 3.2; // world height kept in frame
-const REF_PX_PER_UNIT = 228; // scale the line spacing was tuned at
+const FIT_H = 3.2;
+const REF_PX_PER_UNIT = 228;
 const TARGET_Y = 1.42;
-const SHIFT = 0.05; // on wide screens the machine sits right of the title
-const SPACING_PX = 4.6; // distance between engraved lines, css px
-const EDGE_PX = 0.85; // outline reach, css px
-const IDLE_RAD_S = 0.075; // earth's pace when nobody touches it
+const SHIFT = 0.05;
+const SPACING_PX = 4.6; // change line spacing here
+const EDGE_PX = 0.85;
+const IDLE_RAD_S = 0.075;
 const DRAG_TAU_S = 0.06;
 const VEL_TAU_S = 0.08;
 const COAST_TAU_S = 1.8;
 const MAX_COAST_RAD_S = 2.5;
 const PICK_PX = 22;
-const PICK_TOUCH_PX = 46; // fingers get a wider reach around each planet
+const PICK_TOUCH_PX = 46;
 const INK = [0.15, 0.11, 0.075];
-const DOT_GAP = 0.036; // world distance between orbit dots
+const DOT_GAP = 0.036;
 const DOT_PX = 1.7;
 const DOT_ALPHA = 0.75;
-const TRACE_GAP = 0.006; // dots close enough to read as a line
-const TRACE_TAU_S = 0.22; // how fast a dragged planet's orbit inks in
+const TRACE_GAP = 0.006;
+const TRACE_TAU_S = 0.22;
 
+// HATCH AXES
+// plane normals of the two object-space line families per kind
 const AXES: Record<Kind, [number[], number[]]> = {
-  // a cylinder shaded the engraver's way: lines along it, then rings around it
   drum: [
     [1, 0, 0.25],
     [0, 1, 0],
@@ -95,7 +96,6 @@ const AXES: Record<Kind, [number[], number[]]> = {
     [0, 1, 0],
   ],
 };
-// gears sit lighter and more open than the rest, so the train reads as parts, not a knot
 const TONE: Partial<Record<Kind, number>> = { sun: 1.25, globe: 1.05, plate: 1.02, gear: 1.22 };
 const SCALE: Partial<Record<Kind, number>> = { ground: 0.32, gear: 0.7 };
 
@@ -111,7 +111,7 @@ const unraf: (id: number) => void =
   typeof cancelAnimationFrame === "function" ? (id) => cancelAnimationFrame(id) : clearTimeout;
 
 // RENDERER
-// no dom in here: it runs in a worker on an offscreen canvas, or on the page as a fallback
+// no dom: runs in a worker, or on the page as fallback
 export class Orrery {
   private renderer: WebGLRenderer;
   private scene = new Scene();
@@ -225,7 +225,7 @@ export class Orrery {
     this.disposables.push(tri, this.postMat);
 
     // ORBITS
-    // every path dotted; the one being dragged inks in solid
+    // dotted paths; the dragged one inks in solid
     const dotted = this.markMat(DOT_ALPHA);
     for (const s of PLANETS) {
       const dots = new Points(circle(s.orbit, DOT_GAP), dotted);
@@ -311,7 +311,6 @@ export class Orrery {
   }
 
   // PUBLIC
-  // sizes in css px; the host keeps these current
   resize(w: number, h: number, dpr: number) {
     this.w = w || 1;
     this.h = h || 1;
@@ -320,7 +319,6 @@ export class Orrery {
     this.wake();
   }
 
-  // the page owns the IntersectionObserver and document.hidden; it calls this with both
   show(on: boolean) {
     this.visible = on;
     this.last = 0;
@@ -337,7 +335,6 @@ export class Orrery {
     this.wake();
   }
 
-  // pointer positions in css px from the canvas corner
   down(x: number, y: number, id: number, touch: boolean) {
     if (this.pointer !== -1) return;
     const i = this.pick(x, y, touch);
@@ -362,7 +359,6 @@ export class Orrery {
     if (d > Math.PI) d -= Math.PI * 2;
     else if (d < -Math.PI) d += Math.PI * 2;
     this.phi = a;
-    // the dragged planet follows the pointer; the train decides everyone else
     this.goal += d / RATIO[this.driver];
     this.wake();
   }
@@ -416,7 +412,6 @@ export class Orrery {
       if (dt > 0)
         this.vel += ((this.theta - prev) / dt - this.vel) * (1 - Math.exp(-dt / VEL_TAU_S));
     } else {
-      // a let-go keeps its swing, then eases back to the idle pace
       const idle = this.reducedMotion ? 0 : IDLE_RAD_S;
       this.vel += (idle - this.vel) * (1 - Math.exp(-dt / COAST_TAU_S));
       this.theta += this.vel * dt;
@@ -457,7 +452,6 @@ export class Orrery {
   }
 
   // INPUT
-  // nearest planet on screen, within reach of the pointer
   private pick(x: number, y: number, touch: boolean) {
     let best = -1;
     if (!this.rig || !this.sized) return best;
@@ -482,7 +476,6 @@ export class Orrery {
     return this.h / 2 / (dist * Math.tan((FOV_DEG * Math.PI) / 360));
   }
 
-  // pointer angle around the column, on the plane of the planets
   private angle(x: number, y: number) {
     ndc.set((x / this.w) * 2 - 1, 1 - (y / this.h) * 2);
     v3.set(ndc.x, ndc.y, 0.5).unproject(this.camera).sub(this.camera.position).normalize();
@@ -506,7 +499,6 @@ export class Orrery {
 
     const halfV = (FOV_DEG * Math.PI) / 360;
     const halfH = Math.atan(Math.tan(halfV) * aspect);
-    // portrait screens crop the outer planets rather than shrink the machine
     const fitW = aspect < 1 ? FIT_W_NARROW : FIT_W;
     const dist = Math.max(fitW / 2 / Math.tan(halfH), FIT_H / 2 / Math.tan(halfV));
     const cam = this.camera;
@@ -520,7 +512,6 @@ export class Orrery {
     cam.updateProjectionMatrix();
     cam.updateMatrixWorld();
 
-    // small prints get finer lines, not fewer
     const ppu = this.pxPerUnit();
     const fine = Math.min(1, Math.max(0.6, ppu / REF_PX_PER_UNIT));
     this.shared.uDensity.value = ppu / (SPACING_PX * fine);
@@ -546,7 +537,6 @@ export class Orrery {
   }
 }
 
-// evenly spaced points around a circle in xz
 function circle(radius: number, gap: number) {
   const n = Math.round((Math.PI * 2 * radius) / gap);
   const pos = new Float32Array(n * 3);

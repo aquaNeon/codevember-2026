@@ -1,37 +1,33 @@
 // CLOTH
-// a long sheer veil as a particle grid solved by position based dynamics at a fixed step:
-// stretch, shear and a soft bend, air drag across the cloth, a divergence free wind that
-// never repeats, a soft pull back to the middle of the frame, and particles that keep a
-// hair's breadth apart so layers lie over each other instead of through. no allocation
-// after the constructor
+// PBD grid: stretch, shear, soft bend, face drag, divergence-free wind, self collision
 
-export const NX = 30; // across, 1.3 m
-export const NY = 200; // along, 7 m
+export const NX = 30;
+export const NY = 200;
 export const N = NX * NY;
 export const STEP_S = 1 / 60;
 export const WIDTH_M = 1.3;
 export const LENGTH_M = 7;
 
 const ITERS = 4;
-const GRAVITY = -0.08; // m/s², nearly weightless
+const GRAVITY = -0.08; // change weight here
 const DAMP_TAU_S = 2.4;
-const KN = 4.2; // air across the cloth, 1/s
-const KT = 0.25; // and along it
+const KN = 4.2;
+const KT = 0.25;
 const MAX_V = 2.2;
-const WIND = 0.5; // m/s
-const LIFT = 0.04; // a slow updraft that keeps it aloft
-const LEASH_K = 0.8; // 1/s², the centre of mass drawn gently home
+const WIND = 0.5;
+const LIFT = 0.04;
+const LEASH_K = 0.8;
 const LEASH_C = 0.8;
-const ORIENT_K = 2.2; // and each end eased toward its point along the lean
+const ORIENT_K = 2.2;
 const END_ROWS = 24;
-export const SPAN_MAX_M = 6; // the furthest the two ends are drawn apart
-const TOUCH = 2.2; // how much of the pointer's speed the air takes on
-const R_SELF = 0.019; // layers keep this far apart
-const CELL = R_SELF * 2; // with this, two cells per axis always hold every neighbour
+export const SPAN_MAX_M = 6;
+const TOUCH = 2.2; // change pointer air strength here
+const R_SELF = 0.019;
+const CELL = R_SELF * 2;
 const HASH = 16384;
 const BREATH_R = 0.5;
-const SLOW = 0.72; // the clock of the air and the path, slowed for grace
-const KEEP = 0.5; // a safety: nothing crushes closer than this share of its flat length
+const SLOW = 0.72; // change pace here
+const KEEP = 0.5;
 
 export class Cloth {
   readonly x = new Float32Array(N * 3);
@@ -39,9 +35,9 @@ export class Cloth {
   readonly uv = new Float32Array(N * 2);
   private p = new Float32Array(N * 3);
   private v = new Float32Array(N * 3);
-  private w = new Float32Array(N * 3); // the air at each particle
-  private f = new Float32Array(N * 3); // air force, gathered from the faces
-  private area = new Float32Array(N); // each particle's share of the flat cloth
+  private w = new Float32Array(N * 3);
+  private f = new Float32Array(N * 3);
+  private area = new Float32Array(N);
   private ca: Uint16Array;
   private cb: Uint16Array;
   private cr: Float32Array;
@@ -55,11 +51,12 @@ export class Cloth {
   private cursor = new Int32Array(HASH);
   t = 0;
   wind = WIND;
-  tilt = 0; // rad, the path's lean, set from the frame's shape
-  span = SPAN_MAX_M; // m end to end along the lean, set wider than the frame
+  tilt = 0;
+  span = SPAN_MAX_M;
   private tiltNow = 0;
-  speed = 0; // mean particle speed, m/s
-  // BREATH: a ray from the eye through the pointer, and the way the pointer moved
+  speed = 0;
+  // BREATH
+  // eye ray through the pointer, and the pointer's motion
   private bo = new Float32Array(3);
   private bd = new Float32Array(3);
   private bm = new Float32Array(3);
@@ -67,7 +64,7 @@ export class Cloth {
 
   constructor() {
     // REST
-    // laid out streaming from the hand that holds it, with a wave to start the folds
+    // initial pose streams from one end, with a wave to seed folds
     const dx = WIDTH_M / (NX - 1);
     const dy = LENGTH_M / (NY - 1);
     for (let j = 0; j < NY; j++)
@@ -106,7 +103,8 @@ export class Cloth {
         if (i < NX - 2) add(k, k + 2, 0.2, dx * 2);
         if (j < NY - 2) add(k, k + NX * 2, 0.2, dy * 2);
       }
-    // KEEP: one-sided, only pushing apart what has been crushed together
+    // KEEP
+    // one-sided: only pushes apart what is crushed together
     const keep: number[] = [];
     for (let j = 0; j < NY; j++)
       for (let i = 0; i < NX; i++) {
@@ -133,13 +131,13 @@ export class Cloth {
       this.ck[c] = pairs[c * 4 + 2];
       this.cr[c] = pairs[c * 4 + 3];
     }
-    // settle the laid out pose into a sheet before anything else
+    // SETTLE
+    // relax the laid out pose before the first step
     for (let s = 0; s < 40; s++) this.solve(1);
     this.p.set(this.x);
     this.normals();
   }
 
-  // a few seconds in the new lean, for a frame that opens already composed
   settle(dt: number, steps: number) {
     this.tiltNow = this.tilt;
     for (let s = 0; s < steps; s++) {
@@ -167,7 +165,8 @@ export class Cloth {
     this.bd[0] = dx;
     this.bd[1] = dy;
     this.bd[2] = dz;
-    // eased toward the latest motion, so a flick is a breath and not a blow
+    // SMOOTHING
+    // eased toward the latest motion so a flick stays gentle
     this.bm[0] += (mx - this.bm[0]) * 0.35;
     this.bm[1] += (my - this.bm[1]) * 0.35;
     this.bm[2] += (mz - this.bm[2]) * 0.35;
@@ -185,8 +184,7 @@ export class Cloth {
     const damp = Math.exp(-dt / DAMP_TAU_S);
 
     // LEASH
-    // only the whole veil is held: its centre of mass drifts home on a soft spring, and its
-    // two ends are eased toward the frame's lean. nothing tells a single fold where to go
+    // only the whole veil is held: centre of mass on a soft spring, ends eased to the lean
     let cx = 0;
     let cy = 0;
     let cz = 0;
@@ -211,7 +209,8 @@ export class Cloth {
     vx0 /= N;
     vy0 /= N;
     vz0 /= N;
-    // on tall screens home sits a little left, as the lean carries the far end right
+    // HOME
+    // tall screens shift home left to offset the lean
     const hx =
       -0.05 - 0.6 * Math.sin(this.tiltNow) + 0.15 * Math.cos(this.tiltNow) * Math.sin(t * 0.041);
     const lx = -LEASH_K * (cx - hx) - LEASH_C * vx0;
@@ -219,8 +218,8 @@ export class Cloth {
     const ly = -LEASH_K * (cy - hy) - LEASH_C * vy0;
     const lz = -LEASH_K * 4 * cz - LEASH_C * 1.5 * vz0;
     this.tiltNow += (this.tilt - this.tiltNow) * (1 - Math.exp(-dt / 1.5));
-    // each end eased toward its own point along the lean, level with home and past the frame,
-    // so the veil holds a band across the middle instead of sagging with its ends afloat
+    // END PULL
+    // ends eased to points past the frame, so it holds a band instead of sagging
     let ax = 0;
     let ay = 0;
     let az = 0;
@@ -247,8 +246,7 @@ export class Cloth {
     const obz = (-bz / E) * ORIENT_K * 0.5;
 
     // WIND
-    // a slow, large swirl that never repeats, and gusts: broad fronts that travel across the
-    // frame, so one end lifts before the other and folds roll along with them
+    // large slow swirl plus travelling gust fronts, so folds roll across the frame
     const breathe = 0.85 + 0.15 * Math.sin(t * 0.31) + 0.08 * Math.sin(t * 0.17 + 1.0);
     const W = this.wind * breathe;
     const ga = 0.35 * Math.sin(t * 0.029);
@@ -268,7 +266,8 @@ export class Cloth {
       let wx = (Math.sin(Z) + 0.8 * Math.cos(Y)) * 0.6;
       let wy = (0.9 * Math.sin(X) + Math.cos(Z)) * 0.6;
       let wz = (0.8 * Math.sin(Y) + 0.9 * Math.cos(X)) * 0.6;
-      // GUSTS: two trains of fronts at different speeds along the gust direction
+      // GUSTS
+      // two trains of fronts at different speeds along the gust direction
       const along = px * gdx + py * gdy;
       const g1 = Math.max(0, Math.sin(along * 1.6 - t * 0.9));
       const g2 = Math.max(0, Math.sin(along * 0.9 - t * 0.55 + 2.0));
@@ -279,7 +278,8 @@ export class Cloth {
       wx *= W;
       wy = wy * W + LIFT;
       wz *= W * 0.6;
-      // TOUCH: air dragged along by the moving pointer, near its ray
+      // TOUCH
+      // air dragged along by the moving pointer, near its ray
       if (S > 0.01) {
         const qx = px - this.bo[0];
         const qy = py - this.bo[1];
@@ -295,7 +295,6 @@ export class Cloth {
           wz -= k * bsp * 0.6;
         }
       }
-      // the free edges catch a little more
       const ii = i % NX;
       const edge = ii < 2 || ii > NX - 3 ? 1.25 : 1;
       w[i3] = wx * edge;
@@ -306,7 +305,8 @@ export class Cloth {
       f[i3 + 2] = 0;
     }
 
-    // DRAG per triangle: air pushes on a face by how squarely it meets it, like a sail
+    // DRAG
+    // per triangle, by how squarely the air meets the face, like a sail
     for (let j = 0; j < NY - 1; j++)
       for (let i = 0; i < NX - 1; i++) {
         const a = j * NX + i;
@@ -321,7 +321,6 @@ export class Cloth {
       let vx = v[i3];
       let vy = v[i3 + 1];
       let vz = v[i3 + 2];
-      // a little drag along the cloth too
       let fx = f[i3] / m + KT * (w[i3] - vx) + lx;
       let fy = f[i3 + 1] / m + KT * (w[i3 + 1] - vy) + ly + GRAVITY;
       let fz = f[i3 + 2] / m + KT * (w[i3 + 2] - vz) + lz;
@@ -358,7 +357,6 @@ export class Cloth {
     this.keep();
     this.collide();
     this.t += dt * SLOW;
-    // the pointer's air dies quickly once it stops
     this.bS *= Math.exp(-dt / 0.45);
     const fade = Math.exp(-dt / 0.3);
     this.bm[0] *= fade;
@@ -380,6 +378,7 @@ export class Cloth {
     const vx = x[c3] - x[a3];
     const vy = x[c3 + 1] - x[a3 + 1];
     const vz = x[c3 + 2] - x[a3 + 2];
+    // CROSS
     // twice the area, along the normal
     const nx = uy * vz - uz * vy;
     const ny = uz * vx - ux * vz;
@@ -389,7 +388,8 @@ export class Cloth {
     const rx = (w[a3] + w[b3] + w[c3] - v[a3] - v[b3] - v[c3]) / 3;
     const ry = (w[a3 + 1] + w[b3 + 1] + w[c3 + 1] - v[a3 + 1] - v[b3 + 1] - v[c3 + 1]) / 3;
     const rz = (w[a3 + 2] + w[b3 + 2] + w[c3 + 2] - v[a3 + 2] - v[b3 + 2] - v[c3 + 2]) / 3;
-    // area times (n . r) times n, shared by the three corners
+    // FORCE
+    // area times (n . r) times n, split over the three corners
     const s = (KN * (nx * rx + ny * ry + nz * rz)) / (6 * l);
     const fx = nx * s;
     const fy = ny * s;
@@ -455,8 +455,7 @@ export class Cloth {
   }
 
   // SELF
-  // a spatial hash; any two particles closer than R_SELF that are not near neighbours in the
-  // weave are eased apart, and their velocities with them, so layers slide over each other
+  // spatial hash; non-neighbours closer than R_SELF are eased apart, velocities too
   private collide() {
     const x = this.x;
     const p = this.p;
@@ -474,6 +473,7 @@ export class Cloth {
       cellOf[i] = h;
       start[h + 1]++;
     }
+    // PREFIX SUM
     // cell h spans start[h] .. start[h + 1]
     for (let h = 0; h < HASH; h++) start[h + 1] += start[h];
     cursor.set(start.subarray(0, HASH));
@@ -487,7 +487,8 @@ export class Cloth {
       const gx = Math.floor(fx);
       const gy = Math.floor(fy);
       const gz = Math.floor(fz);
-      // the two cells per axis on the near side of this particle
+      // NEIGHBOUR CELLS
+      // two cells per axis on the near side; CELL = 2 R_SELF covers every pair
       const sx = fx - gx < 0.5 ? -1 : 0;
       const sy = fy - gy < 0.5 ? -1 : 0;
       const sz = fz - gz < 0.5 ? -1 : 0;
@@ -517,7 +518,8 @@ export class Cloth {
               x[j3] += dx * s2;
               x[j3 + 1] += dy * s2;
               x[j3 + 2] += dz * s2;
-              // share velocity, the friction of silk on silk
+              // FRICTION
+              // share velocity, silk on silk
               for (let k = 0; k < 3; k++) {
                 const vi = x[i3 + k] - p[i3 + k];
                 const vj = x[j3 + k] - p[j3 + k];

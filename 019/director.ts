@@ -1,47 +1,44 @@
 import { OUT, PATH_Z_KM, type Fall } from "./fall";
 
 // DIRECTOR
-// a pass is shot like a film scene: a wide establishing shot as it appears, a push-in that
-// tracks it, a low angle from the town as it streaks overhead, a chase alongside the burning
-// head while it sheds, then wide again for the end. eased moves inside a shot, hard cuts
-// between some. the plan is laid on the forecast and redone when the path is steered
+// shot plan timed on the predicted path, replanned when the path is steered
 
 export const SHOT = { establish: 0, track: 1, low: 2, chase: 3, wide: 4, calm: 5 } as const;
 export const SHOT_NAMES = ["Establishing", "Tracking", "Low angle", "Chase", "Wide", "Wide"];
 
-const HILL = [5, 0.9, 9] as const; // km: a hill south of the town
+const HILL = [5, 0.9, 9] as const;
 const TOWN = [1.2, 0.04, -1.5] as const;
 const ESTABLISH_SIM_S = 2.6;
 const LOW_SIM_S = 1.5;
 const CHASE_SIM_S = 1.8;
-const ORBIT_KM = 0.17; // how far the chase camera circles from the head
-const WIDE_LEAD_SIM_S = 0.45; // cut to wide this long before the end
+const ORBIT_KM = 0.17;
+const WIDE_LEAD_SIM_S = 0.45;
 const TRACK_REAL_S = 3.6;
-const WIDE_REAL_S = 4.5; // longest a wide shot of a meteor still flying may run // longest the track may run, it speeds the sky up to fit
-const RATE = [1.9, 1.35, 1.0, 0.42, 0.8, 0.6]; // sim seconds per real second, per shot
+const WIDE_REAL_S = 4.5;
+const RATE = [1.9, 1.35, 1.0, 0.42, 0.8, 0.6];
 const FOV_DEG = [50, 30, 74, 36, 52, 54];
-const HAND_RAD = [0.0022, 0.0028, 0.0035, 0.006, 0.0022, 0]; // handheld drift
+const HAND_RAD = [0.0022, 0.0028, 0.0035, 0.006, 0.0022, 0];
 const LOOK_TAU_S = [0.9, 0.45, 0.3, 0.12, 0.8, 1.5];
 const SHAKE_S = 0.9;
 const CHASE_REAL_S = CHASE_SIM_S / RATE[3];
 const SHAKE_RAD = 0.018;
-// where the subject sits on screen, ndc; above the title and hud
+// FRAMING
+// subject height on screen per shot, ndc
 const FRAME_Y = [0.3, 0.28, 0.32, 0.14, 0.32, 0.3];
 
 export class Director {
   shot: number = SHOT.establish;
   cut = false;
   rate = 1;
-  // camera out
   readonly eye = new Float32Array(3);
   readonly fwd = new Float32Array(3);
   readonly right = new Float32Array(3);
   readonly up = new Float32Array(3);
   readonly shift = new Float32Array(2);
-  readonly vel = new Float32Array(3); // km/s, for motion streaks
+  readonly vel = new Float32Array(3);
   tanHalf = 0.4;
 
-  private look = new Float32Array(3); // smoothed look point
+  private look = new Float32Array(3);
   private goal = new Float32Array(3);
   private eyeGoal = new Float32Array(3);
   private prevEye = new Float32Array(3);
@@ -49,12 +46,13 @@ export class Director {
   private roll = 0;
   private orbit = 0;
   private tShot = 0;
-  private wall = 0; // real seconds
+  private wall = 0;
   private shake = 0;
   private hand = 1;
   private reduced: boolean;
   private passN = 0;
-  // plan, sim seconds since launch
+  // PLAN
+  // shot start times, sim seconds since launch
   private tTrack = 0;
   private tLow = 0;
   private tChase = 0;
@@ -74,7 +72,6 @@ export class Director {
     if (reduced) this.shot = SHOT.calm;
   }
 
-  // a new pass: cut back to the establishing shot
   start(f: Fall) {
     this.passN++;
     this.plan(f);
@@ -89,7 +86,6 @@ export class Director {
     this.tEnd = t0 + fc.tEnd;
     this.tChase = this.tWide - CHASE_SIM_S;
     this.tLow = this.tChase - LOW_SIM_S;
-    // short passes drop the low angle, then the chase; every other pass skips the low angle
     if (this.tLow < t0 + ESTABLISH_SIM_S || this.passN % 2 === 0) this.tLow = this.tChase;
     if (this.tChase < t0 + 1.2) this.tChase = this.tLow = this.tWide;
     this.tTrack = Math.min(t0 + ESTABLISH_SIM_S, this.tLow * 0.45);
@@ -107,7 +103,6 @@ export class Director {
   }
 
   // UPDATE
-  // dt real seconds; picks the shot from the plan, then poses the camera
   update(dt: number, f: Fall, aspect: number, busy: boolean) {
     this.wall += dt;
     this.tShot += dt;
@@ -125,7 +120,6 @@ export class Director {
     const s = this.shot;
     let rate = RATE[s];
     if (s === SHOT.track) rate = Math.max(rate, (this.tLow - this.tTrack) / TRACK_REAL_S);
-    // a long grazer is sped up so the wide shot of it leaving stays short
     if (s === SHOT.wide && flying) rate = Math.max(rate, (this.tEnd - t) / WIDE_REAL_S);
     if (!flying && s === SHOT.wide) rate = 1;
     this.rate = rate;
@@ -139,7 +133,6 @@ export class Director {
     let fov = FOV_DEG[s];
     this.prevEye.set(this.eye);
     if (s === SHOT.establish || s === SHOT.calm) {
-      // the whole path in frame, leaning to where it comes from
       this.eyeGoal.set(HILL);
       const k = s === SHOT.calm ? 0.5 : 0.62;
       const px = fc.path[0] * k + fc.end[0] * (1 - k);
@@ -147,10 +140,10 @@ export class Director {
       this.goal[0] = px;
       this.goal[1] = py * 0.82;
       this.goal[2] = PATH_Z_KM;
-      if (s === SHOT.establish) fov -= Math.min(6, this.tShot * 1.2); // slow push in
+      if (s === SHOT.establish) fov -= Math.min(6, this.tShot * 1.2);
     } else if (s === SHOT.track) {
       this.eyeGoal.set(HILL);
-      this.eyeGoal[0] -= Math.min(1.5, this.tShot * 0.4); // a slow dolly
+      this.eyeGoal[0] -= Math.min(1.5, this.tShot * 0.4);
       this.goal[0] = hx - 6;
       this.goal[1] = hy;
       this.goal[2] = hz;
@@ -162,9 +155,7 @@ export class Director {
       this.goal[2] = hz;
     } else if (s === SHOT.chase) {
       // ORBIT
-      // half a turn round the head in slow motion, eased: from ahead of it, where the lit
-      // face comes at us, across its side, to above and behind as the trail streams away.
-      // the camera rides with the head, so the earth and limb wheel past behind it
+      // eased half turn round the head, from ahead to above and behind
       const vx = f.vx[0];
       const vy = f.vy[0];
       const vz = f.vz[0];
@@ -177,7 +168,6 @@ export class Director {
       const sl = Math.hypot(sx, sz) || 1;
       sx /= sl;
       sz /= sl;
-      // up across the path: side x flight
       let px = -sz * uy;
       let py = sz * ux - sx * uz;
       let pz = sx * uy;
@@ -204,10 +194,8 @@ export class Director {
       this.look[1] = this.goal[1] = hy;
       this.look[2] = this.goal[2] = hz;
     } else {
-      // wide: the end point, from the hill
       this.eyeGoal.set(HILL);
       this.eyeGoal[0] += 1.2;
-      // a grazer is followed as it leaves; anything else, the place it ends
       const follow = fc.out === OUT.skip && f.alive[0];
       this.goal[0] = follow ? hx + 10 : fc.end[0] + 5;
       this.goal[1] = follow ? hy : fc.end[1] + 1;
@@ -224,10 +212,10 @@ export class Director {
     }
     const kf = snap ? 1 : 1 - Math.exp(-dt / 0.6);
     this.fov += (fov - this.fov) * kf;
-    const rollGoal = s === SHOT.low ? 0.03 * this.orbit : 0; // a hint of dutch angle, low shot only
+    const rollGoal = s === SHOT.low ? 0.03 * this.orbit : 0;
     this.roll += (rollGoal - this.roll) * (snap ? 1 : kf);
 
-    // HANDHELD and SHAKE
+    // HANDHELD, SHAKE
     const w = this.wall;
     this.hand += ((busy ? 1 : 0) - this.hand) * (1 - Math.exp(-dt / 1.5));
     if (!busy && this.hand < 0.01) this.hand = 0;
@@ -249,7 +237,6 @@ export class Director {
     fx /= fl;
     fy2 /= fl;
     fz /= fl;
-    // yaw then pitch, small angles
     fx += -fz * yaw;
     fz += fx * yaw;
     fy2 += pitch;
@@ -262,7 +249,6 @@ export class Director {
     const rl = Math.hypot(rx, rz) || 1;
     rx /= rl;
     rz /= rl;
-    // up = right x fwd
     let ux = -rz * fy2;
     let uy = rz * fx - rx * fz;
     let uz = rx * fy2;
@@ -285,7 +271,7 @@ export class Director {
     this.up[2] = uz;
 
     // LENS
-    // portrait screens keep a minimum width of view
+    // portrait keeps a minimum horizontal fov
     const tv = Math.tan((this.fov * Math.PI) / 360);
     this.tanHalf = Math.max(tv, (tv * 0.82) / Math.max(0.3, aspect));
     this.shift[0] = 0;
@@ -294,7 +280,6 @@ export class Director {
     if (this.cut || snap) this.vel.fill(0);
   }
 
-  // true once the camera has come to rest, so the loop may sleep between passes
   settled() {
     return this.shake === 0 && this.hand === 0;
   }

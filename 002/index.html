@@ -26,8 +26,7 @@
     <meta name="theme-color" content="#8d867f" />
     <style>
       /* STUDIO */
-      /* this day only: the page is the studio sweep, matched to where the canvas meets
-         it. doubled selector wins over the shared sheet */
+      /* page matches the studio sweep; doubled :root beats the shared sheet */
       :root:root {
         --bone: #8d867f;
         --bone-hi: #8d867f;
@@ -79,7 +78,8 @@
         color: var(--muted);
         text-align: right;
       }
-      /* µ would capitalise into an M */
+      /* TIME */
+      /* no uppercase: µ would become M */
       [data-cv-time] {
         text-transform: none;
       }
@@ -145,7 +145,7 @@
         display: none;
       }
       /* STILL */
-      /* a capture of the room, for no webgl */
+      /* fallback capture when WebGL2 is unavailable */
       .still {
         position: absolute;
         inset: 0;

@@ -1,8 +1,5 @@
 // SPECIMEN
-// a bolted steel cube on a turned pedestal, raymarched, rusting by one age from 0 to 1.
-// draws only when something changed: a turn, the age, a knob. once still, it averages a few
-// jittered frames for clean edges and smooth brushed highlights, then the loop stops.
-// no dom in here, so the whole scene can run in a worker on an offscreen canvas
+// draws only on change; once still, accumulates jittered frames, then the loop stops
 
 import {
   busy,
@@ -21,40 +18,42 @@ import { PRESENT_FS, SCENE_FS } from "./shaders";
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
-const SAMPLES = 8; // jittered frames averaged once still
-const PLAY_S = 18; // 0 to 40 years
-const SPIN_RAD_S = 0.14; // turntable speed
-const SPIN_IDLE_S = 24; // the turntable eases to a stop this long after the last touch
+const SAMPLES = 8; // change still-frame samples here
+const PLAY_S = 18; // change playback length here
+const SPIN_RAD_S = 0.14; // change turntable speed here
+const SPIN_IDLE_S = 24;
 const SPIN_TAU_S = 0.9;
 const FLING_TAU_S = 0.45;
-const DRAG_RAD = 3.4; // radians per short side of the canvas
+const DRAG_RAD = 3.4; // change drag sensitivity here
 const YAW0 = 0.66;
 const PITCH0 = 0.3;
 const PITCH_MIN = 0.05;
 const PITCH_MAX = 0.75;
-const SLOW_MS = 25; // moving frames slower than this lower the resolution
+const SLOW_MS = 25;
 const MIN_SCALE = 0.5;
-const BG = [0x16 / 255, 0x19 / 255, 0x1c / 255]; // the page colour, as in index.html
+const BG = [0x16 / 255, 0x19 / 255, 0x1c / 255]; // change together with the page colour in index.html
 // LOOPS
 // counts as uniforms so the compiler keeps one copy of each loop body
-const LOOP = new Int32Array([160, 32, 5, 4]); // march steps, shadow steps, occlusion taps, fbm octaves
-const TAP = new Int32Array([4, 3, 5, 1]); // normal taps, relief taps, brushed highlight taps, worley reach
+const LOOP = new Int32Array([160, 32, 5, 4]); // change march, shadow, occlusion, fbm counts here
+const TAP = new Int32Array([4, 3, 5, 1]); // change normal, relief, highlight taps and worley reach here
 
 // FRAMING
 // short side units; the still in index.html is sized and placed by the same numbers
 export const FRAME = {
   wide: { focal: 1.86, centre: 0.53 },
   tall: { focal: 2.6, centre: 0.47 },
-  tallBelow: 0.8, // aspect under which the tall framing applies
+  tallBelow: 0.8, // change portrait aspect cutoff here
 };
 
-// fresh and old rust, linear
+// TONES
+// hematite (fresh, red) and goethite (old, ochre), linear rgb
 const TONES = [
-  [0.3, 0.082, 0.024, 0.105, 0.036, 0.017], // hematite, red
-  [0.31, 0.135, 0.034, 0.105, 0.05, 0.022], // goethite, ochre
+  [0.3, 0.082, 0.024, 0.105, 0.036, 0.017],
+  [0.31, 0.135, 0.034, 0.105, 0.05, 0.022],
 ];
 
-// halton 2, 3 minus a half: subpixel jitter per sample
+// JITTER
+// halton 2, 3 minus a half, subpixel per sample
 const JITTER = new Float32Array(SAMPLES * 2);
 for (let i = 0; i < SAMPLES; i++) {
   JITTER[i * 2] = halton(i + 1, 2) - 0.5;
@@ -187,7 +186,6 @@ export class Specimen {
     this.touch();
   }
 
-  // keyboard: a nudge of the turntable, eased by the fling
   turn(dir: number) {
     if (this.reducedMotion) this.yaw += dir * 0.5;
     else this.fling += dir * 2.2;
@@ -195,7 +193,6 @@ export class Specimen {
   }
 
   // INPUT
-  // x, y in css px from the canvas top left
   press(x: number, y: number) {
     this.down = true;
     this.px = x;
@@ -224,7 +221,6 @@ export class Specimen {
   lift() {
     if (!this.down) return;
     this.down = false;
-    // a release after a pause does not fling
     if (performance.now() - this.dragAt > 80) this.fling = 0;
     this.wake();
   }
@@ -303,7 +299,7 @@ export class Specimen {
   };
 
   // QUALITY
-  // a run of slow moving frames drops the moving resolution; still frames are always full
+  // slow moving frames drop the moving resolution; still frames stay full
   private adapt(ms: number) {
     if (ms <= 0 || ms > 200) return;
     this.movingFrames++;

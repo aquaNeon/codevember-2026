@@ -1,8 +1,5 @@
 // LICHEN
-// colonies spread over a half resolution arrival-time field: every texel stores when the
-// nearest colony reaches it, so growth is a smooth front and two colonies stop where they meet.
-// the loop only runs while some colony is still spreading; then the frame just stays.
-// no dom in here, so the whole scene can run in a worker on an offscreen canvas
+// half-res arrival-time field: each texel stores when the nearest colony reaches it
 
 import {
   busy,
@@ -22,12 +19,12 @@ import { COPY_FS, GROW_FS, MAX_AGE_S, MAX_COLONIES, SHOW_FS, STONE_FS } from "./
 const MAX_DPR = 2;
 const SIM_SCALE = 0.5;
 const MAX_DT_S = 1 / 20;
-const UNITS = 60; // the short side of the screen is this many units, lichen is sized in units
-const SPEED_U = 2.1; // young spread speed in units per second, change for bigger colonies
-const SETTLE_S = MAX_AGE_S + 6; // cups and rims finish this long after the last planting
+const UNITS = 60; // change scale here, units across the short side
+const SPEED_U = 2.1; // change spread speed here
+const SETTLE_S = MAX_AGE_S + 6;
 const SPECIES = 4;
-const LOBE_MAX = 1.9; // fastest lobe relative to the mean, sets how many passes a frame needs
-const EMPTY = new Float32Array([64, 64, -1, 0]); // matches SENT in the shaders
+const LOBE_MAX = 1.9;
+const EMPTY = new Float32Array([64, 64, -1, 0]); // change together with SENT in shaders.ts
 
 export type Colony = { x: number; y: number; species: number; size: number };
 
@@ -64,9 +61,8 @@ export class Lichen {
   onShown: () => void = () => {};
 
   // AVOID
-  // the title and hud: colonies are seeded away from them and only creep in slowly
   private boxes = new Float32Array([-1e4, -1e4, -1e4, -1e4, -1e4, -1e4, -1e4, -1e4]);
-  private uvBoxes = new Float32Array(8); // the same, in 0..1 from the top left
+  private uvBoxes = new Float32Array(8);
   private probe = new Float32Array(4);
 
   constructor(
@@ -105,7 +101,6 @@ export class Lichen {
   }
 
   // HOST
-  // css size and device pixel ratio of the canvas
   size(w: number, h: number, dpr: number) {
     this.cssW = Math.max(1, w);
     this.cssH = Math.max(1, h);
@@ -114,7 +109,6 @@ export class Lichen {
     this.wake();
   }
 
-  // on screen and the tab visible
   visibility(v: boolean) {
     this.visible = v;
     this.last = 0;
@@ -126,7 +120,6 @@ export class Lichen {
     this.wake();
   }
 
-  // the title and hud, as two boxes in 0..1 from the top left
   avoid(b: number[]) {
     for (let i = 0; i < 8; i++) this.uvBoxes[i] = b[i] ?? -1;
     this.sized = false;
@@ -138,9 +131,7 @@ export class Lichen {
   }
 
   // PUBLIC
-  // x, y in 0..1 from the top left
-  // false when there is no room: the stone is full, or that spot is already lichen
-  // with fallback, a spot in the title or hud, or on lichen, goes somewhere else instead
+  // x, y in 0..1 from top left; false when full or already covered
   plant(x: number, y: number, species = -1, fallback = false) {
     if (fallback && (this.inBox(x, y) || this.covered(x, y))) return this.plantSomewhere();
     if (this.count >= MAX_COLONIES || this.covered(x, y)) return false;
@@ -150,7 +141,6 @@ export class Lichen {
     return true;
   }
 
-  // somewhere bare, clear of the title and hud
   plantSomewhere() {
     for (let i = 0; i < 24; i++) {
       const x = 0.08 + Math.random() * 0.84;
@@ -168,7 +158,8 @@ export class Lichen {
     return false;
   }
 
-  // reads the one texel under a click; a click is rare enough for the stall
+  // PROBE
+  // sync readPixels of one texel; clicks are rare enough for the stall
   private covered(x: number, y: number) {
     const t = this.state[0];
     if (!t) return false;
@@ -192,7 +183,6 @@ export class Lichen {
     this.wake();
   }
 
-  // a species unlike the nearest neighbour, so meeting colonies read as two
   private pick(x: number, y: number) {
     let near = -1;
     let best = Infinity;
@@ -222,6 +212,7 @@ export class Lichen {
     if (!this.visible) return;
     const gl = this.gl;
     if (!this.linked) {
+      // STAGGERED LINK
       // one program per frame, so a driver without parallel compile blocks in short bursts
       const p = this.pending[this.linkedCount];
       if (!(this.parallel && busy(gl, p))) {
@@ -250,7 +241,8 @@ export class Lichen {
     else this.last = 0;
   };
 
-  // one frame of growth: several passes so the computed front stays ahead of the shown one
+  // STEP
+  // several passes per frame so the computed front stays ahead of the shown one
   private step(dt: number) {
     this.time += dt;
     const fresh = this.queue.shift();
@@ -267,7 +259,8 @@ export class Lichen {
     this.clear = false;
   }
 
-  // reduced motion: run the whole growth out of sight, then show the end
+  // REDUCED MOTION
+  // run the whole growth offscreen, then show the end
   private settle() {
     while (this.queue.length) {
       this.colonies.push(this.queue.shift() as Colony);
@@ -350,7 +343,6 @@ export class Lichen {
   }
 
   // RESIZE
-  // the field is carried over to the new size, the stone is drawn again
   private resize() {
     const gl = this.gl;
     const dpr = Math.min(this.dpr || 1, MAX_DPR);
@@ -374,7 +366,6 @@ export class Lichen {
       for (const t of this.state) free(gl, t);
       this.state = next;
       if (this.clear) {
-        // first fill: everything empty
         for (const t of next) {
           gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
           gl.clearBufferfv(gl.COLOR, 0, EMPTY);
@@ -387,7 +378,6 @@ export class Lichen {
     for (let i = 0; i < 2; i++) {
       const u = this.uvBoxes;
       if (u[i * 4 + 2] <= u[i * 4]) continue;
-      // y flips: sim px are y up
       this.boxes[i * 4] = u[i * 4] * t.w;
       this.boxes[i * 4 + 1] = (1 - u[i * 4 + 3]) * t.h;
       this.boxes[i * 4 + 2] = u[i * 4 + 2] * t.w;

@@ -22,10 +22,11 @@ const TAP_MEND_RATE = 1.6;
 const TINK_S = 0.5;
 const POL_TAU_S = 0.35;
 const SEED = 11;
-const SNAP_X = TIP_X + 3.0; // where scroll, keys and deep links snap the tail: mid-way along the thin part
-// only the thin outer part of the tail snaps; the neck and the thick of it just glint
+// SNAP
+// only the thin tail snaps; bulb and neck shrug off a blow
+const SNAP_X = TIP_X + 3.0; // change default snap point here
 const SNAP_MAX_X = DROP.JOIN_X - 0.45 * DROP.TAIL_U;
-const TIP_ZONE_U = 0.7; // a tap this close to the end snaps the very tip
+const TIP_ZONE_U = 0.7;
 const YAW = (DROP.YAW_DEG * Math.PI) / 180;
 
 export type Phase = "whole" | "breaking" | "held" | "mending";
@@ -33,7 +34,6 @@ const PHASES: Phase[] = ["whole", "breaking", "held", "mending"];
 
 type Prog = { p: WebGLProgram; u: Record<string, WebGLUniformLocation | null> };
 
-// scratch
 const v3 = new Float32Array(3);
 
 export class Shatter {
@@ -94,7 +94,7 @@ export class Shatter {
   private snap = SNAP_X;
   private t = 0;
   private rate = 0;
-  private held = false; // a deep link holds its moment
+  private held = false;
   private mendTimer = 0;
   private over = false;
   private reported = -1;
@@ -167,7 +167,6 @@ export class Shatter {
     canvas.addEventListener("webglcontextlost", onLost);
     this.cleanups.push(() => canvas.removeEventListener("webglcontextlost", onLost));
 
-    // a deep link to a moment: snapped at the usual point, held there
     if (at >= 0) {
       this.held = true;
       this.broken = true;
@@ -194,14 +193,14 @@ export class Shatter {
     this.reduced = reduced;
   }
 
-  // the polariser: the stress in the glass shows as colour, the studio goes dark
+  // POLARISCOPE
+  // photoelastic fringes from residual stress; the studio goes dark
   polarise(on: boolean) {
     this.polTo = on ? 1 : 0;
     if (this.reduced) this.pol = this.polTo;
     this.wake();
   }
 
-  // x, y in css px from the canvas corner
   tap(x: number, y: number) {
     this.held = false;
     const phase = this.phase();
@@ -209,7 +208,6 @@ export class Shatter {
     if (phase === "whole") {
       if (what === 2 && v3[0] <= SNAP_MAX_X) this.snapAt(v3[0]);
       else if (what) {
-        // the bulb, and the thick of the tail, shrug off a blow: a glint, nothing more
         this.tink = this.reduced ? 0 : 1;
         this.wake();
       }
@@ -220,7 +218,6 @@ export class Shatter {
   hover(x: number, y: number) {
     this.swayToX = (x / this.css.w - 0.5) * 2 * KEY.sway;
     this.swayToZ = (y / this.css.h - 0.5) * 2 * KEY.sway;
-    // the pointer only says yes where a tap would snap it
     const over = this.phase() !== "whole" || (this.pick(x, y) === 2 && v3[0] <= SNAP_MAX_X);
     if (over !== this.over) {
       this.over = over;
@@ -235,7 +232,6 @@ export class Shatter {
     this.wake();
   }
 
-  // scroll and drag move time by s seconds; scrolling on a whole drop snaps it
   nudge(s: number) {
     this.seek(this.t + s, s > 0);
   }
@@ -265,7 +261,6 @@ export class Shatter {
     return this.broken && this.t > 0 ? "held" : "whole";
   }
 
-  // the tail breaks where it is tapped; close to the end, at the very tip
   private snapAt(lx: number) {
     this.snap = lx < TIP_X + TIP_ZONE_U ? TIP_X + 0.08 : lx;
     this.broken = true;
@@ -277,7 +272,6 @@ export class Shatter {
     clearTimeout(this.mendTimer);
     if (!this.broken) return;
     if (this.reduced) {
-      // no motion: straight to the end of the move
       this.t = rate > 0 ? END_S : 0;
       this.rate = 0;
       if (rate > 0) this.later();
@@ -286,14 +280,14 @@ export class Shatter {
     this.wake();
   }
 
-  // after a quiet spell the powder gathers back into the drop
   private later() {
     clearTimeout(this.mendTimer);
     if (this.held || this.t <= 0) return;
     this.mendTimer = setTimeout(() => this.play(-MEND_RATE), MEND_AFTER_MS) as unknown as number;
   }
 
-  // the part of the drop under a css point: 1 bulb, 2 tail, 0 none; its local x into v3
+  // PICKING
+  // 1 bulb, 2 tail, 0 none; local x into v3
   private pick(x: number, y: number) {
     const nx = (x / this.css.w) * 2 - 1;
     const ny = 1 - (y / this.css.h) * 2;
@@ -324,8 +318,7 @@ export class Shatter {
   }
 
   // LOOP
-  // visible means on screen and the tab shown: the stage's IntersectionObserver and
-  // visibilitychange (document.hidden) drive show(); the loop also stops once all is still
+  // visible = on screen and tab shown; the loop also stops once all is still
   private wake() {
     if (!this.raf && this.visible) this.raf = requestAnimationFrame(this.frame);
   }
@@ -338,7 +331,6 @@ export class Shatter {
     if (!this.sized) this.resize();
     let busy = false;
     if (this.rate !== 0) {
-      // the front's run flashes past in playback; scrubbing still crawls through it
       const quick = this.t < SLOW.runS ? SLOW.runS / SLOW.playRunS : 1;
       this.t += dt * this.rate * quick;
       busy = true;
@@ -353,7 +345,7 @@ export class Shatter {
       }
     }
     // LIGHT
-    // the softbox follows the pointer a little, and settles
+    // softbox eases toward the pointer sway
     const k = this.reduced ? 1 : 1 - Math.exp(-dt / KEY.tauS);
     this.swayX += (this.swayToX - this.swayX) * k;
     this.swayZ += (this.swayToZ - this.swayZ) * k;
@@ -394,7 +386,6 @@ export class Shatter {
     this.onState(this.t, real, pieces, phase, this.over, END_S);
   }
 
-  // microseconds the front takes from the snap to the far end of the bulb
   private endUs() {
     return (DROP.STRETCH - this.snap) / FRONT_UPS;
   }
@@ -405,7 +396,6 @@ export class Shatter {
     const tp = this.broken ? phys(this.t, this.endUs()) : 0;
     const end = this.endUs() * 1e-6;
     const front = this.broken ? tp * 1e6 * FRONT_UPS : 0;
-    // whole through the held beat, gone to powder on the first frame of the blast
     const here = this.broken ? 1 - smooth((tp - end) / 0.004) : 1;
     const milk = this.broken ? smooth((tp - end * 0.85) / (end * 0.15)) : 0;
     gl.viewport(0, 0, this.res[0], this.res[1]);
@@ -430,7 +420,7 @@ export class Shatter {
     gl.bindVertexArray(this.emptyVao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-    // the smoke hanging after the blast, under the powder
+    // SMOKE
     if (this.broken && tp > end) {
       pr = this.smokeP;
       gl.useProgram(pr.p);
@@ -447,7 +437,7 @@ export class Shatter {
       gl.disable(gl.BLEND);
     }
 
-    // the powder, and before the blast the sparks at the front
+    // POWDER AND SPARKS
     if (this.broken) {
       pr = this.dustP;
       gl.useProgram(pr.p);
@@ -500,7 +490,8 @@ export class Shatter {
     this.tan[0] = this.tan[1] * aspect;
     this.px = ph / (2 * this.tan[1]);
 
-    // view then projection, column major
+    // VIEW PROJECTION
+    // column major
     const py = 1 / this.tan[1];
     const px = py / aspect;
     const a = (FAR_M + NEAR_M) / (NEAR_M - FAR_M);
@@ -519,7 +510,7 @@ export class Shatter {
     m[13] = py * tu;
     m[14] = a * tf + b;
     m[15] = -tf;
-    // the bulb's centre on screen, for the polariscope's cross
+    // POLARISCOPE CROSS
     const bx = DROP.AT[0];
     const bz = DROP.AT[2];
     const cw = m[3] * bx + m[7] + m[11] * bz + m[15];

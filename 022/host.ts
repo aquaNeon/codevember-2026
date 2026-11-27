@@ -7,7 +7,6 @@ export type Sink = {
   fail: () => void;
 };
 
-// the calls the page makes on the cave, the same in a worker or on the page
 export const CALLS = ["size", "visibility", "motion", "steer", "wheel", "press", "key"] as const;
 type Call = (typeof CALLS)[number];
 type Driver = Pick<Cave, Call | "dispose">;
@@ -18,14 +17,13 @@ export type FromWorker = { t: "hud"; h: Hud } | { t: "shown" } | { t: "fail" };
 
 const KEYS = new Set(["Enter", " "]);
 const TAP_MS = 300;
-const LINE_PX = 16; // a wheel line, in px
-const SWIPE_K = 1.6; // a finger moves less than a wheel spins
-const LOCK_PX = 10; // a touch picks its axis after this much travel
-const STEER_SPAN = 0.35; // a sideways drag this share of the width steers fully
+const LINE_PX = 16;
+const SWIPE_K = 1.6; // change swipe gain here
+const LOCK_PX = 10;
+const STEER_SPAN = 0.35; // change drag steer range here
 
 // HOST
-// the dom side: size, visibility, pointer and keys in, the hud out. the cave runs in a worker
-// when the canvas can be handed over, so compiling and drawing never block the page
+// OffscreenCanvas worker when available, else in page
 export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");
@@ -92,7 +90,6 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
     let onScreen = false;
     let rect = canvas.getBoundingClientRect();
     const show = () => d.visibility(onScreen && !document.hidden);
-    // where the title sits over the top of the cave, the roof starts below it
     const title = document.querySelector<HTMLElement>(".cv-title");
     const ro = new ResizeObserver(() => {
       rect = canvas.getBoundingClientRect();
@@ -109,15 +106,13 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
     const onMotion = () => d.motion(mq.matches);
 
     // STEER, FLY AND TAP
-    // mouse: hover steers, the wheel flies, a click calls. touch: once a finger has moved
-    // LOCK_PX it is either a vertical swipe that flies or a sideways drag that steers, never
-    // both; a touch that never locks is a tap and calls
+    // touch locks to one axis after LOCK_PX; unlocked touch is a tap
     let downX = 0;
     let downY = 0;
     let downT = 0;
     let lastY = 0;
     let finger = -1;
-    let axis = 0; // 0 none yet, 1 sideways, 2 vertical
+    let axis = 0;
     const down = (e: PointerEvent) => {
       if (e.button > 0) return;
       canvas.setAttribute("data-cv-pointer", "");

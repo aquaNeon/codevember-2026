@@ -3,44 +3,43 @@ import { edgeTable, triTable } from "three/examples/jsm/objects/MarchingCubes.js
 import { benchY } from "./bench";
 
 // METABALL SURFACE
-// every particle splats a soft blob into a grid, marching cubes draws the iso surface.
-// touching layers melt into one skin, so folds merge instead of passing through each other.
+// particles splat into a density grid, marching cubes extracts the iso surface
 
 export const BLOB = {
-  radius: 0.3, // kernel reach in world units
-  iso: 0.42, // threshold, higher pulls the skin in
-  blur: 3, // smoothing passes over the density, hides the individual blobs
-  bridge: 0.45, // links longer than this open a visible gap and get filler blobs
-  fill: 0.2, // spacing of the filler blobs
-  fillMax: 600, // filler budget per frame; only strands use it
-  strand: 5, // a particle with fewer short links than this is part of a strand
-  gap: 0.5, // any link longer than this opens a hole in a stretched sheet and always gets filler
-  cell: 0.07, // grid spacing, smaller is smoother and slower
+  radius: 0.3,
+  iso: 0.42, // change higher to pull the skin in
+  blur: 3, // change for a smoother skin
+  bridge: 0.45,
+  fill: 0.2,
+  fillMax: 600,
+  strand: 5,
+  gap: 0.5,
+  cell: 0.07, // change smaller for smoother, slower
 };
 
-const SIZE = [6.6, 3.85, 6.6]; // grid extent, it follows the dough so nothing gets clipped
+const SIZE = [6.6, 3.85, 6.6];
 const MAX_TRIS = 40000;
 const CREASE = {
-  near: 0.26, // sample distances outside the skin, past the reach of its own blobs
+  near: 0.26,
   far: 0.46,
-  full: 0.3, // field (as share of iso) that counts as fully tucked in
+  full: 0.3,
 };
 // SKIN ATTRIBUTES
-// shell particles carry where they started, flour, strain and tack; a coarse grid spreads them over the skin
-const ATTR = { cell: 0.14, radius: 0.36, solid: 0.35 }; // solid: weight below which a vertex falls back to defaults
-const CH = 10; // weight, rest xyz, current xyz, flour, strain, tack
+// per-particle rest pos, flour, strain, tack splatted on a coarse grid
+const ATTR = { cell: 0.14, radius: 0.36, solid: 0.35 };
+const CH = 10;
 const FALLBACK = { flour: 0.15, strain: 1.6, tack: 0.4 };
-const CONTACT_TAPS = [0.012, 0.035, 0.08]; // heights above the bench the board looks for dough at
-const FOLLOW_CELLS = 2.5; // drift before the grid re-centres
-const NODE = 6; // cached per node: rest xyz, flour, strain, tack
+const CONTACT_TAPS = [0.012, 0.035, 0.08];
+const FOLLOW_CELLS = 2.5;
+const NODE = 6;
 const HASH_BITS = 15;
 const HASH_SIZE = 1 << HASH_BITS;
 const HASH_FULL = HASH_SIZE * 0.7;
 const PICK_FAR = 40;
-// the grid starts below the worktop: the skin runs on under the bench and the board cuts it, so the dough meets it with no gap
-const FLOOR_DEPTH = -0.42; // longest pick ray in world units
+// FLOOR
+// grid starts below the worktop so the board clips the skin with no gap
+const FLOOR_DEPTH = -0.42;
 
-// cube corners as (x, y, z) offsets, three's corner order
 const CORNER = [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1];
 const EDGE = [0, 1, 1, 2, 3, 2, 0, 3, 4, 5, 5, 6, 7, 6, 4, 7, 0, 4, 1, 5, 2, 6, 3, 7];
 
@@ -74,25 +73,23 @@ export class Blobs {
   private nval = new Float32Array((HASH_SIZE + 1) * 6);
   private stamp = 0;
   private cached = 0;
-  // per cube scratch: 12 edge vertices and normals
   private ev = new Float32Array(36);
   private en = new Float32Array(36);
   private cv = new Float32Array(8);
   private gx = new Float32Array(8);
   private gy = new Float32Array(8);
   private gz = new Float32Array(8);
-  // last touched box, so clearing stays local
   private box = new Int32Array([0, 0, 0, 0, 0, 0]);
   // SETTLE
-  // the drawn field eases toward the new one; 1 snaps (load, a held strip moving fast)
+  // drawn field eases toward the new one; 1 snaps
   blend = 1;
   private prev: Float32Array;
   private last = new Int32Array(6);
   private wide = new Int32Array(6);
   private primed = false;
   private span = new Int32Array(6);
-  private near = new Uint8Array(0); // short links per particle, sized on first update
-  private min = new Float64Array(3); // world position of grid cell 0, snapped to whole cells
+  private near = new Uint8Array(0);
+  private min = new Float64Array(3);
 
   constructor() {
     const c = BLOB.cell;
@@ -116,25 +113,23 @@ export class Blobs {
     this.geometry.setDrawRange(0, 0);
   }
 
-  // links are optional: long ones get extra blobs along them so stretched strands stay continuous.
-  // skin is optional: per shell particle rest position, flour, strain and tack
   update(x: Float32Array, count: number, la?: Uint16Array, lb?: Uint16Array, skin?: Skin) {
     if (this.shape(x, count, la, lb, skin)) this.mesh(skin);
   }
 
   // FIELD
-  // density and skin attributes; false when there is nothing to draw. split from mesh() so a cold first build can yield between them
+  // split from mesh() so a cold first build can yield between them
   shape(x: Float32Array, count: number, la?: Uint16Array, lb?: Uint16Array, skin?: Skin) {
     const { nx, ny, field, box, span } = this;
     const sxy = nx * ny;
 
-    // CLEAR last box
+    // CLEAR
     for (let k = box[2]; k <= box[5]; k++)
       for (let j = box[1]; j <= box[4]; j++)
         field.fill(0, k * sxy + j * nx + box[0], k * sxy + j * nx + box[3] + 1);
 
     // FOLLOW
-    // centre the grid on the dough footprint, snapped so the skin does not shimmer as it moves
+    // re-centre on the dough, snapped to whole cells so the skin does not shimmer
     let lo0 = Infinity,
       hi0 = -Infinity,
       lo2 = Infinity,
@@ -149,7 +144,6 @@ export class Blobs {
     }
     if (count) {
       const c = BLOB.cell;
-      // only follow once the dough has drifted a few cells, so the grid does not flick back and forth
       const tx = (lo0 + hi0) / 2 - SIZE[0] / 2,
         tz = (lo2 + hi2) / 2 - SIZE[2] / 2;
       const di =
@@ -173,8 +167,7 @@ export class Blobs {
     for (let i = 0; i < count; i++) this.splat(x[i * 3], x[i * 3 + 1], x[i * 3 + 2]);
 
     // BRIDGE
-    // fill only strands: long links where an end has few short neighbours, i.e. it is not inside the body.
-    // a real strand then always gets dense fill; the budget only thins it out in extreme cases
+    // filler blobs along long links whose end has few short neighbours (strands only)
     if (la && lb) {
       const { near } = this;
       if (near.length < count) this.near = new Uint8Array(count);
@@ -235,7 +228,6 @@ export class Blobs {
   }
 
   // MESH
-  // marching cubes over the field, normals, skin attributes and crease shading
   mesh(skin?: Skin) {
     const skinned = !!skin;
     const { field, box, nx, ny } = this;
@@ -265,13 +257,11 @@ export class Blobs {
           const bits = edgeTable[idx];
           if (!bits) continue;
 
-          // corner gradients, outward = toward lower field
           for (let n = 0; n < 8; n++) {
             const ci = i + CORNER[n * 3],
               cj = j + CORNER[n * 3 + 1],
               ck = k + CORNER[n * 3 + 2];
             const q = ck * sxy + cj * nx + ci;
-            // two cells wide where it fits: smoother shading, the single blobs stop reading
             const sx = ci > 1 && ci < nx - 2 ? 2 : 1,
               sy = cj > 1 && cj < ny - 2 ? 2 : 1,
               sz = ck > 1 && ck < nz - 2 ? 2 : 1;
@@ -301,7 +291,7 @@ export class Blobs {
             en[e * 3 + 1] = ngy / l;
             en[e * 3 + 2] = ngz / l;
             if (!skinned) continue;
-            // SKIN along the edge, from the two cached grid nodes
+            // SKIN
             const sa = this.node(i + CORNER[a * 3], j + CORNER[a * 3 + 1], k + CORNER[a * 3 + 2]);
             const sb = this.node(i + CORNER[b * 3], j + CORNER[b * 3 + 1], k + CORNER[b * 3 + 2]);
             const nv = this.nval;
@@ -335,7 +325,7 @@ export class Blobs {
     this.geometry.setDrawRange(0, v / 3);
 
     // CREASES
-    // dough just outside a vertex means another layer is pressed against it, so fold seams read
+    // field just outside a vertex = another layer pressed against it
     const lim = BLOB.iso * CREASE.full;
     for (let o = 0; o < v; o += 3) {
       const px = pos[o],
@@ -370,7 +360,8 @@ export class Blobs {
     na.needsUpdate = true;
   }
 
-  // the smoothed field is stored per cell; when the grid moves, move it with it
+  // SHIFT
+  // smoothed field moves with the grid
   private shift(di: number, dk: number) {
     if (!this.primed) return;
     const { prev, last, nx, ny, nz } = this;
@@ -396,7 +387,6 @@ export class Blobs {
     const { field, prev, box, last, wide, nx, ny } = this;
     const sxy = nx * ny;
     const a = this.primed ? this.blend : 1;
-    // the region both this frame and the last one touched
     for (let k = 0; k < 3; k++) {
       wide[k] = this.primed ? Math.min(box[k], last[k]) : box[k];
       wide[k + 3] = this.primed ? Math.max(box[k + 3], last[k + 3]) : box[k + 3];
@@ -411,7 +401,6 @@ export class Blobs {
           }
         }
     }
-    // forget what the last region held, then remember this one
     if (this.primed)
       for (let k = last[2]; k <= last[5]; k++)
         for (let j = last[1]; j <= last[4]; j++)
@@ -427,7 +416,7 @@ export class Blobs {
   }
 
   // SKIN SPLAT
-  // weighted sums on the coarse grid; a vertex reads sum / weight, so the attributes stick to the dough
+  // weighted sums on the coarse grid; a vertex reads sum / weight
   private splatSkin(x: Float32Array, skin: Skin) {
     const { attr, anx, any, anz } = this;
     attr.fill(0);
@@ -486,8 +475,7 @@ export class Blobs {
   }
 
   // CONTACT
-  // the field at three heights above the bench under every grid column, as field / (2 iso) in rgb.
-  // the board darkens by it, so its crevice shadow ends exactly where the drawn skin meets it
+  // field / (2 iso) at three heights per column, rgb; drives the board crevice shadow
   contact(out: Uint8Array, box: Float32Array) {
     const { nx, nz } = this;
     const c = BLOB.cell;
@@ -504,7 +492,6 @@ export class Blobs {
         out[o + 3] = 255;
       }
     }
-    // texel centres sit on grid nodes
     box[0] = this.min[0] - c * 0.5;
     box[1] = this.min[2] - c * 0.5;
     box[2] = nx * c;
@@ -512,8 +499,7 @@ export class Blobs {
   }
 
   // NODE CACHE
-  // skin attributes at a fine grid node, computed once per update; edges lerp between two nodes,
-  // so neighbouring cubes agree exactly. returns the offset into nval
+  // hashed per-node attributes; edges lerp two nodes so neighbouring cubes agree
   private node(i: number, j: number, k: number) {
     const q = (k * this.ny + j) * this.nx + i;
     const { hkey, hstamp } = this;
@@ -530,7 +516,6 @@ export class Blobs {
       if (hkey[h] === q) return h * NODE;
       h = (h + 1) & (HASH_SIZE - 1);
     }
-    // table full: compute into the spare slot
     this.fillNode(HASH_SIZE * NODE, i, j, k);
     return HASH_SIZE * NODE;
   }
@@ -544,7 +529,6 @@ export class Blobs {
     const w = this.sampleSkin(px, py, pz);
     const s = Math.min(1, w / ATTR.solid);
     const iw = w > 1e-5 ? 1 / w : 0;
-    // material position of the nearby particles plus this point's own offset from them
     nval[o] = px + (acc[1] - acc[4]) * iw * s;
     nval[o + 1] = py + (acc[2] - acc[5]) * iw * s;
     nval[o + 2] = pz + (acc[3] - acc[6]) * iw * s;
@@ -553,7 +537,6 @@ export class Blobs {
     nval[o + 5] = FALLBACK.tack + (acc[9] * iw - FALLBACK.tack) * s;
   }
 
-  // trilinear read of all channels into acc, returns the weight
   private sampleSkin(x: number, y: number, z: number) {
     const { attr, anx, any, anz, acc } = this;
     acc[0] = 0;
@@ -617,7 +600,8 @@ export class Blobs {
     const ci = Math.round((px - this.min[0]) / c),
       cj = Math.round((py - this.min[1]) / c),
       ck = Math.round((pz - this.min[2]) / c);
-    // leave a one cell border empty so the skin always closes, the floor layer stays empty too
+    // BORDER
+    // one empty cell border so marching cubes always closes the skin
     const a0 = Math.max(1, ci - reach),
       a1 = Math.min(nx - 2, ci + reach);
     const b0 = Math.max(1, cj - reach),
@@ -652,7 +636,7 @@ export class Blobs {
   }
 
   // PICK
-  // marches a ray through the field so grabbing matches the skin you see
+  // ray march through the field, linear refine at the crossing
   readonly hit = new Float32Array(3);
 
   pick(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number) {
@@ -662,7 +646,6 @@ export class Blobs {
     for (let t = 0; t < PICK_FAR; t += step) {
       const f = this.sample(ox + dx * t, oy + dy * t, oz + dz * t);
       if (f >= iso) {
-        // linear refine between the last two samples
         const back = f > prev ? (f - iso) / (f - prev) : 0;
         const th = t - step * back;
         this.hit[0] = ox + dx * th;
@@ -700,7 +683,7 @@ export class Blobs {
   }
 
   // OUTSIDE
-  // pushes points (the towel) out of the drawn skin: trilinear field sample, newton steps along the gradient
+  // trilinear field sample, newton steps along the gradient
   push(q: Float32Array, count: number, margin: number) {
     const { nx, ny, nz, field } = this;
     const c = BLOB.cell;
@@ -736,7 +719,6 @@ export class Blobs {
           y1 = x01 + (x11 - x01) * ty;
         const f = y0 + (y1 - y0) * tz;
         if (f <= target) break;
-        // analytic gradient of the trilinear cell, per world unit
         const gx =
           ((f100 - f000) * (1 - ty) * (1 - tz) +
             (f110 - f010) * ty * (1 - tz) +
@@ -749,14 +731,12 @@ export class Blobs {
         if (g2 < 1e-8) break;
         const k2 = (f - target) / g2;
         q[o] -= gx * k2;
-        // never press down into the bench, that traps the towel between two pushes
         if (gy < 0) q[o + 1] -= gy * k2;
         q[o + 2] -= gz * k2;
       }
     }
   }
 
-  // true when any point sits inside the skin (plus margin), so a sleeping towel knows to wake
   touches(q: Float32Array, count: number, margin: number) {
     const target = BLOB.iso * (1 - margin);
     for (let p = 0; p < count * 3; p += 3)
@@ -765,7 +745,7 @@ export class Blobs {
   }
 
   // BLUR
-  // separable 1-2-1 pass along each axis, only inside the touched box
+  // separable 1-2-1 per axis, inside the touched box
   private smooth() {
     const { nx, ny, nz, field, tmp, box } = this;
     box[0] = Math.max(1, box[0] - 1);
@@ -774,7 +754,6 @@ export class Blobs {
     box[3] = Math.min(nx - 2, box[3] + 1);
     box[4] = Math.min(ny - 2, box[4] + 1);
     box[5] = Math.min(nz - 2, box[5] + 1);
-    // the passes read one cell past the box in tmp; clear that shell so old frames never leak in as slivers
     this.clearTmp();
     this.pass(field, tmp, 1);
     this.pass(tmp, field, nx);
@@ -795,7 +774,6 @@ export class Blobs {
       for (let j = y0; j <= y1; j++) tmp.fill(0, k * sxy + j * nx + x0, k * sxy + j * nx + x1 + 1);
   }
 
-  // step 0 is a plain copy back
   private pass(src: Float32Array, dst: Float32Array, step: number) {
     const { nx, ny, box } = this;
     const sxy = nx * ny;

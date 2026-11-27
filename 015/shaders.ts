@@ -156,7 +156,7 @@ vec3 figure(vec3 c, float cov, float inner, float fill, float fade) {
 }
 
 // HEAT
-// smooth noise in long waves rising through the air, so every line stays a soft curve
+// quintic value noise at low frequency, so displaced lines stay smooth
 float soft(vec2 p) {
   vec2 i = floor(p);
   vec2 t = fract(p);
@@ -190,7 +190,6 @@ vec3 sky(vec2 p, float t, bool sun) {
   t *= (1.0 - 0.55 * glow) * smoothstep(SUN_R * 1.15, SUN_R * 2.4, d);
 
   // CLOUDS
-  // in front of the sun: paper on top, heavier lines under, a fine line round the top
   float cover = 0.0;
   float ct = 0.0;
   float edge = 0.0;
@@ -231,7 +230,6 @@ vec3 sky(vec2 p, float t, bool sun) {
     wash = 0.85 * max(wash, 0.18 * exp(-max(wd - SUN_R, 0.0) * 16.0));
     c *= mix(vec3(1.0), SUN_WASH / PAPER, wash);
   }
-  // the sun behind warms the cloud's rim and wash
   float warm = sun ? exp(-max(d - SUN_R, 0.0) * 7.0) : 0.0;
   vec3 cc = mix(PAPER, mix(INK, SUN_INK, warm), cink);
   cc *= mix(vec3(1.0), SUN_WASH / PAPER, 0.3 * warm * (1.0 - cink));
@@ -386,7 +384,7 @@ void devil(vec2 p, float eye, float sq, inout vec3 c) {
   float r = mix(0.22, 1.1, pow(u, 1.2));
   float d = clamp((xm - axis) / r, -1.0, 1.0);
   float body = smoothstep(1.0, 0.6, abs(d)) * smoothstep(DEVIL_H, DEVIL_H * 0.6, h) * smoothstep(-0.2, 0.3, h);
-  // a helix seen from the side: each stroke bends round the column in a soft arc
+  // HELIX
   float zp = z * px;
   float rim = sqrt(max(1.0 - d * d, 0.05));
   float ph = h * 1.6 + 0.9 * asin(d * 0.98) - t * 2.4;
@@ -812,7 +810,7 @@ void main() {
     vec2 pg = mix(p0, p, steady(CAM_H / max(-p0.y, PX_FLOOR)));
 
     // MIRAGE
-    // over the sand a thin sheet at the foot of the dunes, wavering
+    // sheet beyond LAKE_M, edge jittered by noise
     z = CAM_H / max(-pg.y, PX_FLOOR);
     float x = pg.x * z + uCam;
     float zn = z / uPuddle;
@@ -822,8 +820,7 @@ void main() {
     m = smoothstep(reach * 0.985, reach * 1.015, z);
 
     // ROAD BANDS
-    // each crest of the road's rise and fall catches the sky; fixed to the road, they re-space,
-    // swell and merge into the pool as you drive, and slowly form and dissolve as the air moves
+    // road-fixed noise thresholded into sky reflections, merging into the pool with distance
     float ex = px * z;
     float tarR = 1.0 - smoothstep(ROAD_HALF - ex, ROAD_HALF + ex, abs(x));
     float wzr = z + uTravel;
@@ -836,7 +833,6 @@ void main() {
     thr += 1.0 - smoothstep(1.3, 1.6, zn);
     float uw = max(fwidth(u), 1e-3);
     float mr = smoothstep(thr - uw, thr + uw, u);
-    // a thin margin of bare paper round each band
     edge = smoothstep(thr - 3.5 * uw, thr - 1.5 * uw, u) * (1.0 - mr) * tarR;
     c = ground(pg);
     c = mix(c, PAPER, edge);
@@ -845,7 +841,7 @@ void main() {
   }
 
   // SKY
-  // below the horizon, the water: the sky's lines folded down, rocking in long soft curves
+  // reflection: sky phase mirrored below the horizon, offset by sway
   vec3 refl = PAPER;
   float tone = skyTone(p.y / SKY_K);
   vec2 at = p;

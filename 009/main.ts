@@ -3,7 +3,7 @@ import { mountNav } from "../shared/nav";
 import { mount } from "./host";
 
 const DAY = 9;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200;
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 
@@ -24,7 +24,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || params.has("still")) still();
   else {
-    // wait for load and an idle moment so the scene never competes with first paint
     afterLoad().then(() => {
       const sac = mount(canvas, look, {
         poke: (n) => {

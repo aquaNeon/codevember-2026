@@ -1,27 +1,23 @@
 import { mulberry } from "./math";
 
 // FORM
-// a baya weaver's nest: a long twisted neck bound to the stem, swelling into a pear-shaped
-// chamber with a round doorway low on one side. it is a surface of revolution round a
-// vertical spine, s from the stem (0) to the bottom of the belly (1). every strand is a path
-// on it, sixteen floats the vertex shader turns into a flat ribbon; the shape is written
-// here and in glsl (SHAPE_GLSL), the doorway in glsl only, as a push out of its disc
+// surface of revolution round a spine, s 0 stem to 1 belly; mirrored in SHAPE_GLSL
 
 export const STRIDE = 16;
-export const TOP_Y = 1.16; // where the neck is bound to the stem
+export const TOP_Y = 1.16;
 export const HEIGHT = 2.36;
-export const WIN = 0.03; // how much of the build one strand takes to thread in
-export const SEG = 40; // along a strand
-export const FINE_SEG = 18; // along a fine one, which is short and thin
+export const WIN = 0.03;
+export const SEG = 40;
+export const FINE_SEG = 18;
 export const NECK_N = 110;
 export const RING_N = 18;
 export const DOOR_N = 150;
-export const FINE_N = 3300; // shredded grass, thin as hair
-export const BLADE_N = 150; // a few broad strips among it
+export const FINE_N = 3300;
+export const BLADE_N = 150;
 export const WEAVE_N = DOOR_N + FINE_N + BLADE_N;
 
-const BODY = { c: 0.69, top: 0.43, bot: 0.31, r: 0.6 }; // the chamber, a pear in s
-export const DOOR = { s: 0.82, ph: 1.32, r: 0.29, band: 0.15 }; // the doorway and its edge
+const BODY = { c: 0.69, top: 0.43, bot: 0.31, r: 0.6 };
+export const DOOR = { s: 0.82, ph: 1.32, r: 0.29, band: 0.15 };
 const Z_SQUASH = 0.95;
 const TAU = Math.PI * 2;
 
@@ -37,13 +33,11 @@ const smax = (a: number, b: number, k: number) => {
 export function radius(s: number) {
   const q = (s - BODY.c) / (s < BODY.c ? BODY.top : BODY.bot);
   const k = Math.max(0, 1 - q * q);
-  // the top of the pear draws out into the neck
   const body = BODY.r * Math.pow(k, s < BODY.c ? 0.85 : 0.5);
   const neck = 0.034 + 0.05 * smoothstep(0.04, 0.3, s);
   return Math.max(0.03, smax(body, neck, 0.08));
 }
 
-// a hand-made shape is never quite round
 const lump = (s: number, ph: number) =>
   1 + 0.04 * Math.sin(3 * ph + 7 * s) + 0.03 * Math.sin(5 * ph - 11 * s + 1);
 
@@ -59,7 +53,8 @@ export function surf(s: number, ph: number, o: Float32Array) {
   return o;
 }
 
-// the doorway in surface units: world per unit of s down the side, and the radius there
+// DOOR SCALE
+// world units per unit of s down the side at the doorway, and the radius there
 const probe = new Float32Array(3);
 const probe2 = new Float32Array(3);
 surf(DOOR.s - 0.004, DOOR.ph, probe);
@@ -94,15 +89,13 @@ const float DOOR_SPD = ${f(DOOR_SPD)};
 const float DOOR_RR  = ${f(DOOR_R)};
 float wrapPi(float a) { return a - 6.28318 * floor((a + 3.14159) / 6.28318); }
 float gEdge = 0.0;
-// the doorway is a ragged oval, taller than wide and fuller below, its edge never quite even
-// only a fine raggedness at the edge; the outline itself is a clean oval
+// DOORWAY
+// ragged oval, taller than wide, fuller below
 float doorJit(float x) { return 1.0 + 0.02 * sin(x * 150.0 + 1.0); }
 float doorB(float below) { return DOOR_RAD * (below > 0.0 ? 1.18 : 0.96); }
 const float DOOR_A = DOOR_RAD * 0.9;
-// strands that would cross the doorway are pushed out of it, easing into a loose band at its
-// edge, where they dip and curl in over it. those running round the nest are pushed over or
-// under it; those running down it are pushed round it, out from a point off to the far side,
-// so they part smoothly over the arch rather than meeting in a peak
+// DOOR PUSH
+// strands pushed out of the oval into an edge band; radial from an off-centre point
 vec2 door(vec2 sp, bool hor, float side) {
   gEdge = 0.0;
   float dx = wrapPi(sp.y - DOOR_PH) * DOOR_RR;
@@ -120,7 +113,6 @@ vec2 door(vec2 sp, bool hor, float side) {
     sp.x = DOOR_S + side * qn / DOOR_SPD;
     return sp;
   }
-  // in the oval's own units it is a unit circle
   vec2 n = vec2(dx / DOOR_A, dy / doorB(dy));
   vec2 cs = vec2(-side * 0.45, 0.0);
   vec2 d = n - cs;
@@ -136,7 +128,6 @@ vec2 door(vec2 sp, bool hor, float side) {
   vec2 nn = cs + u * Ln;
   return vec2(DOOR_S + nn.y * doorB(nn.y) / DOOR_SPD, DOOR_PH + nn.x * DOOR_A / DOOR_RR);
 }
-// a point at angle a round the doorway, k times out from its edge
 vec2 doorRing(float k, float a) {
   float dx = DOOR_A * cos(a) * k;
   float dy = doorB(sin(a)) * sin(a) * k;
@@ -148,22 +139,24 @@ vec2 doorRing(float k, float a) {
 export const TYPE = { wrap: 0, door: 2 } as const;
 export const FLAG = { loop: 1, loose: 2, fray: 4, fine: 8, start: 16 } as const;
 
+// STRAND
+// door strands reuse s0 as start angle, ds as multiples of the doorway radius
 type Strand = {
-  s0: number; // door: its start angle round the doorway
+  s0: number;
   ph0: number;
-  ds: number; // door: its distance from the doorway's middle
+  ds: number;
   dph: number;
   depth: number;
   width: number;
   type: number;
-  b: number; // where in the build it threads in; below 0 it is always there
+  b: number;
   flags: number;
-  twist: number; // where along it a half twist sits, 0 for none
+  twist: number;
   hue: number;
-  mAmp: number; // meander in s
+  mAmp: number;
   mFreq: number;
-  key: number; // build order
-  layer: number; // which lies over which
+  key: number;
+  layer: number;
 };
 
 export class Form {
@@ -171,12 +164,10 @@ export class Form {
   readonly n: number;
   readonly coarseN: number;
   readonly fineN: number;
-  // the build share at which each strand is in, in order, and the running length of grass
   readonly order: Float32Array;
   readonly lengthTo: Float32Array;
   readonly fixed = NECK_N + RING_N;
   readonly fixedLen: number;
-  // where the chamber, the belly and the doorway start in the build
   readonly marks = new Float32Array(3);
 
   constructor() {
@@ -203,8 +194,7 @@ export class Form {
     });
 
     // NECK
-    // strands twisted into a cord from the stem down into the top of the chamber, and a few
-    // turns binding it
+    // strands twisted into a cord from the stem into the chamber, plus binding turns
     for (let i = 0; i < NECK_N; i++) {
       const s = base();
       const bind = i % 5 === 0;
@@ -219,8 +209,7 @@ export class Form {
     }
 
     // RING
-    // the first ring, round the top of the shoulder where the neck opens out; the body is
-    // woven down from it
+    // first ring round the shoulder; the body is woven down from it
     for (let i = 0; i < RING_N; i++) {
       const s = base();
       s.s0 = range(0.27, 0.31);
@@ -234,16 +223,15 @@ export class Form {
     }
 
     // DOORWAY
-    // short runs along the opening's edge, a little thicker there and ragged, many ends loose
+    // short runs along the edge, thicker and ragged, many ends loose
     for (let i = 0; i < DOOR_N; i++) {
       const s = base();
       s.type = TYPE.door;
       s.s0 = rnd() * TAU;
-      s.ds = 1 + Math.pow(rnd(), 1.5) * 0.45; // times out from the edge
+      s.ds = 1 + Math.pow(rnd(), 1.5) * 0.45;
       s.dph = range(0.5, 1.05) * Math.PI * (rnd() < 0.5 ? -1 : 1);
       s.width = range(0.006, 0.014);
       s.flags = FLAG.fine | (rnd() < 0.6 ? FLAG.loose : 0) | (rnd() < 0.45 ? FLAG.start : 0);
-      // the doorway is never built on its own: its edge is the finishing
       const j = rnd();
       s.layer = j * 0.2;
       s.key = 0.92 + 0.08 * j;
@@ -251,8 +239,7 @@ export class Form {
     }
 
     // BODY
-    // fine strands and broad strips laid evenly over the chamber: s is drawn by how much
-    // surface there is at each height
+    // fine strands and broad strips; s sampled by inverse CDF of surface area
     const CDF_N = 512;
     const S0 = 0.2;
     const cdf = new Float32Array(CDF_N + 1);
@@ -286,7 +273,6 @@ export class Form {
       const warp = rnd() < 0.4;
       const len = broad ? range(0.9, 1.8) : range(0.5, 1.5);
       s.s0 = s0;
-      // round it, down it, or tangled across at a slant
       const slant = !warp && rnd() < 0.35;
       s.dph = warp
         ? range(-0.6, 0.6)
@@ -309,7 +295,6 @@ export class Form {
       const front = 0.5 + 0.5 * Math.cos(pm - DOOR.ph);
       const j = rnd();
       s.key = Math.min(0.9, Math.max(0, 0.84 * smoothstep(0.2, 1, sm) + 0.06 * front + 0.06 * j));
-      // the layering the finished nest was tuned with: which strand lies over which
       const dx = Math.atan2(Math.sin(pm - DOOR.ph), Math.cos(pm - DOOR.ph)) * DOOR_R;
       const dy = (sm - DOOR.s) * DOOR_SPD;
       const near = Math.hypot(dx, dy) < DOOR.r + 0.14;
@@ -323,27 +308,22 @@ export class Form {
       weave.push(s);
     }
 
-    // each strand is laid over the ones before it, so the newest lie on top
     weave.sort((a, b) => a.layer - b.layer);
     weave.forEach((s, rank) => {
       s.depth = -0.05 + 0.058 * (rank / weave.length) + range(-0.002, 0.002);
-      // the doorway's edge sits in with the body, not proud of it
       if (s.type === TYPE.door) s.depth = -0.016 + range(-0.004, 0.03) * 0.4;
     });
-    // and threaded in from the neck down, the doorway's lip last
     weave.sort((a, b) => a.key - b.key);
     const span = 1 - WIN;
     weave.forEach((s, rank) => {
       s.b = (rank / (weave.length - 1)) * span;
     });
-    // where the chamber, the belly and the doorway start in the build
     const markKey = [0.84 * smoothstep(0.2, 1, 0.45), 0.84 * smoothstep(0.2, 1, 0.8), 0.91];
     for (let m = 0; m < 3; m++) {
       const hit = weave.find((s) => s.key >= markKey[m]);
       this.marks[m] = hit ? hit.b : 1;
     }
 
-    // the lengths, in build order, for the hud
     this.order = new Float32Array(weave.length);
     this.lengthTo = new Float32Array(weave.length + 1);
     let fixedLen = 0;
@@ -355,9 +335,7 @@ export class Form {
     this.fixedLen = fixedLen;
 
     // DRAW ORDER
-    // the build lives in each strand's own data, so the buffer is free to be ordered for
-    // drawing: everything coarse first, then the fine strands shuffled, so drawing fewer of
-    // them thins the whole nest evenly
+    // coarse first, then fine shuffled, so drawing a prefix thins the nest evenly
     const coarse = fixed.concat(
       weave.filter((s) => !(s.flags & FLAG.fine) || s.type !== TYPE.wrap),
     );
@@ -414,7 +392,6 @@ export class Form {
     return surf(s.s0 + s.ds * u, s.ph0 + s.dph * u, o);
   }
 
-  // how many strands are in at a build share
   count(build: number) {
     let lo = 0;
     let hi = this.order.length;

@@ -1,6 +1,5 @@
 // STAGE
-// the page side: watches size, visibility and the pointer, and passes them to the scene.
-// the scene runs in a worker on an offscreen canvas where it can, on this thread otherwise
+// page side: size, visibility, pointer; scene in a worker when possible, else here
 
 const TAP_MS = 250;
 const TAP_PX = 6;

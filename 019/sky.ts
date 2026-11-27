@@ -1,7 +1,5 @@
 // SKY
-// the renderer and its loop. no dom in here, so it runs in a worker on an offscreen canvas
-// or on the page as a fallback. a pass runs at full rate; between passes, once the trail has
-// faded and the camera is still, the loop sleeps until the next meteor is due
+// renderer and loop, no dom: runs in a worker or on the page; sleeps between passes
 
 import { Director, SHOT, SHOT_NAMES } from "./director";
 import {
@@ -31,31 +29,34 @@ import {
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
 const BAKE_PX = 512;
-const BAKE_OCT = 5; // octaves in the cloud sheet, a uniform so the loop is not unrolled
-const FIRST_MS = 900; // the first meteor arrives this long after the sky is up
-const BEAT_MS = 1800; // between passes
-const AUTO_PASSES = 7; // after this many untouched passes the sky waits for a tap
-const SLOW_MS = 24; // frames slower than this lower the resolution
+const BAKE_OCT = 5;
+const FIRST_MS = 900;
+const BEAT_MS = 1800;
+const AUTO_PASSES = 7;
+const SLOW_MS = 24;
 const MIN_SCALE = 0.55;
-// entry angles below the horizon, rad, in turn: medium, steep, grazing, shallow, steep-ish
+// ENTRY ANGLES
+// rad below the horizon, cycled per pass
 const GAMMAS = [0.5, 0.82, 0.18, 0.32, 0.66, 0.42] as const;
 const STRANDS_MAIN = 8;
 const STRANDS_FRAG = 2;
 const SPRITES = MAX_BODIES + 3;
-const CELL_CSS_PX = [6, 4.5]; // halftone cell, wide and narrow screens; change for a coarser screen
-const NARROW_PX = 640; // the shared layout moves the title to the top below this
-const BOIL_HZ = 8; // speed lines are redrawn this often
-const IMPACT_FRAMES = 3; // inverted, inverted, flat accent
-// speed lines per shot: radial focus lines, parallel streaks
+const CELL_CSS_PX = [6, 4.5]; // change for a coarser screen
+const NARROW_PX = 640;
+const BOIL_HZ = 8;
+const IMPACT_FRAMES = 3;
+// SPEED LINES
+// per shot: radial focus lines, parallel streaks
 const RADIAL = [0, 0, 0.7, 0, 0, 0];
 const PARALLEL = [0, 0.4, 0, 1, 0, 0];
 const SPEED0_KMS = 19;
 const HUD_MS = 110;
 const SUN = norm([0.62, -0.06, -0.78]);
 const MOON = norm([0.16, 0.36, -0.92]);
-const SMOKE_S = 4.5; // the debris cloud lingers this long
-const WIND = [0.03, 0.004, 0.02] as const; // km/s², drifts the train
-// strand params: phase, spread, width, hue
+const SMOKE_S = 4.5;
+const WIND = [0.03, 0.004, 0.02] as const;
+// STRANDS
+// params: phase, spread, width, hue
 const STRAND = [
   [0, 0, 1, 0],
   [0.1, 0.7, 0.55, 0.08],
@@ -64,14 +65,14 @@ const STRAND = [
   [0.85, 1.7, 0.4, 0.42],
   [0.45, 2.2, 0.35, 0.55],
   [0.72, 1.1, 0.3, 0.12],
-  [0.2, 0.3, 5, 0.03], // the soft glow round it all
+  [0.2, 0.3, 5, 0.03],
 ] as const;
 
 export type Hud = {
   alt: number;
   speed: number;
   mass: number;
-  left: number; // share of the mass still there
+  left: number;
   entry: number;
   phase: string;
   shot: string;
@@ -107,7 +108,7 @@ export class Sky {
   private spriteBuf: WebGLBuffer;
   private sprites = new Float32Array(SPRITES * 10);
   private spriteN = 0;
-  // speed lines and the impact frame
+  // SPEED LINES, IMPACT
   private focus = new Float32Array(4);
   private flow = new Float32Array([1, 0]);
   private ndc = new Float32Array(2);
@@ -133,13 +134,13 @@ export class Sky {
   private scale = 1;
   private slow = 0;
   private frames = 0;
-  private due = 0; // when the next meteor arrives, performance.now ms, 0 when none
+  private due = 0;
   private passN = 0;
   private untouched = 0;
   private waiting = false;
   private gamma: number = GAMMAS[0];
   private flash = 0;
-  private flashGoal = 0; // the flash rises to this, then falls
+  private flashGoal = 0;
   private hudAt = 0;
   private hud: Hud = {
     alt: 0,
@@ -212,7 +213,8 @@ export class Sky {
     this.attr(1, 3, SPARK_STRIDE * 4, 12);
     this.attr(2, 4, SPARK_STRIDE * 4, 24);
 
-    // SPRITES and FLARES: position, dir or tint, radius, light, kind, seed
+    // SPRITES, FLARES
+    // layout: position, dir or tint, radius, light, kind, seed
     this.spriteVao = this.vao();
     this.spriteBuf = this.instanced(this.sprites.byteLength, 0, 3, 40, 0, gl.DYNAMIC_DRAW);
     this.attr(1, 3, 40, 12);
@@ -282,7 +284,8 @@ export class Sky {
     this.wake();
   }
 
-  // the title and hud blocks, css px from the bottom left of the canvas
+  // TYPE BOXES
+  // css px from the bottom left of the canvas
   type(b: number[]) {
     this.boxes.set(b);
     this.wake();
@@ -295,7 +298,6 @@ export class Sky {
   }
 
   // INPUT
-  // a tap, a click or Enter sends the next meteor, or cuts short the one in flight
   press(_x: number, _y: number) {
     this.wake();
   }
@@ -326,7 +328,6 @@ export class Sky {
 
   private launch() {
     this.due = 0;
-    // each pass picks its own angle: a set order for variety, a little jitter on top
     const n = this.passN++;
     if (n > 0) this.gamma = GAMMAS[n % GAMMAS.length] + (Math.random() - 0.5) * 0.08;
     this.untouched++;
@@ -347,7 +348,8 @@ export class Sky {
     this.raf = 0;
     if (!this.visible || this.dead) return;
     const gl = this.gl;
-    // ?hold: the opening frame only, for the still
+    // HOLD
+    // ?hold renders the opening frame only, for the still
     if (this.hold && this.drawn) return;
     if (!this.linked) {
       for (const p of this.passes) if (this.parallel && busy(gl, p)) return this.wake();
@@ -367,7 +369,6 @@ export class Sky {
     const f = this.fall;
     const quiet = f.quiet();
     const busyNow = !quiet;
-    // the sky moves on at the rate of the shot it is in, then the camera finds it
     const rate = this.reduced ? 0.6 : this.dir.rate;
     const close = this.dir.shot === SHOT.chase;
     if (close && f.closeUp === 1) f.ripSoon();
@@ -394,7 +395,7 @@ export class Sky {
     this.report(now);
 
     // SLEEP
-    // between passes, with nothing moving, wait on a timer for the next one
+    // nothing moving between passes: wait on a timer instead of rAF
     const still = quiet && this.dir.settled() && this.flash === 0;
     if (!f.active && !this.due && !this.waiting && !this.hold) {
       if (this.untouched >= AUTO_PASSES) this.waiting = true;
@@ -429,7 +430,6 @@ export class Sky {
     const h = Math.max(1, Math.round(this.cssH * dpr));
     this.canvas.width = w;
     this.canvas.height = h;
-    // the meteor layer at about one pixel per css pixel
     const k = Math.min(1, 1.25 / dpr);
     const lw = Math.max(1, Math.round(w * k));
     const lh = Math.max(1, Math.round(h * k));
@@ -566,8 +566,8 @@ export class Sky {
     gl.uniform1f(p.u.uLine, W / this.cssW);
     const narrow = this.cssW <= NARROW_PX;
     gl.uniform1f(p.u.uCell, (CELL_CSS_PX[narrow ? 1 : 0] * W) / this.cssW);
-    // the tone thins out round the title and the hud, and in bands along the edges they sit
-    // on: the bottom on wide screens, both ends on narrow ones where the title is at the top
+    // TYPE MASK
+    // tone thins round title, hud and edge bands (bottom when wide, both ends when narrow)
     const h = this.cssH;
     gl.uniform4fv(p.u.uBox, this.boxes);
     if (narrow) gl.uniform4f(p.u.uBand, 40 / h, 220 / h, 1 - 300 / h, 1 - 190 / h);
@@ -607,6 +607,7 @@ export class Sky {
     this.trailN = n;
 
     // SPRITES
+    // slot 9: wear 0-15 in the integer part, seed in the fraction, +100 for the main body
     const sp = this.sprites;
     let k = 0;
     for (let b = 0; b < MAX_BODIES; b++) {
@@ -619,29 +620,26 @@ export class Sky {
       sp[o + 3] = f.vx[b] / v;
       sp[o + 4] = f.vy[b] / v;
       sp[o + 5] = f.vz[b] / v;
-      // a vaporising piece shrinks to nothing as it goes
       const fz = f.fuse0[b] > 0 ? Math.max(0, f.fuse[b] / f.fuse0[b]) : 1;
       sp[o + 6] = b ? pieceR(f.mass[b]) * Math.sqrt(fz) : visR(f.mass[b]);
-      // heads ease in as they appear and out as the last of the mass goes
       const ease =
         Math.min(1, (f.t - f.born[b]) / (b ? 0.04 : 0.5)) * Math.min(1, f.mass[b] / (b ? 2 : 30));
       sp[o + 7] = Math.max(b ? 0.15 : 0.45, lit(f.lum[b])) * (b ? 0.7 : 1) * ease;
       sp[o + 8] = 0;
-      // how worn it is rides in the whole part: 0 fresh to 15 eaten down to the burst
       const worn = Math.min(1, (1 - f.mass[b] / MASS0_KG) / 0.65);
-      sp[o + 9] = Math.floor(worn * 15) + f.seed[b] * 0.99 + (b ? 0 : 100); // 100 marks the main body
+      sp[o + 9] = Math.floor(worn * 15) + f.seed[b] * 0.99 + (b ? 0 : 100);
     }
     // AIRBURST
-    // the debris cloud first, so the fireball blooms in front of it, then the shock ring
+    // debris cloud first so the fireball draws in front, then the shock ring
     const age = f.t - f.burst[4];
     const e = f.burst[3];
     if (e > 0 && age < SMOKE_S) {
       const o = k++ * 10;
-      const go = 3.2 * (1 - Math.exp(-age * 1.4)); // km the debris carries on along the path
+      const go = 3.2 * (1 - Math.exp(-age * 1.4));
       sp[o] = f.burst[0] + f.burst[5] * go + WIND[0] * 14 * age;
       sp[o + 1] = f.burst[1] + f.burst[6] * go - 0.06 * age;
       sp[o + 2] = f.burst[2] + f.burst[7] * go + WIND[2] * 14 * age;
-      sp[o + 3] = Math.exp(-age / 1.1); // heat
+      sp[o + 3] = Math.exp(-age / 1.1);
       sp[o + 4] = 0;
       sp[o + 5] = 0;
       sp[o + 6] = (1 + 3.4 * (1 - Math.exp(-age * 0.8))) * e;
@@ -655,7 +653,7 @@ export class Sky {
       sp[o] = f.burst[0];
       sp[o + 1] = f.burst[1];
       sp[o + 2] = f.burst[2];
-      sp[o + 3] = Math.min(1, age / 2.4); // how far it has cooled
+      sp[o + 3] = Math.min(1, age / 2.4);
       sp[o + 4] = 0;
       sp[o + 5] = 0;
       sp[o + 6] = (2 + 8 * (1 - Math.exp(-age * 2.2))) * e;
@@ -686,9 +684,7 @@ export class Sky {
   }
 
   // SPEED LINES
-  // focus lines round the head on the low angle and as a cut lands, parallel streaks along
-  // its flight while tracking and chasing, all scaled by its speed; the airburst throws its
-  // own focus lines out from where it went
+  // focus lines on the low angle and cuts, streaks along the flight, scaled by speed
   private lines(dt: number) {
     const f = this.fall;
     const d = this.dir;
@@ -708,7 +704,6 @@ export class Sky {
       const sy = this.ndc[1];
       fo[0] = sx;
       fo[1] = sy;
-      // a cut to the low angle lands with a burst of focus lines; any cut eases the streaks in
       fo[2] = (RADIAL[s] + (s === SHOT.low ? this.cutLines * 0.6 : 0)) * k;
       fo[3] = PARALLEL[s] * k * (1 - this.cutLines);
       const e = d.eye;
@@ -738,7 +733,6 @@ export class Sky {
     }
   }
 
-  // a world point to ndc, into this.ndc; false when behind the camera
   private project(x: number, y: number, z: number) {
     const d = this.dir;
     const e = d.eye;
@@ -800,7 +794,8 @@ export class Sky {
   }
 }
 
-// light as drawn, softened so the brightest moments do not all read the same
+// TONE CURVE
+// compresses luminosity so bright moments still differ
 function lit(l: number) {
   return (2.2 * Math.sqrt(l)) / (1 + 0.3 * l);
 }

@@ -10,20 +10,19 @@ import { benchY } from "./bench";
 import { PUFF_FS, PUFF_VS } from "./shaders";
 
 // FLOUR IN THE AIR
-// a fine dust that puffs up, slows, falls back and settles on the bench. sizes are in pixels so it
-// stays dust at any distance; a few rare clumps drop fast. fixed pool, nothing allocated after start
+// fixed particle pool, point sizes in pixels so dust stays fine at any distance
 
 const COUNT = 1400;
 const CLUMP_SHARE = 0.04;
 const SIZE_PX = { dust: [0.8, 1.8], clump: [2.2, 3.0] };
 const LIFE_S = { dust: [0.8, 1.5], clump: [0.6, 1.0] };
-const DRAG_PER_S = 4.5; // the puff spends its push quickly
+const DRAG_PER_S = 4.5;
 const GRAVITY = { dust: 1.6, clump: 7 };
 const SWIRL = 0.5;
-const FADE_S = 0.3; // how long settled dust stays visible on the bench
+const FADE_S = 0.3; // change settled dust fade here
 const ALPHA = { dust: 0.95, clump: 0.85 };
 const COLOR = "#fff6e8";
-const BRIGHT = 2.2; // the scene is tone mapped, sunlit flour has to sit above white
+const BRIGHT = 2.2; // change dust brightness, above 1 to survive tone mapping
 
 export class Puff {
   readonly points: Points;
@@ -79,7 +78,6 @@ export class Puff {
     return this.seed / 2147483647;
   }
 
-  // a ring at (x, y, z), radii rx/rz, n grains pushed out and up at speed
   burst(x: number, y: number, z: number, rx: number, rz: number, n: number, speed: number) {
     for (let k = 0; k < n; k++) {
       const p = this.next;
@@ -113,7 +111,6 @@ export class Puff {
     this.geo.attributes.aAlpha.needsUpdate = true;
   }
 
-  // true while any grain is still up or fading; the render loop stays awake until then
   step(dt: number) {
     if (!this.alive) return false;
     const { x, v, age, span, life, phase, fall } = this;
@@ -127,7 +124,6 @@ export class Puff {
       const o = p * 3;
       const floor = benchY(x[o], x[o + 2]) + 0.006;
       const landed = x[o + 1] <= floor;
-      // settled grains get a short fade on the bench, airborne ones live their span
       const t = landed ? Math.max(age[p] / span[p], 1 - FADE_S / span[p]) : age[p] / span[p];
       if (t >= 1) {
         life[p] = -1;

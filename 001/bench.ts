@@ -1,6 +1,5 @@
 // BENCH
-// what the dough and towel rest on: the board top at 0, the worktop a board's thickness lower,
-// a rounded step between so dough pulled past the edge slumps over it instead of floating
+// height field: board top at 0, rounded-box sdf smoothstep down to the worktop
 export const BENCH = { hw: 2.95, hd: 1.95, r: 0.3, drop: 0.13, edge: 0.14 };
 
 export function benchY(x: number, z: number) {

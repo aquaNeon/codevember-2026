@@ -3,8 +3,8 @@ import { mountNav } from "../shared/nav";
 
 const DAY = 12;
 const IDLE_MS = 1200;
-const GPU_WARM_MS = 1500; // earliest start after navigation
-const CM_PER_UNIT = 11; // the feather is one unit long
+const GPU_WARM_MS = 1500;
+const CM_PER_UNIT = 11;
 const WINDS = ["calm", "breath", "breeze", "gust"];
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
@@ -18,7 +18,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   const fallen = root.querySelector<HTMLElement>("[data-cv-fallen]");
   const wind = root.querySelector<HTMLElement>("[data-cv-wind]");
   // STILL
-  // the same drawing, flat, with a css shadow
   const still = () => {
     if (root.hasAttribute("data-cv-still")) return;
     root.setAttribute("data-cv-still", "");
@@ -58,7 +57,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
 function afterLoad<T>(fn: () => Promise<T>): Promise<T> {
   return new Promise<void>((done) => {
-    // and give a cold gpu process time to start before the first webgl call
+    // GPU WARM-UP
+    // let a cold gpu process start before the first webgl call
     const ready = () => setTimeout(done, Math.max(0, GPU_WARM_MS - performance.now()));
     const idle = () =>
       "requestIdleCallback" in window

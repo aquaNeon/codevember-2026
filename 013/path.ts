@@ -1,5 +1,5 @@
 // CLASSICAL LABYRINTH
-// seven circuits walked 3-2-1-4-7-6-5, then a spiral into the centre; garden units, one lane = 1, y up
+// seven circuits walked 3-2-1-4-7-6-5, then a spiral in; one lane = 1 unit, y up
 export const R_OUT = 9;
 export const R_CENTRE = 2;
 export const STEP = 0.04;
@@ -8,22 +8,25 @@ const MAX_RADIUS = 20;
 
 const BOTTOM = -Math.PI / 2;
 const TAU = Math.PI * 2;
-// where each group of rings stops short of the bottom seam, in radians
-const LEFT_A = BOTTOM - 0.42; // rings 1-3
-const LEFT_B = BOTTOM - 0.68; // rings 4-7
-const RIGHT_A = BOTTOM + 0.4; // rings 1-4
-const RIGHT_B = BOTTOM + 0.7; // rings 5-7
-const GATE_OUT = 2.3; // how far the entrance runs out past the turn
-const GOAL_TURN = 0.8; // widest radius the last lane bends at
+// SEAM
+// ring ends short of the bottom seam, rad: left 1-3 / 4-7, right 1-4 / 5-7
+const LEFT_A = BOTTOM - 0.42;
+const LEFT_B = BOTTOM - 0.68;
+const RIGHT_A = BOTTOM + 0.4;
+const RIGHT_B = BOTTOM + 0.7;
+const GATE_OUT = 2.3;
+const GOAL_TURN = 0.8;
 // CENTRE SPIRAL
-// the last lane winds in to the middle; one wrap per pitch, raked like the rings it replaces
+// the last lane winds in to the middle, one wrap per pitch
 export const SPIRAL_PITCH = 0.7;
-const LOOP_R = 0.12; // the closed circle at the very middle; under half a lane, so the centre fills
-const SPIRAL_PULL = 2; // how hard the lane is steered onto the spiral
-const BEND_REACH = 0.6; // lanes either side a turn is felt from
+const LOOP_R = 0.12; // change centre circle here; keep under half a lane
+const SPIRAL_PULL = 2;
+const BEND_REACH = 0.6;
 
 const ring = (k: number) => R_OUT + HALF_LANE - k;
 
+// PATH
+// circuit 0 gate, 1-7 rings, 8 centre; soft 0 walled, 1 on the spiral
 export type Path = {
   n: number;
   length: number;
@@ -32,14 +35,14 @@ export type Path = {
   tx: Float32Array;
   ty: Float32Array;
   s: Float32Array;
-  circuit: Uint8Array; // 0 gate, 1-7 rings, 8 centre
-  bend: Float32Array; // curvature, spread ahead and behind so the rake slows before a turn
-  soft: Float32Array; // 0 in a walled lane, 1 on the centre spiral, which has no walls
-  half: Float32Array; // half the lane width
-  spiral: number; // first sample of the spiral
-  loop: number; // arc length where the closing circle starts; past the end the rake goes round it again
+  circuit: Uint8Array;
+  bend: Float32Array;
+  soft: Float32Array;
+  half: Float32Array;
+  spiral: number;
+  loop: number;
   loopLen: number;
-  gate: [number, number, number, number]; // entrance segment, outside end first
+  gate: [number, number, number, number];
 };
 
 export function build(): Path {
@@ -61,6 +64,7 @@ export function build(): Path {
     }
   };
 
+  // TURN
   // half-turn bulging into the seam; phi 0 is the outer ring, pi the inner one
   const turn = (
     a: number,
@@ -115,7 +119,7 @@ export function build(): Path {
   arc(5, LEFT_B + TAU, RIGHT_B);
 
   // GOAL
-  // out of the last turn, then steered onto a spiral that winds clockwise in to the middle
+  // out of the last turn, then steered onto a clockwise spiral into the middle
   turn(RIGHT_B, -1, 3, 1.5, 0, Math.PI / 2, 8);
   let x = xs[xs.length - 1];
   let y = ys[ys.length - 1];
@@ -130,10 +134,12 @@ export function build(): Path {
     wound += Math.abs(Math.atan2(Math.sin(t - th), Math.cos(t - th)));
     th = t;
     const want = Math.max(LOOP_R, r0 - (SPIRAL_PITCH * wound) / TAU);
-    // wound in as far as the circle: stop steering, the loop closes at the radius reached
+    // LOOP CLOSE
+    // stop steering at the circle; the loop closes at the radius reached
     if (want <= LOOP_R) break;
     if (spiral < 0 && r < R_CENTRE) spiral = xs.length;
-    // clockwise tangent plus a pull toward the spiral's radius at this angle
+    // STEER
+    // clockwise tangent plus a pull toward the spiral radius at this angle
     const err = SPIRAL_PULL * (want - r);
     const aim = Math.atan2(-Math.cos(t) + err * Math.sin(t), Math.sin(t) + err * Math.cos(t));
     const d = Math.atan2(Math.sin(aim - hd), Math.cos(aim - hd));
@@ -145,7 +151,7 @@ export function build(): Path {
   }
 
   // LOOP
-  // one exact clockwise turn round the middle, so the rake can circle it as long as it likes
+  // one exact clockwise turn round the middle, so the rake can circle it
   const loopAt = xs.length - 1;
   const a0 = Math.atan2(y, x);
   const lr = Math.hypot(x, y);
@@ -219,20 +225,22 @@ export function build(): Path {
     }
     p.bend[i] = sum / c;
   }
-  // the loop bends no harder than the spiral's end, so the rake keeps its pace round it
+  // LOOP BEND
+  // capped at the spiral's end so the rake keeps pace round it
   for (let i = loopAt; i < n; i++) p.bend[i] = p.bend[Math.max(0, loopAt - w)];
   return p;
 }
 
 // STRIP
-// three vertices per sample (left edge, centre, right edge) as x, y, s, d, pivot distance, soft; depth |d| keeps the nearest lane
+// 3 verts per sample (left, centre, right): x, y, s, d, pivot, soft; |d| depth-tests
 export function strip(p: Path) {
   const v = new Float32Array(p.n * 18);
   for (let i = 0; i < p.n; i++) {
     const hw = p.half[i];
     const nx = -p.ty[i] * hw;
     const ny = p.tx[i] * hw;
-    // signed curvature, left turns positive; gives each vertex its distance to the turn's pivot
+    // PIVOT
+    // signed curvature, left positive; gives each vertex its pivot distance
     const a = Math.max(0, i - 1);
     const b = Math.min(p.n - 1, i + 1);
     const k = (p.tx[a] * p.ty[b] - p.ty[a] * p.tx[b]) / Math.max(p.s[b] - p.s[a], 1e-6);
@@ -253,7 +261,6 @@ export function strip(p: Path) {
   return { v, idx };
 }
 
-// nearest sample to (x, y) within [i0, i1]
 export function nearest(p: Path, x: number, y: number, i0 = 0, i1 = p.n - 1) {
   let best = -1;
   let bd = Infinity;
@@ -275,12 +282,12 @@ export function dist(p: Path, i: number, x: number, y: number) {
   return Math.hypot(p.x[i] - x, p.y[i] - y);
 }
 
-// arc length past the end goes round the closing circle again
+// WRAP
+// past the end, arc length goes round the closing circle again
 export function wrapS(p: Path, s: number) {
   return s > p.length ? p.loop + ((s - p.loop) % p.loopLen) : Math.max(s, 0);
 }
 
-// sample index at arc length s
 export function at(p: Path, s: number) {
   const t = wrapS(p, s);
   let lo = 0;

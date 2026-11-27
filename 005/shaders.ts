@@ -1,9 +1,9 @@
 export const MAX_COLONIES = 32;
-export const MAX_AGE_S = 12; // a colony stops spreading at this age
-export const TAU_S = 4.5; // spread slows with age on this time scale
-const SENT = "64.0"; // empty: never reached
-const PAST = "60.0"; // how far back arrival times are kept
-const CUP_S = "3.0"; // a spot has to be covered this long before cups rise on it
+export const MAX_AGE_S = 12;
+export const TAU_S = 4.5; // change age slowdown here
+const SENT = "64.0";
+const PAST = "60.0";
+const CUP_S = "3.0"; // change cup delay here
 
 const DEFS = `
 #define MAX ${MAX_AGE_S.toFixed(1)}
@@ -48,7 +48,8 @@ float fbm(vec2 p) {
   }
   return s / 0.97;
 }
-// F1, F2, hash of the nearest cell, and the offset to its point
+// WORLEY
+// F1, F2, nearest cell hash; off is the offset to its point
 void worley(vec2 p, int salt, out vec3 f, out vec2 off) {
   ivec2 i = ivec2(floor(p));
   vec2 fp = fract(p);
@@ -71,24 +72,19 @@ void worley(vec2 p, int salt, out vec3 f, out vec2 off) {
 `;
 
 // FOLIOSE LOBES
-// cells in log-polar space round the seed: they widen with the radius, so lobes come out
-// small and crowded in the middle and broad and flat at the rim
+// log-polar cells round the seed, so lobes widen with the radius
 const LOBES = `
-const float LOBE_N = 30.0; // scallops round the margin
-const float FINE_N = 46.0; // small lobes, cells round a ring
-const float BROAD_N = 17.0; // broad tongues laid over them
-const float LOBE_SQ = 0.85; // under 1: lobes run a little longer along the radius than across
-// position across the margin lobe this direction falls in (-1..1), and that lobe's hash
+const float LOBE_N = 30.0; // change scallop count here
+const float FINE_N = 46.0;
+const float BROAD_N = 17.0;
+const float LOBE_SQ = 0.85;
 vec2 scallop(vec2 d, float salt) {
   float u = (atan(d.y, d.x) / (2.0 * PI) + 0.5) * LOBE_N;
   float j = mod(floor(u), LOBE_N);
   return vec2(fract(u) * 2.0 - 1.0, h1(ivec2(int(j) + int(salt) * 3, 7)));
 }
-// soft lobes: each cell is a round pillow of its own size, and neighbours blend with a smooth
-// minimum instead of meeting at a hard edge. s: 0 at a lobe's middle, 1 at its rim, more in
-// the gaps; g: the soft-weighted way out from the lobe middle, in screen directions, ~0..1;
-// out: how much that way points away from the seed; hsh: the nearest lobe's hash;
-// crease: the soft valley where two lobes press together
+// SOFT LOBES
+// per-cell pillows joined by smooth-min; s 0 middle to 1 rim, crease where lobes meet
 const float SOFT_K = 7.0;
 void plates(vec2 d, int salt, float N, out float s, out vec2 g, out float out_, out float hsh,
             out float crease) {
@@ -97,7 +93,6 @@ void plates(vec2 d, int salt, float N, out float s, out vec2 g, out float out_, 
   vec2 et = vec2(-er.y, er.x);
   float k = N / (2.0 * PI);
   vec2 q = vec2(log(r) * k * LOBE_SQ, (atan(d.y, d.x) / (2.0 * PI) + 0.5) * N);
-  // knock the rings out of line; the noise follows the direction, so it wraps cleanly
   q.x += 0.9 * vnoise(er * 2.3 + float(salt)) + 0.5 * vnoise(er * 5.1 - float(salt));
   ivec2 i = ivec2(floor(q));
   vec2 fp = fract(q);
@@ -122,7 +117,8 @@ void plates(vec2 d, int salt, float N, out float s, out vec2 g, out float out_, 
       }
     }
   s = -log(max(sum, 1e-6)) / SOFT_K;
-  // where two pillows press together the soft minimum drops below the nearest one
+  // CREASE
+  // smooth-min drops below the nearest pillow where two press together
   crease = smoothstep(0.03, 0.12, best - s);
   vec2 a = acc / max(sum, 1e-6);
   g = a.x * er + a.y * et;
@@ -130,7 +126,6 @@ void plates(vec2 d, int salt, float N, out float s, out vec2 g, out float out_, 
 }`;
 
 // SPECKS
-// old dead fragments and grit on the stone; living colonies creep round them, then over
 const SPECKS = `
 vec2 speck(vec2 pu) {
   vec3 f;
@@ -142,45 +137,42 @@ vec2 speck(vec2 pu) {
 }`;
 
 // SPREAD
-// state: r seconds until this texel is covered (negative once it is), g colony age on
-// arrival, b colony slot (-1 empty), a where two colonies meet.
-// a texel takes the earliest arrival any neighbour offers; colonies cannot overgrow each other
+// rgba: seconds to cover, age on arrival, colony slot, seam; earliest neighbour wins
 export const GROW_FS = `#version 300 es
 precision highp float;
 precision highp int;
 ${DEFS}
 uniform sampler2D uPrev;
-uniform vec4  uSeeds[NCOL]; // sim px xy, species, size
-uniform vec4  uNew;         // sim px xy, slot, 1 while planting
-uniform float uShift;       // seconds passed since the last pass
-uniform float uSpeed;       // young spread speed, sim px per second
-uniform float uUnit;        // sim px per unit
+uniform vec4  uSeeds[NCOL];
+uniform vec4  uNew;
+uniform float uShift;
+uniform float uSpeed;
+uniform float uUnit;
 uniform float uClear;
-uniform vec4  uAvoid[2];    // sim px boxes kept mostly clear: the title and the hud
+uniform vec4  uAvoid[2];
 out vec4 outColor;
 ${HASH}
 ${LOBES}
 ${SPECKS}
+// NEIGHBOURS
 // king and knight moves, so fronts come out round instead of octagonal
 const ivec2 OFFS[16] = ivec2[16](ivec2(1, 0), ivec2(-1, 0), ivec2(0, 1), ivec2(0, -1),
   ivec2(1, 1), ivec2(-1, 1), ivec2(1, -1), ivec2(-1, -1),
   ivec2(2, 1), ivec2(1, 2), ivec2(-1, 2), ivec2(-2, 1),
   ivec2(-2, -1), ivec2(-1, -2), ivec2(1, -2), ivec2(2, -1));
 
-// how fast colony id creeps into p, before slowing with age: lobes are fast radial lanes,
-// and they fork as the rosette widens
+// SPEED
+// per-colony speed field; lobes are fast radial lanes
 float reach(vec2 p, int id) {
   vec4 s = uSeeds[id];
   vec2 d = (p - s.xy) / uUnit;
   vec2 dir = normalize(d + 1e-4);
   float salt = float(id) * 17.3;
   vec2 pu = p / uUnit;
-  // a few broad bulges, then a patchy stone, so fronts come out ragged
   float bulge = 1.0 + 0.7 * (vnoise(dir * 1.3 + salt) - 0.5) + 0.4 * (vnoise(dir * 3.1 - salt) - 0.5);
   float ground = 0.4 + 1.2 * fbm(pu * 0.45 + salt);
   float grit = 1.0 - 0.88 * speck(pu).x;
   float lane = 0.66;
-  // foliose lobes push ahead at their middles, so the margin scallops
   if (s.z < 1.5) {
     vec2 L = scallop(d, salt);
     lane = (0.6 + 0.5 * sqrt(1.0 - abs(L.x))) * (0.82 + 0.36 * L.y);
@@ -205,11 +197,10 @@ void main() {
   float R = R0;
   float a = a0;
   float id = c.b;
-  // an empty or spent texel can be taken by anyone still spreading
   float cmp = (own && a0 < MAX) ? R0 : 2.0 * SENT;
   float border = 0.0;
-  // the speed field only depends on the colony, so it is worked out once for each of the
-  // (at most) two colonies round this texel; keeps the unrolled loop small
+  // SPEED CACHE
+  // speed field evaluated once per colony (at most two here), keeps the unrolled loop small
   vec4 ns[16];
   float idA = -1.0;
   float idB = -1.0;
@@ -249,6 +240,7 @@ void main() {
   else outColor = vec4(R, a, id, border);
 }`;
 
+// COPY
 // carries the state over to a new size
 export const COPY_FS = `#version 300 es
 precision highp float;
@@ -260,13 +252,13 @@ void main() {
 }`;
 
 // STONE
-// drawn once per size: weathered limestone with its own light
+// drawn once per size, not per frame
 export const STONE_FS = `#version 300 es
 precision highp float;
 precision highp int;
 ${DEFS}
 uniform vec2  uRes;
-uniform float uUnit; // canvas px per unit
+uniform float uUnit;
 out vec4 outColor;
 ${HASH}
 ${SPECKS}
@@ -291,10 +283,10 @@ void main() {
   vec3 hi = vec3(0.8, 0.78, 0.74);
 #endif
   vec3 col = mix(lo, hi, smoothstep(0.25, 0.75, fbm(p * 0.12 + 3.0)));
-  // old grey weathering, faint
+  // WEATHERING
   col *= 1.0 - 0.07 * smoothstep(0.55, 0.8, fbm(p * 0.25 + 11.0));
 
-  // pores with a shadowed upper lip
+  // PORES
   vec3 w;
   vec2 o;
   worley(p * 1.4, 3, w, o);
@@ -303,7 +295,6 @@ void main() {
   col *= 1.0 - pit * (0.16 + 0.12 * lip);
 
   // DEAD LICHEN
-  // grey-black and chalky fragments, and pin dots of old fruit
   vec2 sk = speck(p);
   vec3 dead = sk.y < 0.55 ? vec3(0.34, 0.33, 0.31) : vec3(0.88, 0.87, 0.83);
   col = mix(col, dead * (0.8 + 0.4 * vnoise(p * 14.0)), sk.x * 0.85);
@@ -312,7 +303,7 @@ void main() {
   float pin = step(dt.z, 0.08) * smoothstep(dotR, dotR * 0.5, length(fract(p * 2.5) - 0.2 - 0.6 * dt.xy) / 2.5);
   col = mix(col, vec3(0.18, 0.17, 0.16), pin * 0.8);
 
-  // mineral flecks
+  // FLECKS
   float g = h1(ivec2(floor(p * 11.0)));
   col *= g > 0.988 ? 0.78 : (g < 0.01 ? 1.08 : 1.0);
   col *= 0.86 + 0.28 * diff;
@@ -320,8 +311,7 @@ void main() {
 }`;
 
 // LICHEN
-// colours: foliose orange (Xanthoria), foliose sage (Flavoparmelia),
-// crustose chartreuse on black (map lichen), crustose grey (Lecanora)
+// Xanthoria, Flavoparmelia, map lichen (Rhizocarpon), Lecanora
 export const SHOW_FS = `#version 300 es
 precision highp float;
 precision highp int;
@@ -332,7 +322,7 @@ uniform vec2  uRes;
 uniform vec2  uSim;
 uniform vec4  uSeeds[NCOL];
 uniform float uSpeed;
-uniform float uUnit; // sim px per unit
+uniform float uUnit;
 out vec4 outColor;
 ${HASH}
 ${LOBES}
@@ -351,11 +341,9 @@ void main() {
   vec4 s = texture(uState, uv);
 
   // CAST SHADOW
-  // lichen sits a hair proud of the stone
   vec4 sh = texture(uState, uv + LIGHT * (0.22 * uUnit) / uSim);
   float shade = smoothstep(0.6, -0.6, sh.r) * smoothstep(MAX + 0.4, MAX - 0.4, sh.g) * step(0.0, sh.b);
 
-  // nearest live texel decides which colony this is
   ivec2 ip = ivec2(floor(sp - 0.5));
   ivec2 top = ivec2(uSim) - 1;
   float id = -1.0;
@@ -376,7 +364,6 @@ void main() {
   }
 
   // COVERAGE
-  // crisp, slightly ragged edge at the arrival front
   float R = s.r;
   float a = s.g;
   float jit = vnoise(sp / uUnit * 9.0) - 0.5;
@@ -389,7 +376,6 @@ void main() {
   vec2 d = (sp - seed.xy) / uUnit;
   vec2 pu = sp / uUnit;
 
-  // how far inside the growing front, in units, and how far out from the centre (0..1)
   float A = min(a - R, MAX);
   float e1 = exp(-a / TAU);
   float front = uSpeed * seed.w * TAU * max(e1 - exp(-A / TAU), 0.0) / uUnit;
@@ -406,7 +392,6 @@ void main() {
     col = mix(col, RIM[k], rim * 0.8);
 
     // FINE LOBES
-    // small pillowy tongues blended softly into each other; each its own height and tone
     float sf;
     vec2 gf;
     float of;
@@ -414,7 +399,6 @@ void main() {
     float cf;
     plates(d, salt, FINE_N, sf, gf, of, hf, cf);
     float cell = r / (FINE_N / (2.0 * PI));
-    // near the seed the cells get too small to read as lobes; there it is plain crust
     float big = smoothstep(0.3, 0.6, cell);
     float swf = sf + wob;
     float body = mix(1.0, smoothstep(1.08, 0.92, swf), big);
@@ -428,7 +412,6 @@ void main() {
     fine = mix(fine, GROOVE[k], (1.0 - body) * 0.5 + cf * big * 0.3);
 
     // BROAD TONGUES
-    // in patches, big soft lobes lie over the fine ones, curl at the edge and cast a shadow
     float sb;
     vec2 gb;
     float ob;
@@ -448,7 +431,7 @@ void main() {
     broad = mix(broad, GROOVE[k], cb * 0.3);
     col = mix(fine * (1.0 - 0.4 * castB), broad, bodyB);
 
-    // the old middle crumbles into granules
+    // GRANULES
     vec3 g;
     vec2 go;
     worley(pu / 0.16, salt + 2, g, go);
@@ -457,17 +440,15 @@ void main() {
   } else {
     vec3 w;
     vec2 o;
-    // warped cells, so areoles come out as irregular plates, not a honeycomb
+    // AREOLES
+    // warped worley, so plates come out irregular, not a honeycomb
     vec2 q = pu / (k == 2 ? 0.55 : 0.6) + 0.6 * vec2(vnoise(pu * 1.3), vnoise(pu * 1.3 + 9.0));
     worley(q, salt, w, o);
-    // areoles break up into the prothallus toward the margin, smaller and further apart
     float keep = smoothstep(0.1, 1.4, front + w.z * 0.9 - 0.25);
     bool map = k == 2;
     float gap = (map ? mix(0.24, 0.07, keep) : mix(0.14, 0.03, keep)) + 0.05 * vnoise(pu * 3.0);
     float plate = smoothstep(gap, gap + 0.06, w.y - w.x);
     float dome = clamp(dot(o, LIGHT) / 0.5, -1.0, 1.0);
-    // every areole its own shade: map lichen runs yellow to lime to sea green,
-    // the grey crust from chalk to blue grey to cream
     float hue = fract(w.z * 7.3);
     vec3 tintA = map ? vec3(0.9, 0.84, 0.3) : vec3(0.88, 0.88, 0.84);
     vec3 tintB = map ? vec3(0.62, 0.78, 0.24) : vec3(0.68, 0.72, 0.74);
@@ -481,7 +462,7 @@ void main() {
   }
 
   // CUPS
-  // apothecia rise in the older parts once the thallus has filled in
+  // apothecia, once a spot has been covered for CUP_S
   vec3 w;
   vec2 o;
   bool crowd = k == 0;
@@ -495,7 +476,6 @@ void main() {
     float q = w.x / rc;
     vec2 n = o / max(w.x, 1e-4);
     float lit = dot(n, LIGHT);
-    // shadow beside the cup, then the lip, then the dished disc
     col *= 1.0 - 0.35 * smoothstep(1.35, 1.0, q) * step(1.0, q) * clamp(-lit, 0.0, 1.0);
     vec3 lip = LIP[k] * (0.92 + 0.25 * lit * smoothstep(0.6, 1.0, q));
     vec3 disc = DISC[k] * (0.9 - 0.25 * lit * (1.0 - q));
@@ -505,7 +485,7 @@ void main() {
 
   col *= 0.93 + 0.14 * vnoise(pu * 16.0);
 
-  // where colonies meet they draw a dark line
+  // SEAM
   float line = smoothstep(0.12, 0.5, s.a);
   col = mix(col, GROOVE[k] * 0.55, line * 0.9);
 

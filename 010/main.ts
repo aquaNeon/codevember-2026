@@ -5,14 +5,14 @@ import { mount, type Material } from "./host";
 import { sketch } from "./sketch";
 
 const DAY = 10;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
-const SKETCH_MS = 1500; // the line drawing plays at least this long before the picture fades in
+const IDLE_MS = 1200; // change max idle wait here
+const SKETCH_MS = 1500; // change min sketch time here
 const SHAPE_NAMES = ["Sphere", "Drop", "Cube"] as const;
-const SUN_AZ_DEG = [20, 56] as const; // keep in step with gallery.ts
+const SUN_AZ_DEG = [20, 56] as const; // change together with gallery.ts
 
 const START: Material = { shape: 0, ior: 1.33, tint: "emerald", wave: 0.45, flow: 0.45, sun: 0.4 };
 const TINTS: Tint[] = ["clear", "emerald", "amber", "pink", "ink"];
-const IOR_RANGE = [1.1, 1.7] as const; // randomize stays inside this
+const IOR_RANGE = [1.1, 1.7] as const;
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 
@@ -48,7 +48,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   let scene: ReturnType<typeof mount> | null = null;
 
   // PANEL
-  // the controls mirror the material
   const show = () => {
     const deg = Math.round(SUN_AZ_DEG[0] + (SUN_AZ_DEG[1] - SUN_AZ_DEG[0]) * m.sun);
     const pct = (v: number) => String(Math.round(v * 100));
@@ -117,7 +116,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();
   else {
-    // wait for load and an idle moment so the scene never competes with first paint
     afterLoad().then(() => {
       scene = mount(
         canvas,

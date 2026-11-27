@@ -7,7 +7,6 @@ export type Sink = {
   fail: () => void;
 };
 
-// the calls the page makes on the sky, the same in a worker or on the page
 export const CALLS = [
   "size",
   "visibility",
@@ -30,8 +29,7 @@ const TAP_PX = 8;
 const KEYS = new Set(["Enter", " "]);
 
 // HOST
-// the dom side: size, visibility, pointer and keys in, the hud out. the sky runs in a worker
-// when the canvas can be handed over, so compiling and drawing never block the page
+// dom side; the sky runs in a worker via OffscreenCanvas when available
 export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");
@@ -103,7 +101,7 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
     let downT = 0;
     const show = () => d.visibility(onScreen && !document.hidden);
     // TYPE
-    // where the title and hud sit, so the sky can thin its tone behind them
+    // title and hud rects, so the sky thins its tone behind them
     const blocks = canvas.closest("[data-cv]")?.querySelectorAll<HTMLElement>(".cv-title, .cv-hud");
     const type = () => {
       const b: number[] = [];

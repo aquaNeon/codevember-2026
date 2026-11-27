@@ -1,6 +1,5 @@
 // STAGE
-// the page side: watches size, visibility and the pointer, and passes them to the scene.
-// the scene runs in a worker on an offscreen canvas where it can, on this thread otherwise
+// page side: forwards size, visibility and pointer to the scene, in a worker if possible
 
 export type ToWorker =
   | { t: "init"; canvas: OffscreenCanvas; reduced: boolean; at: number; bg: number }
@@ -112,7 +111,7 @@ export class Stage {
   }
 
   // INPUT
-  // a mouse carries the light as it moves; a finger drags it and leaves it where it lifts
+  // mouse moves the light on hover; touch drags it and leaves it on lift
   private down = (e: PointerEvent) => {
     if (!e.isPrimary || this.pointer !== -1) return;
     this.pointer = e.pointerId;

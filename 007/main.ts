@@ -3,7 +3,7 @@ import { mountNav } from "../shared/nav";
 
 const DAY = 7;
 const IDLE_MS = 1200;
-const GPU_WARM_MS = 1500; // earliest start after navigation
+const GPU_WARM_MS = 1500;
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 
@@ -23,7 +23,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
     afterLoad(() => import("./hollow"))
       .then(({ Hollow, layerAt }) => {
         const hollow = new Hollow(canvas);
-        // ?z=70 starts that deep, to look at one layer
         const start = Number(params.get("z"));
         if (start > 0) hollow.jump(start);
         if (import.meta.env.DEV && params.has("debug")) Object.assign(window, { hollow });
@@ -49,7 +48,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
 function afterLoad<T>(fn: () => Promise<T>) {
   return new Promise<void>((done) => {
-    // and give a cold gpu process time to start before the first webgl call
+    // GPU WARM-UP
+    // give a cold gpu process time before the first webgl call
     const ready = () => setTimeout(done, Math.max(0, GPU_WARM_MS - performance.now()));
     const idle = () =>
       "requestIdleCallback" in window

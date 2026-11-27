@@ -4,7 +4,7 @@ import type { Phase } from "./garden";
 import { mount } from "./host";
 
 const DAY = 13;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200;
 const HINT: Record<Phase, string> = {
   rest: "Press on the path, draw the rake along it",
   raking: "Follow the path",
@@ -52,7 +52,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   )
     still();
   else {
-    // wait for load and an idle moment so the scene never competes with first paint
+    // SCENE
+    // after load and idle so it never competes with first paint
     afterLoad().then(() => {
       const garden = mount(canvas, {
         state: (c, m, phase, out) => {

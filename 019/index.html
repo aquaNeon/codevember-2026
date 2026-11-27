@@ -40,13 +40,11 @@
     <meta name="theme-color" content="#ebe5da" />
     <style>
       /* PAGE */
-      /* printed in ink on the shared paper, with one hot accent for the fire.
-         doubled selector so it wins over the shared sheet that loads after it */
+      /* doubled selector beats the shared sheet loaded after it */
       :root:root {
         --accent: #e6462e;
       }
       /* FIRST PAINT */
-      /* the opening frame of the live sky, rendered; the canvas fades in over it */
       .still {
         position: absolute;
         inset: 0;
@@ -98,7 +96,6 @@
         min-width: 11ch;
       }
       /* MASS BAR */
-      /* what is left of the stone, shrinking toward the right edge */
       .mass-bar {
         display: block;
         width: 132px;
@@ -113,7 +110,7 @@
         transform: scaleX(var(--cv-m, 1));
         transition: transform 0.12s linear;
       }
-      /* the tone thins out under the type; a paper halo keeps it clear of stray lines */
+      /* TYPE HALO */
       .cv-title,
       .cv-hud,
       .fig {

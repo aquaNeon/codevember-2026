@@ -1,18 +1,18 @@
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
-const EYE_4D = 3; // distance of the 4D eye from the centre, in cube half-widths
+const EYE_4D = 3;
 const EYE_3D = 6.5;
 const VIEW_YAW_RAD = 0.62;
 const VIEW_PITCH_RAD = 0.38;
-const FIT = 0.118; // cube half-width as a share of the short side
+const FIT = 0.118;
 const FIT_NARROW = 0.14;
-const SHIFT = 0.06; // on wide screens the figure sits right of the title
-const FLOOR_Y = -3.1; // plane the figure casts its plan onto
+const SHIFT = 0.06;
+const FLOOR_Y = -3.1;
 const FLOOR_ALPHA = 0.22;
-const LINE_PX = 1.25; // ink weight at the middle depth, css px
-const HALO_PX = 3.2; // paper left either side of a front line where it crosses another
+const LINE_PX = 1.25;
+const HALO_PX = 3.2;
 const DOT_PX = 2.4;
-const MAX_NEAR = 1.6; // caps how heavy the nearest corner gets
+const MAX_NEAR = 1.6;
 const LABEL_PX = 15;
 const LABEL_GAP_PX = 13;
 const DRAG_RAD_PX = 0.0085;
@@ -21,7 +21,7 @@ const IDLE_ZW_RAD_S = 0.07;
 const COAST_TAU_S = 1.6;
 const VEL_TAU_S = 0.07;
 const MAX_VEL_RAD_S = 4;
-const DASH = [3.5, 4]; // css px, scaled by dpr on resize
+const DASH = [3.5, 4];
 const NONE: number[] = [];
 const INK = "rgb(38 28 19)";
 const MUTED = "rgb(38 28 19 / 0.5)";
@@ -51,7 +51,7 @@ export class Tesseract {
   private dash = DASH.slice();
 
   // STATE
-  // one 4x4 rotation, row-major, turned a little each frame
+  // 4x4 rotation, row-major
   private m = new Float64Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
   private vxw = IDLE_XW_RAD_S;
   private vyw = 0;
@@ -64,7 +64,6 @@ export class Tesseract {
   private dirty = true;
   private reported = NaN;
 
-  // scratch, filled every frame
   private sx = new Float64Array(16);
   private sy = new Float64Array(16);
   private sz = new Float64Array(16);
@@ -90,7 +89,6 @@ export class Tesseract {
     const sy = Math.sin(VIEW_YAW_RAD);
     const cp = Math.cos(VIEW_PITCH_RAD);
     const sp = Math.sin(VIEW_PITCH_RAD);
-    // yaw about y, then pitch about x
     this.view.set([cy, 0, sy, sp * sy, cp, -sp * cy, -cp * sy, sp, cp * cy]);
 
     const mq = matchMedia("(prefers-reduced-motion: reduce)");
@@ -154,7 +152,6 @@ export class Tesseract {
 
   private step(dt: number) {
     if (this.pointer === -1) {
-      // a flick keeps spinning, then settles into the drift
       const k = 1 - Math.exp(-dt / COAST_TAU_S);
       const idle = this.reducedMotion ? 0 : 1;
       this.vxw += (IDLE_XW_RAD_S * idle - this.vxw) * k;
@@ -178,7 +175,8 @@ export class Tesseract {
     return !this.reducedMotion || Math.abs(this.vxw) + Math.abs(this.vyw) > 1e-4;
   }
 
-  // rotate the frame by a in the plane of axes i and j
+  // ROTATE
+  // plane rotation of the frame in axes i, j
   private turn(i: number, j: number, a: number) {
     if (!a) return;
     const c = Math.cos(a);
@@ -206,7 +204,8 @@ export class Tesseract {
       const y = m[4] * a + m[5] * b + m[6] * c + m[7] * d;
       const z = m[8] * a + m[9] * b + m[10] * c + m[11] * d;
       const w = m[12] * a + m[13] * b + m[14] * c + m[15] * d;
-      // 4D to 3D: what lies further along w shrinks toward the centre
+      // PROJECT
+      // 4D to 3D perspective along w
       const f4 = EYE_4D / (EYE_4D - w);
       const X = x * f4;
       const Y = y * f4;
@@ -217,7 +216,6 @@ export class Tesseract {
       const f3 = EYE_3D / (EYE_3D - vz);
       this.sx[i] = this.cx + vx * f3 * this.unit;
       this.sy[i] = this.cy - vy * f3 * this.unit;
-      // its plan, dropped straight down onto the floor
       const fy = v[3] * X + v[4] * FLOOR_Y + v[5] * Z;
       const fz = v[6] * X + v[7] * FLOOR_Y + v[8] * Z;
       const ff = EYE_3D / (EYE_3D - fz);
@@ -249,7 +247,8 @@ export class Tesseract {
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    // back to front, so front lines can cut their halo through what is behind
+    // DEPTH SORT
+    // back to front so front lines cut a halo through those behind
     for (let e = 0; e < N_EDGES; e++)
       this.depth[e] = this.sz[EDGES[e * 2]] + this.sz[EDGES[e * 2 + 1]];
     const order = this.order;
@@ -268,7 +267,6 @@ export class Tesseract {
       const e = order[n];
       const a = EDGES[e * 2];
       const b = EDGES[e * 2 + 1];
-      // hidden edges dash out smoothly as they pass behind the middle
       const front = smooth(-0.3, 0.3, this.depth[e] * 0.5);
       const weight =
         LINE_PX * dpr * Math.pow(Math.min(MAX_NEAR, (this.sf[a] + this.sf[b]) * 0.5), 1.3);
@@ -315,7 +313,6 @@ export class Tesseract {
       ctx.globalAlpha = 1;
       ctx.strokeStyle = INK;
       ctx.stroke();
-      // letter pushed outward from the centre
       const dx = x - this.cx;
       const dy = y - this.cy;
       const l = Math.hypot(dx, dy) || 1;
@@ -325,7 +322,6 @@ export class Tesseract {
     }
   }
 
-  // a line between two corners, trimmed by a share at each end
   private segment(a: number, b: number, trim: number) {
     const ax = this.sx[a];
     const ay = this.sy[a];
@@ -372,7 +368,6 @@ export class Tesseract {
   private up = (e: PointerEvent) => {
     if (e.pointerId !== this.pointer) return;
     this.pointer = -1;
-    // a pointer that stopped before letting go should not fling
     if (e.timeStamp - this.pt > 80) this.vxw = this.vyw = 0;
     this.vxw = clamp(this.vxw, MAX_VEL_RAD_S);
     this.vyw = clamp(this.vyw, MAX_VEL_RAD_S);
@@ -412,7 +407,8 @@ export class Tesseract {
     this.unit = Math.min(this.w, this.h) * (cw < ch ? FIT_NARROW : FIT);
     this.cx = this.w * (cw / ch > 1.25 ? 0.5 + SHIFT : 0.5);
     this.cy = this.h * (cw < ch ? 0.47 : 0.4);
-    // canvas state resets with its size, and setting it per frame would build strings
+    // CANVAS STATE
+    // set on resize since resizing resets it; per frame would build strings
     const ctx = this.ctx;
     ctx.font = `italic ${LABEL_PX * dpr}px "Instrument Serif", Georgia, serif`;
     ctx.textAlign = "center";

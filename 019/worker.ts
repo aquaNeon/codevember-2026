@@ -3,7 +3,6 @@ import type { FromWorker, ToWorker } from "./host";
 import { Sky } from "./sky";
 
 // WORKER
-// the whole sky lives here, so waking a cold gpu never blocks the page
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 const send = (msg: FromWorker) => scope.postMessage(msg);

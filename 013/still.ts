@@ -1,10 +1,10 @@
 import { build, HALF_LANE, R_CENTRE, R_OUT } from "./path";
 
 const SIZE_PX = 720;
-const WALL = 0.16; // wall width, in lanes
+const WALL = 0.16;
 
 // STILL
-// the labyrinth as a flat drawing, for when there is no webgl
+// flat drawing fallback without webgl
 export function still() {
   const c = document.createElement("canvas");
   c.width = c.height = SIZE_PX;
@@ -37,7 +37,6 @@ export function still() {
   g.beginPath();
   g.arc(0, 0, R_CENTRE - WALL / 2, 0, Math.PI * 2);
   g.fill();
-  // the centre spiral as a single raked line
   g.strokeStyle = ink;
   g.lineWidth = WALL / 2;
   trace(p.spiral - 20, p.n);

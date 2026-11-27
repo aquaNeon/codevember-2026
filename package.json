@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/comments.mjs",
+    "lint:comments": "node scripts/comments.mjs",
     "format": "prettier --write .",
     "typecheck": "tsc"
   },

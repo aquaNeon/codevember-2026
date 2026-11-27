@@ -1,16 +1,16 @@
-export const NB = 11; // blades on the frond, the last the apical blade at the growing tip
-export const FIELD_S = 64; // billow cells along each blade
-export const FIELD_U = 9; // and across it
-export const SPINE_W = 160; // samples per spine row
+export const NB = 11;
+export const FIELD_S = 64;
+export const FIELD_U = 9;
+export const SPINE_W = 160;
 
 // UNDERWATER
-const VEIL_MIX = 0.16; // raise for more water over the frond
-const SOFT_MIX = 0.45; // raise for a softer frond
-const HALATION_MIX = 0.55; // raise for more glow off the sunlit blades
-const BOKEH_SHARE = 0.06; // raise for more discs in front of the lens
-const BOKEH_GAIN = 0.11; // raise for brighter discs
-const GRAIN_MIX = 0.034; // raise for more grain
-const GRAIN_FROND = 0.15; // raise for more grain on the frond than the water
+const VEIL_MIX = 0.16; // change for more water over the frond
+const SOFT_MIX = 0.45; // change for a softer frond
+const HALATION_MIX = 0.55; // change for more halation
+const BOKEH_SHARE = 0.06; // change for more bokeh discs
+const BOKEH_GAIN = 0.11; // change for brighter discs
+const GRAIN_MIX = 0.034; // change for more grain
+const GRAIN_FROND = 0.15; // change for more grain on the frond
 const glf = (v: number) => v.toFixed(3);
 
 const HEAD = `#version 300 es
@@ -30,7 +30,8 @@ float noise2(vec2 p) {
 }
 `;
 
-// sun shafts fanning down from a point above the screen, in aspect space
+// RAYS
+// god rays radiating from uSun, in aspect space
 const RAYS = `
 float rays(vec2 p, float t) {
   vec2 d = p - uSun;
@@ -59,7 +60,7 @@ void main() {
 `;
 
 // BACKGROUND
-// turquoise water going blue with depth, the sun above, far kelp out of focus; half resolution
+// half resolution: water gradient, surface, far kelp, bokeh
 export const BG_FS = `${HEAD}
 uniform vec2  uRes;
 uniform float uTime;
@@ -77,7 +78,7 @@ vec3 stalk(vec3 col, vec2 p, float x0, float lean, float w, float blur, float ne
   float m = 1. - smoothstep(1. - blur, 1. + blur, d);
   float lit = .3 + .7 * smoothstep(-1.1, 1.2, y);
   vec3 c = vec3(.22, .2, .06) * lit * (.8 + .35 * (1. - d)) * (1. + 2.4 * shaft);
-  // haze: the further the stalk, the more of the water's own blue-green it takes
+  // HAZE
   c = mix(col * vec3(1.05, 1.2, 1.1), c, near * .9);
   return mix(col, c, m * (.4 + .5 * near));
 }
@@ -91,13 +92,13 @@ void main() {
   col = mix(col, vec3(.02, .26, .27), smoothstep(.4, 1.1, y) * .9);
   float g = length((p - uSun) * vec2(.75, 1.));
   col += vec3(.2, .5, .42) * exp(-g * 1.1) * .9;
-  // the surface seen from below, a bright rippled sheet right at the top
+  // SURFACE
   float surf = smoothstep(.95, 1.04, y + (noise1(p.x * 5. + t * .3) - .5) * .03);
   float rip = noise2(vec2(p.x * 7. + t * .2, y * 30. - t * .5));
   col += vec3(.2, .4, .36) * surf * rip * rip;
   float shaft = rays(p, t);
   // FAR KELP
-  // furthest first, each one less fogged and softer
+  // back to front, fog and blur falling off with distance
   col = stalk(col, p, -1.25 * uAspect, .16, .1, .6, .1, 1.3, t, shaft);
   col = stalk(col, p, .85 * uAspect, -.12, .13, .55, .18, 4.1, t * .9, shaft);
   col = stalk(col, p, .15 * uAspect, .28, .07, .5, .07, 2.2, t * 1.1, shaft);
@@ -138,9 +139,8 @@ void main() {
 
 const LAYER = `
 // LAYERS
-// each blade gets its own thin slab of depth, younger in front, so blades slide over one
-// another and never cut through; a sliver of true depth keeps each one right with itself
-uniform vec2 uDepth; // ndc depth of the frond, step per layer
+// per-blade depth slab, younger in front, so blades overlap instead of intersecting
+uniform vec2 uDepth;
 vec4 layered(vec4 c, float layer) {
   float z = c.z / c.w - uDepth.x;
   c.z = (uDepth.x - layer * uDepth.y + clamp(z * .03, -.4 * uDepth.y, .4 * uDepth.y)) * c.w;
@@ -148,7 +148,8 @@ vec4 layered(vec4 c, float layer) {
 }
 `;
 
-// one spine is three texture rows: position, lateral, normal
+// SPINE
+// three texture rows per spine: position, lateral, normal
 const SPINE = `
 uniform sampler2D uSpine;
 vec3 spine(float i, float last, int row) {
@@ -159,14 +160,14 @@ vec3 spine(float i, float last, int row) {
 }
 `;
 
-// shared light: the sun through the tissue, the water behind it, a satin sheen on top
+// LIGHT
+// transmission (Beer-Lambert), water behind, sheen
 const LIGHT = `
 const vec3 SIGMA = vec3(.66, 1.22, 2.9);
 const vec3 SUN = vec3(1.4, 1.12, .7);
 const vec3 L = vec3(-.135, .9, -.42);
 // CAUSTICS
-// the rippled surface focuses the sun into a drifting net of light; two ridged noise layers
-// sliding past each other, fixed in the water so the frond moves through it
+// two ridged noise layers sliding past each other, fixed in world space
 float caustic(vec3 pos, float t) {
   vec2 p = vec2(pos.x + pos.z * .4, pos.y * .55 - pos.z * .3) * 3.2;
   vec2 w = vec2(noise2(p * .5 + t * .07), noise2(p * .5 - t * .05 + 7.)) * 1.6;
@@ -194,7 +195,8 @@ vec3 sheen(vec3 N, vec3 V, float shaft, float lightY, float hard) {
   float nv = abs(dot(N, V));
   vec3 R = reflect(-V, N);
   float fr = .04 + .96 * pow(1. - nv, 5.);
-  // what the wet surface mirrors: bright water overhead, dark below
+  // REFLECTION
+  // env: bright overhead, dark below
   vec3 env = mix(vec3(.01, .05, .06), vec3(.55, .8, .72), smoothstep(-.1, .9, R.y)) * (.5 + 1.5 * shaft + lightY);
   float rl = max(dot(R, normalize(L + vec3(0., 0., .9))), 0.);
   vec3 hi = vec3(1., .93, .75) * (pow(rl, hard) * 2. + pow(rl, 12.) * .25) * (.4 + 2. * shaft + lightY);
@@ -202,7 +204,7 @@ vec3 sheen(vec3 N, vec3 V, float shaft, float lightY, float hard) {
   return (env * .55 + hi) * fr + hi * .06 + vec3(1., .9, .7) * satin * (.4 + shaft + lightY);
 }
 // VEIL
-// the water between the eye and the frond, thicker for the far parts, so it shares the background's light
+// fog toward the background colour, thicker with distance
 vec3 veil(vec3 col, vec3 bg, vec3 pos, float shaft, float extra) {
   float dist = length(uCam - pos);
   float k = ${glf(VEIL_MIX)} + clamp((dist - uCam.z + .6) * .17, 0., .34) + clamp(-pos.z * .42, 0., .21) + extra;
@@ -212,14 +214,14 @@ vec3 veil(vec3 col, vec3 bg, vec3 pos, float shaft, float extra) {
 `;
 
 // BLADE
-// a grid over (s along, u across) laid on each blade's spine, one instance per blade
+// (s along, u across) grid on each blade's spine, one instance per blade
 export const BLADE_VS = `${HEAD}
 layout(location = 0) in vec2 aUV;
 uniform mat4  uMvp;
 uniform sampler2D uField;
 uniform float uTime;
-uniform vec4  uB0[${NB}]; // length, half width, spine index at the base, indices per unit
-uniform vec4  uB1[${NB}]; // last index, phase, age, petiole half width
+uniform vec4  uB0[${NB}];
+uniform vec4  uB1[${NB}];
 out vec3 vPos;
 out vec3 vN;
 out vec3 vT;
@@ -229,7 +231,8 @@ flat out vec4 vB;
 invariant gl_Position;
 ${SPINE}
 ${LAYER}
-// the root starts as wide as the petiole it grows from, then the blade opens out
+// WIDTH
+// petiole width at the root, then the blade profile
 float width(float s, float w, float pet) {
   float wedge = pow(smoothstep(0., .2, s), .7);
   return w * pow(sin(3.14159 * pow(s, .55)), .5) * (1. - .2 * s) * wedge + pet * (1. - smoothstep(0., .12, s));
@@ -282,18 +285,17 @@ in vec3 vN;
 in vec3 vT;
 in vec2 vUV;
 in float vW;
-flat in vec4 vB; // length, age, index, half width
+flat in vec4 vB;
 out vec4 o;
 ${NOISE}
 ${RAYS}
 ${TONE}
 ${LIGHT}
 // CORRUGATION
-// sinuous ridges across the blade, warped into puckers, with soft blisters and fine ribs along it
+// warped sine ridges across the blade, gated by noise, plus blisters
 float crinkle(vec2 q, float seed) {
   float warp = noise2(vec2(q.x * 9., q.y * 3.5) + seed) * 3.2 + noise2(q * vec2(34., 12.) + seed) * 1.3;
   float ph = q.y * 190. + warp + sin(q.x * 23. + q.y * 7. + seed) * .4;
-  // fine wavy crests across the blade, now and then breaking off and restarting
   float run = noise2(q * vec2(24., 10.) + seed + 4.);
   float ridge = sin(ph) * smoothstep(-.3, .35, run) * (.7 + .3 * noise2(q * vec2(6., 2.) + seed + 9.));
   float blister = noise2(q * vec2(46., 30.) + seed) - .5;
@@ -319,7 +321,6 @@ void main() {
   vec3 N = normalize(vN);
   vec3 B = normalize(cross(N, vT));
   if (dot(N, V) < 0.) N = -N;
-  // strongest on the broad middle, calmer at the root and right at the thin margin
   float cw = vW / .16;
   float seed = vB.z * 9.1;
   vec2 cq = vec2(x, sg);
@@ -366,7 +367,7 @@ void main() {
     speck = 1. - smoothstep(rad - aa, rad + aa, d);
   }
   // THICKNESS
-  // folds of the corrugation hold more tissue, so they read as dark wavy lines against the sun
+  // corrugation folds hold more tissue, so they darken in transmission
   float e = smoothstep(.55, 1., au);
   float base = 1. - smoothstep(0., .08, s);
   float tau = 1.12 + base * .5 + (1. - au * au) * .3 - e * .42 - net * .1;
@@ -378,20 +379,19 @@ void main() {
   float lightY;
   float caus;
   vec3 col = through(tau, N, V, vPos, bg, shaft, lightY, caus);
-  // the side of each pucker that faces the sun takes a little more of it
   col *= 1. + 1.1 * dot(N - N0, normalize(L));
   // COLOUR
-  // warm amber-brown, deeper than the lemon-gold stipe and floats, patchy from blade to blade
+  // per-blade noise blot between two browns
   float blot = noise2(vec2(x * 3.1, sg * 1.3) + vB.z * 2.7);
   col *= mix(vec3(1.1, .86, .58), vec3(1.02, .9, .66), blot);
   col += vec3(.012, .04, .04) * (.6 + .4 * N.y);
   // BACKLIGHT
-  // thin tissue facing away from the sun lets it through, warmer the thinner it gets
+  // view-against-sun transmission, warmer as tissue thins
   float back = pow(max(dot(-V, normalize(L)), 0.), 2.) * (.4 + lightY + 1.6 * shaft);
   col += vec3(.4, .22, .04) * exp(-tau * 2.2) * back * (.5 + 1.5 * caus);
   col = mix(col, vec3(.5, .54, .48) * (.25 + .5 * lightY + 1.3 * shaft), speck * .55);
-  col += sheen(N, V, shaft + caus * .4, lightY, 16.) * .55; // raise for a wetter blade
-  // the margin is thinner and glows amber where the sun comes through
+  col += sheen(N, V, shaft + caus * .4, lightY, 16.) * .55; // change for a wetter blade
+  // RIM
   float rim = smoothstep(edge - .14, edge - fw, au);
   col *= 1. + .45 * rim;
   col += vec3(.35, .2, .04) * rim * (.15 + .5 * lightY + shaft) * .3;
@@ -402,7 +402,7 @@ void main() {
 `;
 
 // LAYERS
-// blades seen through other blades: drawn again behind the depth, filtering what is in front
+// blades redrawn behind the depth buffer, multiplying into what is in front
 export const DIM_FS = `${HEAD}
 in vec2 vUV;
 in float vW;
@@ -429,15 +429,15 @@ void main() {
 `;
 
 // TUBES
-// the main stipe and every bulb on its stalk, as surfaces of revolution on their spines
+// main stipe and every bulb stalk, as surfaces of revolution on their spines
 export const TUBE_VS = `${HEAD}
-layout(location = 0) in vec2 aRing; // along 0..1, angle
+layout(location = 0) in vec2 aRing;
 uniform mat4  uMvp;
-uniform float uMain; // 1 for the main stipe
-uniform vec4  uStipe; // length, last index, indices per unit, radius
+uniform float uMain;
+uniform vec4  uStipe;
 uniform vec4  uB0[${NB}];
 uniform vec4  uB1[${NB}];
-uniform vec4  uB2[${NB}]; // stalk length, bulb radius, shape power, stipe radius there
+uniform vec4  uB2[${NB}];
 out vec3 vPos;
 out vec3 vN;
 out float vS;
@@ -449,8 +449,8 @@ flat out float vAge;
 ${SPINE}
 ${LAYER}
 float smax(float a, float b, float k) { float h = clamp(.5 + .5 * (a - b) / k, 0., 1.); return mix(b, a, h) + k * h * (1. - h); }
-// the stalk leaves the stipe as wide as it, thins to a short pedicel, swells into an
-// egg-shaped bulb, then necks into the blade's root and fades inside it
+// RADIUS
+// stipe width, thin pedicel, egg-shaped bulb, neck into the blade root
 float radius(float sg, float P, float R, float k, float rs) {
   float tt = (sg + P) / P;
   float t2 = clamp((tt - .3) / .7, 0., 1.);
@@ -489,7 +489,8 @@ void main() {
   }
   vec3 c = spine(i, last, row);
   vec3 T = normalize(spine(i + .5, last, row) - spine(i - .5, last, row));
-  // the sideways swing bends the spine, so square the frame up to the bent tangent
+  // FRAME
+  // re-orthogonalise the lateral against the bent tangent (Gram-Schmidt)
   vec3 la = normalize(spine(i, last, row + 1) - T * dot(spine(i, last, row + 1), T));
   vec3 rad = cos(aRing.y) * la + sin(aRing.y) * cross(T, la);
   vPos = c + rad * r;
@@ -526,18 +527,17 @@ void main() {
   vec3 N = normalize(vN);
   float nv = abs(dot(N, V));
   // FIBRES
-  // the stipe and stalks are rough and stringy along their length; the bulbs are smooth
+  // stringy noise along stipe and stalks, none on the bulbs
   float fib = noise2(vec2(vPhi * 9., vS * 9.)) * .6 + noise2(vec2(vPhi * 26., vS * 22.)) * .4;
   float rough = 1. - vBulb;
   vec3 tg = normalize(cross(normalize(vT), N));
   N = normalize(N + tg * (fib - .5) * .45 * rough);
   nv = abs(dot(N, V));
   float str = noise2(vec2(vPhi * 6., vS * 40.));
-  // the stalk end of each bulb is older, darker olive-brown tissue
   float root = (1. - smoothstep(.12, .6, vAlong)) * vBulb;
   float blot = noise2(vec2(vS * 2.3, vPhi * .4)) * rough;
   // MOTTLE
-  // the float wall is uneven: cloudy thicker patches and a few darker freckles
+  // thickness patches and dark freckles on the float wall
   float mot = noise2(vec2(vPhi * 2.2, vS * 34.)) * .65 + noise2(vec2(vPhi * 6., vS * 90.)) * .35;
   float frk = smoothstep(.72, .86, noise2(vec2(vPhi * 11., vS * 160.)));
   float tau = mix(1.35, 1.05, vBulb) + str * .15 * rough + fib * .3 * rough + blot * .3;
@@ -549,7 +549,7 @@ void main() {
   float caus;
   vec3 col = through(tau, N, V, vPos, bg, shaft, lightY, caus);
   // WAX
-  // gas inside: light scatters in the wall and the far side glows warm through the near one
+  // warm face-on glow through the wall of the gas-filled float
   float lit = .1 + .45 * lightY + shaft + caus * .6;
   col *= 1. + vBulb * .45 * pow(nv, 1.5);
   col += vec3(.5, .26, .05) * vBulb * lit * smoothstep(.15, 1., nv) * (.75 + .5 * mot) * .3;
@@ -558,9 +558,8 @@ void main() {
   col *= .95 + .1 * noise2(vec2(vPhi * 14., vS * 120.)) * rough;
   col += vec3(.015, .04, .036) * (.5 + .5 * N.y);
   // SHEEN
-  // broad and soft on the bulbs, duller still on the stipe
-  col += sheen(N, V, shaft + caus * .5, lightY, mix(14., 7., vBulb)) * mix(.45, .3, vBulb); // raise for wetter floats
-  // stipe and floats glow a lemon gold, the stipe mottled along its length
+  // broader lobe on the bulbs than on the stipe
+  col += sheen(N, V, shaft + caus * .5, lightY, mix(14., 7., vBulb)) * mix(.45, .3, vBulb); // change for wetter floats
   col *= mix(vec3(1.38, 1.04, .34) * (.9 + .2 * blot), vec3(1.3, 1., .42), vBulb);
   col = veil(col, bg, vPos, shaft, 0.);
   col *= vig(gl_FragCoord.xy / uRes);
@@ -569,17 +568,16 @@ void main() {
 `;
 
 // MOTES
-// fine particulate and flakes of marine snow drifting through the whole volume; near ones blur
-// into soft discs
+// marine snow and dust as points; near ones become bokeh discs
 export const MOTE_VS = `${HEAD}
 layout(location = 0) in vec4 aSeed;
 uniform mat4  uProj;
 uniform float uTime;
-uniform float uTan; // tan of half the vertical fov
+uniform float uTan;
 uniform float uAspect;
 uniform float uCamZ;
 uniform float uDpr;
-uniform vec4  uFlow; // cursor ndc, then its velocity in ndc per second
+uniform vec4  uFlow;
 uniform vec2  uSun;
 out float vA;
 out float vSoft;
@@ -590,13 +588,12 @@ ${RAYS}
 void main() {
   float snow = step(.86, fract(aSeed.w * 13.7 + aSeed.x * 3.1));
   // LENS
-  // a few right in front of the camera, huge and faint
+  // a few points right at the lens, large and faint
   float lens = step(${glf(1 - BOKEH_SHARE)}, fract(aSeed.w * 7.3 + aSeed.y * 1.7)) * (1. - snow);
   float z = mix(mix(-3.2, 2.35, aSeed.z), mix(2.6, 3.05, aSeed.z), lens);
   float dist = uCamZ - z;
   float hh = dist * uTan;
   float sp = .6 + aSeed.w;
-  // snow sinks slowly against the drift; the dust rides it
   vec2 drift = vec2(.018 + .01 * sin(uTime * .21 + aSeed.w * 6.), mix(.028, -.012, snow)) * uTime * sp;
   drift += vec2(sin(uTime * .37 + aSeed.w * 9.), cos(uTime * .29 + aSeed.w * 5.)) * .012;
   vec2 q = fract(aSeed.xy + drift / (hh * 2.)) * 2.2 - 1.1;
@@ -613,7 +610,7 @@ void main() {
   vSeed = aSeed.w * 37.;
   float sh = rays(q * vec2(uAspect, 1.), uTime);
   // GLINT
-  // fine dust flashes as it turns in a shaft
+  // dust flashes inside sun shafts
   float glint = 1. + 2.5 * sh * pow(noise1(uTime * 1.3 + aSeed.x * 91.), 6.) * (1. - snow);
   vA = (.25 + 2.6 * sh) * (.4 + .6 * (q.y * .5 + .5)) / (1. + coc * coc * 9.) * (.6 + .4 * aSeed.w) * mix(1., .55, snow) * glint;
   vA = mix(vA, (${glf(BOKEH_GAIN)} + .6 * sh) * (.5 + .5 * (q.y * .5 + .5)) * (.6 + .4 * aSeed.x), lens);
@@ -629,7 +626,6 @@ out vec4 o;
 ${NOISE}
 void main() {
   vec2 c = gl_PointCoord - .5;
-  // flakes are ragged; dust and bokeh are round
   float rag = (noise2(c * 5. + vSeed) - .5) * .7 * vSnow;
   float d = length(c) * 2. + rag;
   float disc = 1. - smoothstep(1. - vSoft, 1., d);
@@ -639,7 +635,7 @@ void main() {
 `;
 
 // SOFT
-// the scene at half resolution through a small box, alpha carrying where the frond is
+// half-resolution box blur; alpha carries frond coverage
 export const SOFT_FS = `${HEAD}
 uniform sampler2D uScene;
 uniform vec2 uRes;
@@ -652,18 +648,17 @@ void main() {
 `;
 
 // POST
-// the whole frame seen through water: a slow refractive wobble, a faint fringe at the edges,
-// red light absorbed with depth, a little scatter round the brightest shafts, and moving grain
+// ripple, edge fringe, soft focus, scatter, red absorption, grain
 export const POST_FS = `${HEAD}
 uniform sampler2D uScene;
 uniform sampler2D uBg;
 uniform sampler2D uSoft;
 uniform vec2  uRes;
 uniform float uTime;
-uniform float uRipple; // wobble, device px
-uniform float uFringe; // colour split at the corners, device px
-uniform float uGrain; // grain clump size, device px
-uniform float uBlur; // soft focus radius, device px
+uniform float uRipple;
+uniform float uFringe;
+uniform float uGrain;
+uniform float uBlur;
 out vec4 o;
 ${NOISE}
 void main() {
@@ -681,10 +676,9 @@ void main() {
   vec2 ca = c * edge * uFringe * 5.6 / uRes;
   vec4 sc = texture(uScene, uv);
   vec3 col = sc.rgb;
-  // the split only shows near the frame edge, so the middle skips the extra taps
   if (edge > .07) col.rb = vec2(texture(uScene, uv + ca).r, texture(uScene, uv - ca).b);
   // SOFT FOCUS
-  // the frond seen through a hand of water: never pixel-sharp, and the sunlit blades bloom
+  // 4-tap blur from the soft target, plus halation off bright blades
   vec2 k = uBlur / uRes;
   vec4 sf = texture(uSoft, uv + k * vec2(1., .4)) + texture(uSoft, uv - k * vec2(1., .4)) + texture(uSoft, uv + k * vec2(-.4, 1.)) + texture(uSoft, uv - k * vec2(-.4, 1.));
   sf *= .25;
@@ -695,22 +689,21 @@ void main() {
   col = mix(col, sf.rgb, .15 + ${glf(SOFT_MIX)} * m);
   col += max(hl.rgb - .48, 0.) * vec3(1., .84, .58) * (.25 + .75 * hl.a) * ${glf(HALATION_MIX)};
   // SCATTER
-  // the shafts bleed a little light into the water round them
+  // bright background shafts bleed into the frame
   vec2 r = vec2(uRes.y / uRes.x, 1.) * .022;
   vec3 b = texture(uBg, uv + r * vec2(.8, .6)).rgb + texture(uBg, uv - r * vec2(.8, .6)).rgb;
   b = max(b * .5 - .42, 0.);
   col += b * vec3(.55, .9, .8) * .35; // change scatter strength here
   // ABSORPTION
-  // deeper water and the edges of the view lose their reds first
+  // reds drop with depth and toward the edges
   float lum = dot(col, vec3(.3, .59, .11));
   float deep = clamp((1. - uv.y) * .55 + edge * 1.2, 0., 1.);
   col.r = mix(col.r, lum * .8, deep * .28);
-  // a gentle olive cast in the far water
   col = mix(col, col * vec3(.88, 1., .9) + vec3(.006, .013, .003), deep * .5);
   // VIGNETTE
   col *= 1. - edge * .32;
   // GRAIN
-  // soft clumps like film, a little sharp speckle on top
+  // value-noise clumps plus per-pixel hash speckle
   float g = (noise2(gl_FragCoord.xy / uGrain + fract(t * 7.31) * 613.) - .5) * 1.7 + (hash12(gl_FragCoord.xy + fract(t * 3.17) * 271.) - .5) * .5;
   col += g * ${glf(GRAIN_MIX)} * (.35 + lum) * (1. + ${glf(GRAIN_FROND)} * m);
   o = vec4(col, 1.);

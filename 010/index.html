@@ -62,7 +62,6 @@
       }
 
       /* ENTRANCE */
-      /* the sheet arrives with the other live panels (shared/style.css), its rows a beat apart */
       .mat {
         --ease-out: cubic-bezier(0.2, 0.7, 0.1, 1);
       }
@@ -100,8 +99,6 @@
       }
 
       /* FIRST PAINT */
-      /* the room as lines that draw themselves in, see sketch.ts; the live canvas fades
-         in over it */
       .still {
         position: absolute;
         inset: 0;
@@ -142,7 +139,6 @@
       }
 
       /* SLIDERS */
-      /* a hairline track and a dot, as on day 002 */
       input[type="range"] {
         -webkit-appearance: none;
         appearance: none;
@@ -183,7 +179,6 @@
       }
 
       /* MATERIAL */
-      /* a small material sheet: colour, shape, then the knobs */
       .mat {
         position: fixed;
         top: 108px;
@@ -201,7 +196,6 @@
         border-radius: 16px;
       }
       /* GLASS */
-      /* frosted panels: the room shows through, blurred and a little brighter */
       .mat-body,
       [data-cv-live] .cv-hud {
         background: rgb(250 248 244 / 0.32);
@@ -349,8 +343,6 @@
         .mat-toggle[aria-expanded="true"]::after {
           content: " \2212";
         }
-        /* open, the sheet docks at the bottom: compact, see-through, the knobs in two
-           columns, so the sculpture and its light stay in view above it */
         .mat-body {
           position: fixed;
           left: var(--gutter);
@@ -373,7 +365,6 @@
         main:has(.mat-toggle[aria-expanded="true"]) .cv-hud {
           visibility: hidden;
         }
-        /* the sheet rises out of the bottom edge, rows close behind */
         .mat-body {
           transition:
             opacity 0.35s var(--ease-out),

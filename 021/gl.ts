@@ -12,7 +12,8 @@ export type Opts = {
   seed: number;
 };
 
-// starts compiling a program; nothing here waits on the driver
+// PARALLEL COMPILE
+// KHR_parallel_shader_compile; busy() polls COMPLETION_STATUS_KHR (0x91b1)
 export function pass(gl: WebGL2RenderingContext, vs: string, fs: string): Pass {
   const prog = gl.createProgram();
   if (!prog) throw new Error("no program");
@@ -32,11 +33,9 @@ export function pass(gl: WebGL2RenderingContext, vs: string, fs: string): Pass {
   return { prog, u: {}, shaders };
 }
 
-// COMPLETION_STATUS_KHR, polled so linking never blocks
 export const busy = (gl: WebGL2RenderingContext, p: Pass) =>
   !gl.getProgramParameter(p.prog, 0x91b1);
 
-// once linked: check it, free the shaders, look up every uniform it declares
 export function finish(gl: WebGL2RenderingContext, p: Pass) {
   if (!gl.getProgramParameter(p.prog, gl.LINK_STATUS)) {
     const log = p.shaders.map((sh) => gl.getShaderInfoLog(sh)).join("\n");
@@ -59,7 +58,6 @@ export function software(gl: WebGL2RenderingContext) {
   return /swiftshader|llvmpipe|software|basic render/i.test(name);
 }
 
-// workers without rAF fall back to a timer
 export const raf = (fn: (now: number) => void) =>
   typeof requestAnimationFrame === "function"
     ? requestAnimationFrame(fn)

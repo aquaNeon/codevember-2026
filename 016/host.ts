@@ -6,7 +6,6 @@ export type Sink = {
   fail: () => void;
 };
 
-// what the host may call on the scene, in the page or across the worker boundary
 export type Call = "size" | "show" | "down" | "move" | "up" | "poke" | "motion";
 type Driver = Pick<Spore, Call | "dispose">;
 
@@ -22,8 +21,7 @@ export type FromWorker =
   | { t: "fail" };
 
 // HOST
-// dom side of the plate: events, size and visibility in, state out. the scene runs in a worker
-// when the canvas can be handed over, so context start and shader compile never block the page
+// scene runs in a worker when the canvas can transfer, otherwise on the page
 export function mount(
   canvas: HTMLCanvasElement,
   look: Look,
@@ -108,7 +106,6 @@ export function mount(
     const show = () => d.show(onScreen && !document.hidden);
     const ro = new ResizeObserver(() => {
       rect = canvas.getBoundingClientRect();
-      // the plate panel, relative to the canvas; hidden or missing means the whole canvas
       const p = panel?.getBoundingClientRect();
       const x = p ? p.left - rect.left : 0;
       const y = p ? p.top - rect.top : 0;

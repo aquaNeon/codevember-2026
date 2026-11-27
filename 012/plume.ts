@@ -1,15 +1,13 @@
 // PLUME
-// the feather is drawn once, barb by barb, into a canvas: a quill, a tapering rachis,
-// two vanes of fine curved barbs with a few splits, barring across them, and loose down
-// at the base. the scene only ever samples it
+// drawn once into a canvas, barb by barb; the shader only samples it
 
 export const TEX_W = 512;
 export const TEX_H = 1536;
-const BARBS = 760; // per side, change for a finer vane
-const BASE_V = 0.1; // where the bare quill ends and the vane starts
+const BARBS = 760; // change for a finer vane
+const BASE_V = 0.1;
 const DOWN_V = 0.3;
-const TIP_V = 0.975; // the vane closes here // down gives way to the firm vane here
-const LEFT_W = 0.44; // vane widths, share of the texture width
+const TIP_V = 0.975;
+const LEFT_W = 0.44;
 const RIGHT_W = 0.3;
 
 type Rgb = [number, number, number];
@@ -19,11 +17,10 @@ export type Look = {
   bar: Rgb;
   down: Rgb;
   shaft: Rgb;
-  bars: number; // dark bands along the feather, 0 for none
+  bars: number;
 };
 
 export const LOOKS: Record<"a" | "b", Look> = {
-  // a: warm grey-brown, barred like a hawk's tail covert
   a: {
     base: [164, 128, 96],
     bar: [62, 40, 26],
@@ -31,7 +28,6 @@ export const LOOKS: Record<"a" | "b", Look> = {
     shaft: [236, 226, 206],
     bars: 6.5,
   },
-  // b: plain white, a swan's breast feather
   b: {
     base: [238, 234, 226],
     bar: [196, 188, 176],
@@ -54,7 +50,6 @@ export const rachisX = (v: number) => 0.5 + 0.025 * Math.sin(Math.PI * v);
 function vaneWidth(v: number, side: number) {
   const t = Math.min(1, Math.max(0, (v - BASE_V) / (TIP_V - BASE_V)));
   const grow = smooth(0, 0.16, t);
-  // closes like an ellipse, so the tip comes out round
   const close = Math.sqrt(Math.max(0, 1 - Math.pow(t, 2.6)));
   return (side < 0 ? LEFT_W : RIGHT_W) * grow * close * (1 - 0.18 * t);
 }
@@ -85,8 +80,7 @@ function splits(side: number) {
   return out;
 }
 
-// two ways to draw it: in colour for the flat still, or as a mask for the shader, which
-// colours it itself. the mask is one stroke per barb, so it costs a fraction of the colour pass.
+// DRAW
 // mask channels: r brightness (half), g down, b shaft, a coverage
 export function drawPlume(look: Look, mask = false) {
   const steps = strokes(look, mask);
@@ -95,7 +89,6 @@ export function drawPlume(look: Look, mask = false) {
   return r.value;
 }
 
-// the same, a slice at a time, so the page stays responsive while it draws
 export async function drawPlumeSoon(look: Look, mask = false) {
   const steps = strokes(look, mask);
   let r = steps.next();
@@ -106,14 +99,15 @@ export async function drawPlumeSoon(look: Look, mask = false) {
   return r.value;
 }
 
-const SLICE = 60; // barbs drawn between yields
+const SLICE = 60;
 
 function* strokes(look: Look, mask: boolean): Generator<void, HTMLCanvasElement> {
   seed = 7;
   const c = document.createElement("canvas");
   c.width = TEX_W;
   c.height = TEX_H;
-  // cpu-backed, so each slice is rasterised as it is drawn instead of all at upload
+  // CANVAS
+  // cpu-backed, so each slice rasterises as drawn instead of all at upload
   const g = c.getContext("2d", { willReadFrequently: true });
   if (!g) throw new Error("no 2d");
   g.lineCap = "round";
@@ -128,7 +122,6 @@ function* strokes(look: Look, mask: boolean): Generator<void, HTMLCanvasElement>
       const v = BASE_V + (TIP_V - 0.012 - BASE_V) * ((i + rand() * 0.6) / BARBS);
       const t = (v - BASE_V) / (1 - BASE_V);
       const down = 1 - smooth(DOWN_V - 0.12, DOWN_V + 0.03, v);
-      // barbs leave the shaft steep near the base and lie flatter toward the tip
       let ang = (68 - 40 * t) * (Math.PI / 180);
       for (const s of cuts) {
         const d = (s.v - v) / s.w;
@@ -137,7 +130,8 @@ function* strokes(look: Look, mask: boolean): Generator<void, HTMLCanvasElement>
       ang += down * (0.5 + rand() * 0.5);
       ang += (rand() - 0.5) * 0.03;
 
-      // reach the outline: walk the barb out until it meets the edge
+      // OUTLINE
+      // bisect barb length against the vane width
       const slope = (1 / Math.tan(ang)) * (TEX_W / TEX_H);
       let lo = v;
       let hi = TIP_V;
@@ -153,7 +147,6 @@ function* strokes(look: Look, mask: boolean): Generator<void, HTMLCanvasElement>
 
       const x0 = rachisX(v);
       const pts = down > 0.2 ? 14 : 6;
-      // bow: barbs curve gently toward the tip as they leave the shaft
       const bow = 0.12 + 0.05 * rand();
       let px = X(x0);
       let py = Y(v);
@@ -188,7 +181,6 @@ function* strokes(look: Look, mask: boolean): Generator<void, HTMLCanvasElement>
             }
           continue;
         }
-        // barring runs across the vane, bending a little toward the tip at the edge
         const vm = uv - 0.04 * s;
         const band = look.bars
           ? smooth(0.35, 0.75, 0.5 + 0.5 * Math.sin(vm * look.bars * Math.PI * 2))
@@ -206,7 +198,6 @@ function* strokes(look: Look, mask: boolean): Generator<void, HTMLCanvasElement>
         g.moveTo(px, py);
         g.lineTo(nx, ny);
         g.stroke();
-        // fluffy barbules off the downy barbs
         if (down > 0.3 && p > 1) {
           g.lineWidth = 0.6;
           for (let h = 0; h < 2; h++) {
@@ -227,7 +218,6 @@ function* strokes(look: Look, mask: boolean): Generator<void, HTMLCanvasElement>
   }
 
   // AFTERFEATHER
-  // a small loose tuft where the vane starts
   g.lineWidth = 0.7;
   for (let i = 0; i < 70; i++) {
     const side = rand() < 0.5 ? -1 : 1;
@@ -250,7 +240,6 @@ function* strokes(look: Look, mask: boolean): Generator<void, HTMLCanvasElement>
   }
 
   // RACHIS + QUILL
-  // a pale tapering shaft with darker edges; the quill below it is hollow and see-through
   const shaft = (v0: number, v1: number, w0: number, w1: number, color: string) => {
     const n = 60;
     g.fillStyle = color;

@@ -28,11 +28,11 @@ import {
 } from "./shaders";
 
 // BREAD BOARD
-// an oiled wooden board on a pale worktop; flour on it is a dusting times a worked map the dough wipes
+// flour = base dusting x a worked map the dough wipes
 
 export const BOARD = { w: 5.9, d: 3.9, h: 0.13, r: 0.3, edge: 0.035 };
 const FLOUR_PX = 256;
-const FLOUR_SPAN = 7.6; // world units the worked map covers
+const FLOUR_SPAN = 7.6;
 const SHADE_PX = 256;
 const SHADE_SPAN = 7.6;
 const BLUR_PASSES = 1;
@@ -49,8 +49,8 @@ type Uniforms = Record<string, IUniform>;
 export class Board {
   readonly meshes: Mesh[];
   readonly contact = { value: 1 };
-  // half width, half depth, corner radius of the fitted board, for the worktop's contact shadow
-  // the bevel grows the outline by its size, so the real edge sits that much further out
+  // FOOTPRINT
+  // fitted outline for the worktop contact shadow, grown by the bevel
   readonly footprint = {
     value: new Vector3(BOARD.w / 2 + BOARD.edge, BOARD.d / 2 + BOARD.edge, BOARD.r + BOARD.edge),
   };
@@ -117,7 +117,6 @@ export class Board {
       curveSegments: 8,
     });
     boardGeo.rotateX(-Math.PI / 2);
-    // top bevel ends at 0; the bottom bevel sits under the worktop so the side meets it square
     boardGeo.translate(0, -h - edge, 0);
     const boardMat = surface(shared, COLORS.woodA, COLORS.woodB, 0.62, false);
     const board = new Mesh(boardGeo, boardMat);
@@ -143,7 +142,6 @@ export class Board {
     );
   }
 
-  // a portrait screen sees more depth than width: the board gets deeper and narrower to fill it
   fit(aspect: number) {
     const t = Math.min(1, Math.max(0, (1.2 - aspect) / 0.7));
     const sx = 1 - t * 0.14,
@@ -156,7 +154,7 @@ export class Board {
   }
 
   // FLOUR MAP
-  // soft disk: k > 0 adds flour, k < 0 takes it away but never below floor
+  // soft disk: k > 0 adds, k < 0 removes down to floor
   dab(x: number, z: number, r: number, k: number, floor = 0) {
     const f = this.flourF;
     const px = FLOUR_PX / FLOUR_SPAN;
@@ -183,7 +181,6 @@ export class Board {
     this.flourDirty = true;
   }
 
-  // finger drag: a run of dabs from a to b
   streak(ax: number, az: number, bx: number, bz: number, r: number, k: number) {
     const len = Math.hypot(bx - ax, bz - az);
     const n = Math.max(2, Math.ceil(len / (r * 0.5)));
@@ -193,7 +190,6 @@ export class Board {
     }
   }
 
-  // flour under a point, 0..1
   flourAt(x: number, z: number) {
     const i = Math.round((x / FLOUR_SPAN + 0.5) * FLOUR_PX - 0.5),
       j = Math.round((z / FLOUR_SPAN + 0.5) * FLOUR_PX - 0.5);
@@ -201,7 +197,6 @@ export class Board {
     return this.flourF[j * FLOUR_PX + i];
   }
 
-  // a new round: the board gets dusted again, old marks fade but do not vanish
   redust() {
     const f = this.flourF;
     for (let q = 0; q < f.length; q++) f[q] += (0.5 - f[q]) * 0.6;
@@ -209,7 +204,7 @@ export class Board {
   }
 
   // SHADE MAP
-  // occupancy of whatever sits on the board, blurred into a contact shadow
+  // occupancy grid, blurred into a contact shadow
   clearShade() {
     this.shadeF.fill(0);
   }
@@ -264,7 +259,8 @@ export class Board {
   }
 }
 
-// 5 tap box along one axis
+// BLUR
+// 5-tap box along one axis
 function blur(src: Float32Array, dst: Float32Array, n: number, step: number) {
   const lim = n * n;
   for (let q = 0; q < lim; q++) {
@@ -285,7 +281,8 @@ function map(data: Uint8Array, px: number) {
   return t;
 }
 
-// only the key, the one light with a shadow, passes through the window
+// KEY LIGHT
+// only the shadowed key light passes through the window
 const KEY_BEGIN = ShaderChunk.lights_fragment_begin.replace(
   "vDirectionalShadowCoord[ i ] ) : 1.0;",
   BOARD_KEY,

@@ -1,14 +1,13 @@
 // CRYSTAL
-// a quartz point: a flat hexagon table, a bevelled crown, a short six-sided belt, then a long
-// point. a ring half a step round on the way down splits the point into slim facets that all
-// lean a different way. local frame hangs from the origin down -y
+// quartz point; a half-step-turned ring splits the tip into slim facets
 
 const SIDES = 6;
-const R_M = 0.145; // belt radius, change for a bigger crystal
+const R_M = 0.145; // change crystal size here
 export const MAX_RIM = 8;
 const EPS = 1e-6;
 
-// height, radius and turn per ring, top to tip, in belt radii
+// PROFILE
+// height, radius, turn per ring, top to tip, in belt radii
 const PROFILE = [
   [0, 0.56, 0],
   [-0.2, 1, 0],
@@ -20,16 +19,14 @@ const PROFILE = [
 export interface Crystal {
   faces: number;
   tris: number;
-  // per drawn vertex; edge is 0 on a face's rim, 1 at its centre
   pos: Float32Array;
   normal: Float32Array;
   edge: Float32Array;
-  // per face: outward normal and offset, n.x = d on the face
   planes: Float32Array;
   centroid: Float32Array;
-  corners: Float32Array; // rim corners, MAX_RIM * 3 floats per face
+  corners: Float32Array;
   rimCount: Uint8Array;
-  aperture: Float32Array; // radius of a beam through the face
+  aperture: Float32Array;
   height: number;
   radius: number;
 }
@@ -46,8 +43,8 @@ export function crystal(): Crystal {
   });
 
   const pts = ring.flat();
-  // only neighbours can share a face: one ring (the table), or close in angle and at most
-  // two rings apart
+  // NEIGHBOURS
+  // faces only join one ring (the table), or close angles at most two rings apart
   const where = ring.flatMap((r, i) =>
     r.map((_, k) => [i, r.length === 1 ? -1 : k + PROFILE[i][2]]),
   );
@@ -74,7 +71,8 @@ export function crystal(): Crystal {
   const rims: number[][] = [];
   const aperture = new Float32Array(f);
 
-  // each face is a fan around its centre, so only the rim gets an edge line
+  // FANS
+  // each face fans around its centre, so only the rim gets an edge line
   let v = 0;
   hull.forEach((h, i) => {
     const [nx, ny, nz, d] = h.plane;
@@ -102,7 +100,6 @@ export function crystal(): Crystal {
     aperture[i] = Math.sqrt(area / Math.PI) * 0.8;
   });
 
-  // rim corners per face, padded, for the beam tracer
   const corners = new Float32Array(f * MAX_RIM * 3);
   const rimCount = new Uint8Array(f);
   rims.forEach((r, i) => {
@@ -127,8 +124,7 @@ export function crystal(): Crystal {
 }
 
 // HULL
-// every plane through three points with all points on one side is a face; small enough to
-// brute force. points sharing a plane become one polygon
+// brute force: planes through three points with all points on one side; coplanar merge
 interface Face {
   plane: number[];
   centre: number[];
@@ -168,7 +164,6 @@ function faces(pts: number[][], near: (a: number, b: number) => boolean): Face[]
         const on: number[] = [];
         pts.forEach((p, m) => Math.abs(dot(nr, p) - d) <= EPS && on.push(m));
         const centre = [0, 1, 2].map((q) => on.reduce((s, m) => s + pts[m][q], 0) / on.length);
-        // wind the rim counter-clockwise seen from outside
         const u = sub(pts[on[0]], centre);
         const w = cross(nr, u);
         on.sort((p, q) => angle(sub(pts[p], centre), u, w) - angle(sub(pts[q], centre), u, w));

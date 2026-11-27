@@ -1,5 +1,6 @@
 export const SLOTS = 4;
 
+// NOISE
 // ashima 3d simplex noise
 export const NOISE = /* glsl */ `
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -51,9 +52,7 @@ float snoise(vec3 v) {
 `;
 
 // FORM
-// a 3d cross: a centre cube with an arm on each face, three bars through the middle,
-// every edge on a generous bevel. the skin is the same bars blended with a wide smooth-min,
-// so it spans the hollows between the arms instead of following them in
+// beveled 3d cross; skin is the same bars under a wide smooth-min, bridging the hollows
 export const ARM = { half: 0.3, reach: 0.9, bevel: 0.11, fillet: 0.06 }; // change the cross here
 export const SKIN = { bridge: 0.42, gap: 0.022 };
 
@@ -82,7 +81,6 @@ float bars(vec3 p, float k) {
   return smin(smin(x, y, k), z, k);
 }
 
-// the form gives a little under a press too, so the skin has somewhere to go
 float formSd(vec3 p, vec4 dents[${SLOTS}]) {
   float d = bars(p, FILLET);
   vec3 n = normalize(p + 1e-5);
@@ -97,7 +95,8 @@ float skinSd(vec3 p, vec4 dents[${SLOTS}]) {
   return smin(bars(p, BRIDGE), formSd(p, dents), 0.02) - GAP;
 }
 
-// both shapes are star-shaped round the centre, so a short inward march finds the surface along any direction
+// RADIAL MARCH
+// both SDFs are star-shaped about the origin, so a short inward march finds the surface
 float formAt(vec3 n, vec4 dents[${SLOTS}]) {
   float t = 1.3;
   for (int i = 0; i < 22; i++) t -= formSd(n * t, dents);
@@ -126,12 +125,10 @@ ${NOISE}
 ${FORM}
 
 // SKIN
-// cling film over the form: taut over the corners, a little looser over the faces.
-// a press pushes it flat onto the form with a ring of small wrinkles; a pull lifts it into a tent
+// cling film: a press flattens it with radial wrinkles, a pull lifts a tent
 float radius(vec3 n, out float dent, out float lift, out vec3 slid) {
   float rf = formAt(n, uDent);
   float r = skinAt(n, uDent);
-  // breathing: the film over the hollows rises and falls, the parts lying on the form barely move
   float span = smoothstep(0.0, 0.25, r - rf);
   r += (uBreath * 2.5 + 0.006 * snoise(n * 2.2 + vec3(0.0, uTime * 0.05, uTime * 0.04))) * (0.3 + span);
   dent = 0.0;
@@ -149,17 +146,13 @@ float radius(vec3 n, out float dent, out float lift, out vec3 slid) {
     float ang = atan(dot(n, b), dot(n, t));
     float ring = exp(-c * 7.0) - exp(-c * 18.0);
     r -= push * pit;
-    // radial creases only, fading in and out across the ring, so the dimple stays one smooth shape
     r += push * 0.022 * ring * sin(ang * 14.0);
-    // a tent: a sharp peak at the grab, sloping skin around it
     float tent = exp(-sqrt(c + 1e-5) * 4.5);
     r += pull * tent;
     dent += push * pit;
     lift += pull * tent;
-    // the skin slides in toward a press and out along a pull, so its pattern moves with it
     slid -= d * (push * ring * 0.35 - pull * tent * 0.2);
   }
-  // pressed flat onto the form, never through it
   r = max(r, rf + 0.004);
   slid = normalize(slid);
   return r;
@@ -210,7 +203,6 @@ vec3 film(float d, float ct) {
 }
 
 void main() {
-  // three flips the winding for BackSide, so the wall says which one it is
   bool front = uSide > 0.0;
   vec3 N = normalize(vNormal) * uSide;
   vec3 V = normalize(vView);
@@ -218,14 +210,13 @@ void main() {
   float ct = sqrt(1.0 - (1.0 - c * c) / 1.769);
   float fres = pow(1.0 - c, 3.0);
 
-  // film drains downward like a bubble: thin at the top, thicker below, slow swirls on top
   float swirl = snoise(vDir * 0.9 + vec3(uTime * 0.012, -uTime * 0.02, 0.0));
-  // pressed skin thickens, stretched skin thins and runs to the blues\n  float th = 460.0 - 140.0 * vDir.y + 100.0 * swirl + 260.0 * vDent - 520.0 * vLift;
+  float th = 460.0 - 140.0 * vDir.y + 100.0 * swirl + 260.0 * vDent - 520.0 * vLift;
   vec3 irid = film(th, ct);
   irid = mix(vec3(dot(irid, vec3(0.333))), irid, 0.9);
 
   // VEINS
-  // meridians running pole to pole, wandering a little, like the ribs of a seed pod
+  // wobbly meridians, pole to pole
   float phi = atan(vDir.z, vDir.x);
   float wob = 0.35 * snoise(vDir * 1.6 + 4.0) + 0.12 * snoise(vDir * 4.0 + 9.0);
   float rib = abs(sin(phi * 4.0 + wob * 2.2));
@@ -236,7 +227,7 @@ void main() {
     * smoothstep(-0.1, 0.5, snoise(vDir * 1.3 + 2.0));
 
   // LIGHT
-  // view space, fixed to the camera
+  // view space
   vec3 L = normalize(vec3(-0.5, 0.7, 0.55));
   vec3 H = normalize(L + V);
   float nh = max(dot(N, H), 0.0);
@@ -245,26 +236,24 @@ void main() {
   spec += pow(max(dot(N, normalize(L2 + V)), 0.0), 60.0) * 0.25;
 
   float side = front ? 1.0 : 0.5;
-  // over the white form the film has to tint, not just glow: a little more body on the face
   float a = (0.06 + 0.85 * fres) * side;
   vec3 rgb = mix(vec3(0.95 - 0.25 * uPaper), irid * (1.15 - 0.45 * uPaper), 0.75 + 0.25 * smoothstep(0.05, 0.6, fres)) * a;
   vec3 veinCol = mix(vec3(0.85, 0.72, 0.78), vec3(0.42, 0.34, 0.4), uPaper);
   float va = vein * (0.1 + 0.3 * fres) * side;
   rgb += veinCol * va;
-  // faint film colour across the face, added light only so the middle stays clear
   float band = smoothstep(0.2, 0.9, dot(irid, vec3(0.8, 0.1, 0.6)) * 0.7);
   rgb += irid * irid * (0.02 + 0.05 * band) * (1.0 - fres) * side * (1.0 - uPaper);
   a += va * 0.6;
   rgb += vec3(1.0, 0.98, 0.95) * spec * side;
   a = clamp(a + spec * 0.4 * side, 0.0, 1.0);
 
-  // paper: the film has to darken the page instead of glowing on it
   rgb = mix(rgb, rgb * vec3(0.5, 0.46, 0.56), uPaper * (1.0 - min(spec, 1.0)));
   gl_FragColor = vec4(rgb, a);
 }
 `;
 
-// the form is ray-marched inside a proxy box, so its bevels and inner corners stay exact at any size
+// SOLID
+// ray-marched inside a proxy box so bevels and inner corners stay exact at any size
 export const SOLID_VS = /* glsl */ `
 varying vec3 vObj;
 
@@ -280,7 +269,6 @@ uniform vec3 uShade;
 uniform vec3 uRim;
 uniform vec3 uCam;
 uniform vec4 uDent[${SLOTS}];
-// three fills these for any program that declares them, fragment stage included
 uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
 
@@ -297,7 +285,7 @@ vec3 grad(vec3 p) {
 }
 
 // MATTE CLAY
-// opaque, soft diffuse only: wrapped key, a cool bounce from below, a little occlusion in the inner corners
+// wrapped diffuse key, cool bounce from below, hull-depth occlusion
 void main() {
   vec3 rd = normalize(vObj - uCam);
   vec3 p = vObj;
@@ -319,7 +307,6 @@ void main() {
   float key = dot(N, normalize(vec3(-0.5, 0.7, 0.55))) * 0.5 + 0.5;
   float bounce = max(dot(N, normalize(vec3(0.4, -0.8, 0.3))), 0.0);
   float edge = 1.0 - max(dot(N, V), 0.0);
-  // cheap occlusion: how far the surface sits inside the bridged hull
   float ao = clamp(1.0 - (bars(p, BRIDGE) - bars(p, FILLET)) * -4.0, 0.55, 1.0);
   vec3 col = mix(uShade, uLit, smoothstep(0.1, 0.95, key)) * ao;
   col += uRim * bounce * 0.12;

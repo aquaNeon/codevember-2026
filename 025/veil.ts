@@ -1,7 +1,5 @@
 // VEIL
-// the renderer, the air and the loop. no dom in here, so it runs in a worker on an
-// offscreen canvas or on the page as a fallback. the cloth steps at a fixed rate; the
-// picture is the lamp's opacity map, the cloth in weighted blended layers, then the studio
+// no dom, so it runs in a worker; passes: lamp opacity, weighted blended cloth, composite
 
 import { Cloth, LENGTH_M, N, NX, NY, SPAN_MAX_M, STEP_S, WIDTH_M } from "./cloth";
 import { busy, finish, pass, raf, software, unraf, type Opts, type Pass } from "./gl";
@@ -10,18 +8,19 @@ import { CLOTH_FS, CLOTH_VS, COMP_FS, OPAC_FS, OPAC_VS } from "./shaders";
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 15;
 const MAX_STEPS = 3;
-const WARM_S = 6; // simulated before the first frame so it opens mid flight
+const WARM_S = 6;
 const OPAC_PX = 384;
-const SUB = 3; // drawn grid per sim cell, each way
-const END_OUT = 1.2; // span over frame length along the lean
+const SUB = 3;
+const END_OUT = 1.2;
 const FOV_DEG = 36;
 const EYE_Z = 4.1;
-const FREQ = 420; // threads per metre in the organza
-const SHEER = 0.055; // a single layer's cover
+const FREQ = 420; // change thread density here
+const SHEER = 0.055; // change single-layer cover here
 const SLOW_MS = 26;
 const MIN_SCALE = 0.6;
 const HUD_MS = 160;
-// the key lamp: behind the cloth, high and to the right
+// LAMP
+// key light behind the cloth, high right
 const LIGHT = norm([0.5, 0.55, -0.68]);
 const CLEAR_ACCUM = new Float32Array([0, 0, 0, 1]);
 const CLEAR_WEIGHT = new Float32Array([0, 0, 0, 0]);
@@ -102,7 +101,6 @@ export class Veil {
       gl.getExtension("WEBGL_lose_context")?.loseContext();
       throw new Error("software gl");
     }
-    // the layers add up in half floats
     if (!gl.getExtension("EXT_color_buffer_float")) {
       gl.getExtension("WEBGL_lose_context")?.loseContext();
       throw new Error("no float targets");
@@ -179,7 +177,6 @@ export class Veil {
     return t;
   }
 
-  // half float colour targets, one framebuffer
   private target(w: number, h: number, count: number): Target {
     const gl = this.gl;
     const fbo = gl.createFramebuffer();
@@ -233,14 +230,15 @@ export class Veil {
   }
 
   // INPUT
-  // the pointer is a breath of air: where it passes the cloth is pushed along and lifted
+  // pointer is air: the cloth is pushed along and lifted where it passes
   point(x: number, y: number, ms: number) {
     const s = ms / 1000;
     const nx = (x / this.cssW) * 2 - 1;
     const ny = 1 - (y / this.cssH) * 2;
     if (this.mT >= 0 && s > this.mT && s - this.mT < 0.2) {
       const dt = s - this.mT;
-      // the motion as a velocity at the cloth's depth, capped so a flick stays gentle
+      // VELOCITY
+      // at the cloth's depth, capped so a flick stays gentle
       const k = (this.eyeZ / dt) * (this.reduced ? 0.4 : 1);
       let vx = (nx - this.mx) * this.tanX * k;
       let vy = (ny - this.my) * this.tanY * k;
@@ -265,7 +263,7 @@ export class Veil {
   }
 
   // LOOP
-  // the cloth never quite stops, so this runs while the canvas is on screen
+  // the cloth never stops, so this runs whenever the canvas is on screen
   private wake() {
     if (this.dead || this.raf || !this.visible) return;
     this.raf = raf(this.frame);
@@ -285,7 +283,8 @@ export class Veil {
     const dt = this.last ? Math.min(MAX_DT_S, Math.max(0, rawMs) / 1000) : STEP_S;
     this.last = now;
 
-    // SIMULATE at a fixed step; with reduced motion the air slows to a near stand
+    // SIMULATE
+    // fixed step; reduced motion slows the air
     const c = this.cloth;
     c.wind = this.reduced ? 0.2 : 0.7;
     this.acc = Math.min(this.acc + dt * (this.reduced ? 0.35 : 1), MAX_STEPS * STEP_S);
@@ -325,10 +324,11 @@ export class Veil {
   }
 
   // FRAMING
-  // a long lens, the cloth in the middle; tall screens step back to keep its width
+  // long lens; tall screens step back to keep the cloth width
   private resize() {
     const a = this.cssW / this.cssH;
-    // at least one and a half pixels per css pixel: the hems are thin lines
+    // DPR FLOOR
+    // 1.5 minimum so the thin hems hold
     const dpr = Math.min(Math.max(this.dpr || 1, 1.5), MAX_DPR) * this.scale;
     this.W = Math.max(1, Math.round(this.cssW * dpr));
     this.H = Math.max(1, Math.round(this.cssH * dpr));
@@ -336,16 +336,15 @@ export class Veil {
     this.canvas.height = this.H;
     this.tanY = Math.tan(((FOV_DEG / 2) * Math.PI) / 180);
     this.tanX = this.tanY * a;
-    // keep about 2.6 m of width in view on tall screens
     this.eyeZ = Math.max(EYE_Z, 1.75 / this.tanX);
-    // tall screens stand the path up the frame and keep its curves in view
+    // LEAN
+    // tall screens stand the path up the frame
     const lean = Math.min(1, Math.max(0, (1.05 - a) / 0.55));
     const tilt = lean * 1.15;
     this.cloth.tilt = tilt;
     if (a < 1) this.eyeZ = Math.max(EYE_Z, (1.6 + 0.6 * lean) / this.tanY);
     // ENDS OUT OF FRAME
-    // the veil reaches past the frame along its lean; where even its full stretch falls
-    // short, as on an ultrawide, the eye steps in instead
+    // reaches past the frame along the lean; on ultrawide the eye steps in instead
     const reach = (z: number) =>
       2 *
       Math.min(
@@ -355,7 +354,6 @@ export class Veil {
     const need = reach(this.eyeZ) * END_OUT;
     if (need > SPAN_MAX_M) this.eyeZ *= SPAN_MAX_M / need;
     this.cloth.span = Math.min(SPAN_MAX_M, need);
-    // before the first frame the cloth takes the lean at once
     if (!this.drawn) this.cloth.settle(STEP_S, 90);
     const f = 1 / this.tanY;
     const near = 0.1;
@@ -367,7 +365,8 @@ export class Veil {
     m[10] = (far + near) / (near - far);
     m[11] = -1;
     m[14] = (2 * far * near) / (near - far);
-    // view: the eye at (0, 0, eyeZ) looking down -z, folded into the projection
+    // VIEW
+    // eye at (0, 0, eyeZ) looking down -z, folded into the projection
     m[14] += m[10] * -this.eyeZ;
     m[15] = this.eyeZ;
     this.drop(this.oit);
@@ -375,12 +374,12 @@ export class Veil {
     this.sized = true;
   }
 
-  // the lamp's frame round the cloth, refitted every frame
+  // LAMP FRAME
+  // refitted round the cloth every frame
   private lamp() {
     const L = LIGHT;
     const lx = this.lx;
     const ly = this.ly;
-    // x: across the lamp, level; y: completes the frame
     lx[0] = -L[2];
     lx[1] = 0;
     lx[2] = L[0];
@@ -447,7 +446,8 @@ export class Veil {
     gl.bindVertexArray(this.vao);
     gl.enable(gl.BLEND);
 
-    // OPACITY: optical depth per slice, as the lamp sees it
+    // OPACITY
+    // optical depth per slice, from the lamp
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.opac.fbo);
     gl.viewport(0, 0, OPAC_PX, OPAC_PX);
     gl.clearColor(0, 0, 0, 0);
@@ -458,7 +458,8 @@ export class Veil {
     gl.blendFunc(gl.ONE, gl.ONE);
     gl.drawElements(gl.TRIANGLES, this.indexN, gl.UNSIGNED_SHORT, 0);
 
-    // CLOTH: colour weighted by cover, and how much of the ground still shows
+    // CLOTH
+    // colour weighted by cover, plus remaining ground transmittance
     gl.bindFramebuffer(gl.FRAMEBUFFER, oit.fbo);
     gl.viewport(0, 0, this.W, this.H);
     gl.clearBufferfv(gl.COLOR, 0, CLEAR_ACCUM);
@@ -503,7 +504,6 @@ export class Veil {
     if (now - this.hudAt < HUD_MS) return;
     this.hudAt = now;
     const x = this.cloth.x;
-    // end to end, the two short hems
     const a = 0;
     const b = (N - NX) * 3;
     const h = this.hud;

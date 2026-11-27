@@ -3,7 +3,7 @@ import { mountNav } from "../shared/nav";
 import { mount } from "./host";
 
 const DAY = 17;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200;
 const STILL_WIDE = "../stills/017-wide.jpg";
 const STILL_TALL = "../stills/017-tall.jpg";
 
@@ -19,7 +19,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
     if (root.hasAttribute("data-cv-still")) return;
     root.removeAttribute("data-cv-live");
     root.setAttribute("data-cv-still", "");
-    // a capture of the live frond, wide or tall to match the screen
     const frame = root.querySelector<HTMLElement>(".still");
     if (!frame) return;
     const img = document.createElement("img");
@@ -36,7 +35,8 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   )
     still();
   else {
-    // wait for load and an idle moment so the scene never competes with first paint
+    // LIVE
+    // after load and idle, so the scene never competes with first paint
     afterLoad().then(() => {
       const kelp = mount(canvas, {
         state: (v) => {

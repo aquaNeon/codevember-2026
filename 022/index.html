@@ -26,8 +26,7 @@
     <meta name="theme-color" content="#04070a" />
     <style>
       /* NIGHT */
-      /* this day only: a dark cave, so the type goes light.
-         doubled selector so it wins over the shared sheet that loads after it */
+      /* doubled selector beats the shared sheet loaded after it */
       :root:root {
         --bone: #04070a;
         --bone-hi: #04070a;
@@ -50,7 +49,7 @@
         background: var(--bone);
       }
       /* STILL */
-      /* a few echoes caught at once, for no webgl */
+      /* fallback image without webgl */
       [data-cv-still] .still {
         background: var(--bone) url("/stills/022-wide.jpg") center / cover no-repeat;
       }
@@ -71,7 +70,7 @@
         opacity: 1;
       }
       /* FOCUS */
-      /* a quiet frame for keyboard focus only; a click or tap never draws one */
+      /* keyboard focus only, hidden after pointer input */
       .cv-figure canvas:focus {
         outline: none;
       }
@@ -98,7 +97,6 @@
         display: none;
       }
       /* HINT */
-      /* after a long quiet the call to ping steps forward, a colour change and nothing more */
       .cv-hud .hint {
         transition: color 0.6s ease;
       }

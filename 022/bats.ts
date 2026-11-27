@@ -1,9 +1,9 @@
 import { frame, sample, type Frame, type Tunnel } from "./tunnel";
 
 // WING
-// half a wing in its own plane: x along the span, z forward. the shader draws it from these
+// half wing in its plane: x span, z forward
 export const WING = {
-  BODY: 0.07, // where the wing leaves the body
+  BODY: 0.07,
   WRIST: 0.42,
   POLY: [
     [0.06, 0.05],
@@ -14,14 +14,14 @@ export const WING = {
     [0.35, -0.46],
     [0.09, -0.3],
   ],
-  // trailing edges that sag in between the finger tips
   SCALLOP_EDGES: [2, 3, 4, 5],
   SAG: 0.2,
   FINGERS: [2, 3, 4, 5],
   THUMB: [0.45, 0.25],
 };
 
-// circles that cut each scallop: centre x, z and radius
+// SCALLOPS
+// cutting circle per trailing edge: centre x, z, radius
 export function scallops() {
   const out: number[][] = [];
   const P = WING.POLY;
@@ -35,7 +35,6 @@ export function scallops() {
     const l = Math.hypot(dx, dz);
     const h = l * WING.SAG;
     const rho = (l * l) / 4 / (2 * h) + h / 2;
-    // the walk is clockwise, so outward is to its left
     const nx = -dz / l;
     const nz = dx / l;
     out.push([mx + nx * (rho - h), mz + nz * (rho - h), rho]);
@@ -44,7 +43,7 @@ export function scallops() {
 }
 
 // GRID
-// a flat sheet over the whole bat, bent by the flap in the vertex shader
+// flat sheet, bent in the vertex shader
 export function sheet() {
   const NX = 33;
   const NZ = 10;
@@ -55,7 +54,6 @@ export function sheet() {
   for (let j = 0; j < NZ; j++) {
     for (let i = 0; i < NX; i++) {
       const o = (j * NX + i) * 3;
-      // denser near the body and wrist joints, where the sheet bends most
       const u = (i / (NX - 1)) * 2 - 1;
       position[o] = u;
       position[o + 2] = Z0 + ((Z1 - Z0) * j) / (NZ - 1);
@@ -77,7 +75,7 @@ export function sheet() {
 }
 
 // FLOCK
-// bats live in tunnel coordinates (distance along, side, up) so their paths bend with the cave
+// paths in tunnel coordinates (along, side, up) so they bend with the cave
 const Kind = { Cross: 0, Pass: 1, Drop: 2 } as const;
 type KindT = (typeof Kind)[keyof typeof Kind];
 
@@ -101,7 +99,7 @@ type Bat = {
 
 export const FLOCK = {
   COUNT: 7,
-  DROP_S: 0.42, // free fall before the wings open
+  DROP_S: 0.42, // change free fall time here
   GRAVITY_M_S2: 7,
 };
 
@@ -188,7 +186,6 @@ export class Flock {
     b.on = true;
   }
 
-  // writes every bat's pose into out; a parked bat gets scale 0
   step(dt: number, camS: number) {
     const f = this.f;
     for (let i = 0; i < this.bats.length; i++) {
@@ -208,7 +205,6 @@ export class Flock {
           b.vy -= FLOCK.GRAVITY_M_S2 * dt;
           b.fold = 1 - b.age / FLOCK.DROP_S;
         } else {
-          // pull out of the dive and swoop away down the tunnel
           const k = 1 - Math.exp(-dt / 0.35);
           b.vy += (0.5 - b.vy) * k;
           b.vs += (3.4 - b.vs) * k;

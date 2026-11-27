@@ -1,34 +1,35 @@
 // SCENE
-// world in metres-ish: the wall is the plane z = 0, the camera looks straight at it
+// metres; the wall is the plane z = 0, the camera looks straight at it
 
+// SUN
+// light travel direction, from behind the viewer, high right
 const n = Math.hypot(-0.42, -0.5, -0.76);
-// direction the sunlight travels, from a window behind you, high on the right
 export const SUN = [-0.42 / n, -0.5 / n, -0.76 / n] as const;
 
 export const SCENE = {
   fovDeg: 30,
-  fitH: 3.0, // wall height always in view
-  fitW: 2.1, // wall width always in view, decides on narrow screens
-  crystalZ: 0.78, // how far the crystal hangs off the wall
-  restY: 0.5, // where the top of the crystal rests
-  length: 2.4, // chain, pivot to crystal
-  ior: 1.544, // quartz
-  spread: 0.05, // red to violet ior gap; real quartz is ~0.015, wider reads better
+  fitH: 3.0,
+  fitW: 2.1,
+  crystalZ: 0.78,
+  restY: 0.5,
+  length: 2.4,
+  ior: 1.544,
+  spread: 0.05, // change dispersion here, real quartz is ~0.015
 };
 
 // SHAFTS
-// sun through a tall window lands as long soft bands rising to the right. each band is a
-// range across the slope, in metres, with its own penumbra and strength
+// bands across the slope in metres: from, to, penumbra, strength
 export const SHAFTS = {
-  slope: [0.42, 1] as const, // direction a band runs
+  slope: [0.42, 1] as const,
   bands: [
     [-1.38, -0.2, 0.09, 1],
     [0.5, 0.74, 0.12, 0.5],
-  ] as const, // from, to, penumbra, strength
-  upright: [1.72, 2.06, 0.05, 0.9] as const, // a narrow vertical band at the far right
+  ] as const,
+  upright: [1.72, 2.06, 0.05, 0.9] as const,
 };
 
-// how sunlit a wall point is, as the baked wall has it less its waver and plaster
+// SUNLIT
+// baked wall light, without waver and plaster
 export function sunlit(x: number, y: number) {
   const sl = Math.hypot(SHAFTS.slope[0], SHAFTS.slope[1]);
   const u = (x * SHAFTS.slope[1] - y * SHAFTS.slope[0]) / sl;

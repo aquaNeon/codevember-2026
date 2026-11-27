@@ -18,4 +18,9 @@ export default defineConfig(
       "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
   },
+  {
+    files: ["scripts/**"],
+    languageOptions: { globals: globals.node },
+    rules: { "no-console": "off" },
+  },
 );

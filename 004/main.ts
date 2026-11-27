@@ -16,7 +16,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   const stir = root.querySelector<HTMLButtonElement>("[data-cv-stir]");
   const comb = root.querySelector<HTMLButtonElement>("[data-cv-comb]");
 
-  // a plain 2d canvas, cheap enough to start at once
   if (canvas) {
     try {
       const threads = new Threads(canvas);

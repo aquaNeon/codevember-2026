@@ -1,22 +1,21 @@
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
-const EYE_4D = 4; // further than the plate's, the last cell swings out along w as it folds
+const EYE_4D = 4;
 const EYE_3D = 16;
 const PITCH_RAD = 0.34;
 const MAX_PITCH_RAD = 0.9;
 const FIT = 0.074;
-const FIT_NARROW = 0.095; // cube half-width as a share of the short side, laid flat
-const FOLDED_ZOOM = 1.45; // the folded figure is smaller, so it comes closer
+const FIT_NARROW = 0.095;
+const FOLDED_ZOOM = 1.45;
 const YAW_RAD_S = 0.11;
-const FOLD_PERIOD_S = 16; // one unfold and refold when left alone
-const SCRUB_PX = 0.0032; // fold per px of horizontal drag
+const FOLD_PERIOD_S = 16;
+const SCRUB_PX = 0.0032;
 const TILT_RAD_PX = 0.004;
 const LINE_PX = 1.1;
 const GLASS_ALPHA = 0.34;
 const SHADE_ALPHA = 0.55;
 const HATCH_PX = 5;
 const INK = "rgb(38 28 19)";
-// one pale tint per cell: ochre, sage, slate, rose, lavender, sand, teal, clay
 const TINTS = [
   "#d8b675",
   "#a8b896",
@@ -29,11 +28,10 @@ const TINTS = [
 ];
 
 // NET
-// the eight cells laid out as the double cross; each folds about the face it shares
-// with its parent, turning in the plane of its outward axis and w
+// double-cross net; each cell folds about its parent face, in its axis-w plane
 interface Cell {
   at: [number, number, number];
-  folds: [number, number, number, number][]; // axis, side, hinge, schedule; first to last
+  folds: [number, number, number, number][];
 }
 const CELLS: Cell[] = [
   { at: [0, 0, 0], folds: [] },
@@ -54,7 +52,6 @@ const CELLS: Cell[] = [
 const N_CELLS = CELLS.length;
 const N_VERTS = N_CELLS * 8;
 const N_FACES = N_CELLS * 6;
-// corner order around each face, as bit patterns of the cube's 8 corners
 const FACE = new Uint8Array(N_FACES * 4);
 for (let c = 0; c < N_CELLS; c++)
   for (let a = 0; a < 3; a++)
@@ -87,7 +84,7 @@ export class Net {
   private dirty = true;
 
   // STATE
-  private phase = 0.18; // where the idle fold cycle is, 0..1; opens part way in
+  private phase = 0.18;
   private fold = cycle(0.18);
   private yaw = 0.6;
   private pitch = PITCH_RAD;
@@ -96,7 +93,6 @@ export class Net {
   private py = 0;
   private reported = NaN;
 
-  // scratch, filled every frame
   private p4 = new Float64Array(4);
   private vx = new Float64Array(N_VERTS);
   private vy = new Float64Array(N_VERTS);
@@ -177,7 +173,6 @@ export class Net {
   private step(dt: number) {
     if (this.reducedMotion || !dt) return;
     this.yaw += YAW_RAD_S * dt;
-    // left alone it opens and closes on an eased cycle; a drag moves it along that cycle
     if (this.pointer === -1) {
       this.phase = (this.phase + dt / FOLD_PERIOD_S) % 1;
       this.fold = cycle(this.phase);
@@ -192,7 +187,6 @@ export class Net {
   // DRAW
   private place() {
     const f = this.fold;
-    // the tail cell closes on its neighbour first, so the pair never swings far along w
     const main = ease(clamp01((f - 0.3) / 0.7)) * Math.PI * 0.5;
     const tail = ease(clamp01(f / 0.55)) * Math.PI * 0.5;
     const c0 = Math.cos(main);
@@ -203,7 +197,6 @@ export class Net {
     const syaw = Math.sin(this.yaw);
     const cp = Math.cos(this.pitch);
     const sp = Math.sin(this.pitch);
-    // the laid-out cross is centred lower than the folded cube
     const lift = 1 - ease(f);
     const p = this.p4;
     for (let k = 0; k < N_CELLS; k++) {
@@ -226,7 +219,6 @@ export class Net {
         const X = p[0] * f4;
         const Y = (p[1] + lift) * f4;
         const Z = p[2] * f4;
-        // yaw about y, then pitch about x
         const x = cyaw * X + syaw * Z;
         const z0 = -syaw * X + cyaw * Z;
         const y = cp * Y - sp * z0;
@@ -253,7 +245,7 @@ export class Net {
     ctx.clearRect(0, 0, this.w, this.h);
 
     // FACES
-    // back to front; light from the upper left, both sides lit since the glass is clear
+    // back to front; two-sided lighting, the glass is clear
     for (let f = 0; f < N_FACES; f++) {
       const a = FACE[f * 4];
       const b = FACE[f * 4 + 1];
@@ -324,7 +316,7 @@ export class Net {
   }
 
   // INPUT
-  // sideways scrubs the fold, up and down tilts the view
+  // horizontal drag scrubs the fold, vertical tilts
   private down = (e: PointerEvent) => {
     if (this.pointer !== -1) return;
     this.pointer = e.pointerId;
@@ -361,7 +353,6 @@ export class Net {
     this.wake();
   };
 
-  // move the fold and find the matching point on the idle cycle, so letting go is seamless
   private scrub(d: number) {
     this.fold = Math.max(0, Math.min(1, this.fold + d));
     const half = Math.acos(1 - 2 * (1 - this.fold)) / (Math.PI * 2);
@@ -401,7 +392,8 @@ export class Net {
   }
 }
 
-// folded at 0 and 1, laid flat at one half, with a rest at both ends
+// FOLD CYCLE
+// folded at 0 and 1, flat at 0.5
 function cycle(t: number) {
   return 0.5 + 0.5 * Math.cos(t * Math.PI * 2);
 }
@@ -410,7 +402,8 @@ function ease(t: number) {
   return t * t * (3 - 2 * t);
 }
 
-// a diagonal engraving line repeated, for faces turned from the light
+// HATCH
+// diagonal line tile for faces turned from the light
 function hatching(ctx: CanvasRenderingContext2D, size: number, dpr: number) {
   const tile = document.createElement("canvas");
   tile.width = tile.height = size;

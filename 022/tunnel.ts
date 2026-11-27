@@ -1,21 +1,23 @@
 import { fbm3, noise1, rng } from "./noise";
 
 export const CAVE = {
-  DS_M: 0.25, // ring spacing along the loop
-  AROUND: 160, // vertices around each ring
+  DS_M: 0.25, // change ring spacing here
+  AROUND: 160, // change wall resolution here
   CHUNK_RINGS: 32,
-  RW_M: 3.2, // tunnel half width
-  RH_M: 2.7, // tunnel half height
-  CHAMBER_W_M: 6.6, // extra half width in a chamber
+  RW_M: 3.2,
+  RH_M: 2.7,
+  CHAMBER_W_M: 6.6,
   CHAMBER_H_M: 3.4,
-  CHAMBER_HALF_M: 26, // open length each side of a chamber's middle
-  CHAMBER_LIFT_M: 1.1, // the roof rises more than the floor drops
+  CHAMBER_HALF_M: 26,
+  CHAMBER_LIFT_M: 1.1,
 };
 
-// where the chambers sit along the loop, on its gentle stretches
+// CHAMBERS
+// loop fractions, on gentle stretches
 const CHAMBERS_AT = [0.14, 0.56, 0.8];
 
-// the camera roams this fraction of the half width / height, spikes keep clear of it
+// SAFE
+// camera box as a fraction of half width and height; spikes keep clear
 export const SAFE = { X: 0.3, Y: 0.24, MARGIN_M: 0.8, DIP_M: 1.7 };
 
 export type Chamber = { s: number; x: number; y: number; z: number; water: number };
@@ -24,20 +26,20 @@ export type Chunk = {
   position: Float32Array;
   normal: Float32Array;
   index: Uint16Array | Uint32Array;
-  ring: number; // first ring
+  ring: number;
 };
 
 export type Tunnel = {
   L: number;
   N: number;
   ds: number;
-  C: Float32Array; // ring centres
-  T: Float32Array; // tangents
-  S: Float32Array; // sides
-  U: Float32Array; // ups
+  C: Float32Array;
+  T: Float32Array;
+  S: Float32Array;
+  U: Float32Array;
   RW: Float32Array;
   RH: Float32Array;
-  CH: Float32Array; // 0 in the tunnel, 1 in the middle of a chamber
+  CH: Float32Array;
   chambers: Chamber[];
   chunks: Chunk[];
 };
@@ -45,7 +47,7 @@ export type Tunnel = {
 const TAU = Math.PI * 2;
 
 // LOOP
-// a closed curve with a few low harmonics; checked for no cusps and wide clearance between laps
+// closed low-harmonic curve, checked for cusps and lap clearance
 function curve(t: number, o: Float64Array) {
   o[0] =
     70 * Math.cos(t) +
@@ -118,7 +120,7 @@ export function build(): Tunnel {
   }
 
   // MEANDER AND LEVEL
-  // a looping wiggle on top of the curve, calmed in chambers; their floor is held level for the pool
+  // wiggle calmed in chambers; chamber floor held level for the pool
   const tangent = (i: number, out: Float64Array) => {
     const a = ((i + 1) % N) * 3;
     const b = ((i - 1 + N) % N) * 3;
@@ -171,7 +173,6 @@ export function build(): Tunnel {
     sz /= sl;
     S[i * 3] = sx;
     S[i * 3 + 2] = sz;
-    // up = side x tangent
     U[i * 3] = -sz * t0[1];
     U[i * 3 + 1] = sz * t0[0] - sx * t0[2];
     U[i * 3 + 2] = sx * t0[1];
@@ -198,7 +199,7 @@ export function build(): Tunnel {
 }
 
 // FLOOR
-// level in the tunnel; in a chamber a basin under the pool with a shelf of shore along each side
+// flat in the tunnel; in a chamber a basin under the pool with shore shelves
 function floorAt(lx: number, rw: number, rh: number, ch: number) {
   const q = Math.abs(lx) / (0.72 * rw);
   const dip = q < 1 ? 0.5 - 1.5 * (1 - q * q) : 0.5 + 0.9 * (q - 1);
@@ -206,7 +207,7 @@ function floorAt(lx: number, rw: number, rh: number, ch: number) {
 }
 
 // SURFACE
-// one point of the wall at ring i and angle th, with its offset in the ring's own plane
+// wall point at ring i, angle th; ring-plane offset left in LOCAL
 const LOCAL = new Float64Array(2);
 function surface(t: Tunnel, i: number, th: number, out: Float64Array, o: number) {
   const { C, S, U, RW, RH, CH } = t;
@@ -226,7 +227,7 @@ function surface(t: Tunnel, i: number, th: number, out: Float64Array, o: number)
     fbm3(wx * 0.75 + 3, wy * 0.75, wz * 0.75) * 0.55 +
     fbm3(wx * 2.4, wy * 2.4 + 9, wz * 2.4) * 0.16;
   // STRATA
-  // bedding planes in the walls: each layer swells out and breaks off in a ledge
+  // bedding planes: cubic sawtooth over height breaks into ledges
   const band = wy * 1.25 + fbm3(wx * 0.21, wy * 0.08, wz * 0.21) * 2.4;
   const fr = band - Math.floor(band);
   disp -= Math.abs(c) * (0.18 + 0.2 * ch) * fr * fr * fr;
@@ -291,10 +292,10 @@ type Spike = {
   x: number;
   y: number;
   z: number;
-  dir: number; // -1 hangs, 1 stands
+  dir: number;
   len: number;
   base: number;
-  kind: 0 | 1 | 2 | 3; // stalactite, stalagmite, column, straw
+  kind: 0 | 1 | 2 | 3;
   seed: number;
   rows: number;
   cols: number;
@@ -345,7 +346,7 @@ function spikes(t: Tunnel, i: number, out: Spike[]) {
     spawn(0, th, want, 0.07 + want * (0.11 + r() * 0.05));
   }
   // COLUMNS
-  // only off to the sides of a chamber, never across the flight path
+  // chamber sides only, clear of the flight path
   if (ch > 0.6 && r() < 0.035) {
     const th = Math.PI / 2 + (r() < 0.5 ? -1 : 1) * (0.75 + r() * 0.35);
     spawn(2, th, 0, 0.35 + r() * 0.45);
@@ -357,7 +358,6 @@ function spikes(t: Tunnel, i: number, out: Spike[]) {
     spawn(1, th, want, 0.14 + want * (0.2 + r() * 0.08));
   }
   // STRAWS
-  // thin soda straws in clusters, the fine grain that makes the roof read
   const straws = Math.floor(r() * r() * 5 * cluster * (1 + ch));
   for (let k = 0; k < straws; k++) {
     const th = Math.PI / 2 + (r() - 0.5) * 2.2;
@@ -379,7 +379,6 @@ function cone(sp: Spike, pos: Float32Array, nrm: Float32Array, base: number) {
     else if (kind === 1) prof = Math.pow(Math.max(0, 1 - Math.pow(h, 2.4)), 0.6) * (1 - 0.25 * h);
     else if (kind === 2) prof = 0.38 + 0.62 * Math.pow(Math.abs(2 * h - 1), 1.7);
     else prof = 1 - h * 0.55;
-    // drip rings down the length
     prof *= 1 + 0.09 * Math.sin(h * span * 8 + ph) * (kind === 3 ? 0 : 1);
     if (kind !== 2 && r === rows - 1) prof = 0.02;
     const rad = sp.base * prof;
@@ -436,7 +435,7 @@ function quads(
 }
 
 // CHUNKS
-// the wall in runs of rings plus the spikes rooted there, so the renderer can skip what is far
+// ring runs plus their spikes, culled by distance
 function chunks(t: Tunnel): Chunk[] {
   const { N, C } = t;
   const A = CAVE.AROUND;
@@ -493,7 +492,7 @@ function chunks(t: Tunnel): Chunk[] {
 }
 
 // FRAME
-// centre, axes and radii at any distance along the loop, interpolated between rings
+// ring frame interpolated at any distance along the loop
 export type Frame = {
   c: Float64Array;
   t: Float64Array;

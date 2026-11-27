@@ -4,7 +4,7 @@ import { mount } from "./host";
 import type { Hud } from "./sky";
 
 const DAY = 19;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200; // change to start the scene sooner
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 
@@ -47,7 +47,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();
   else {
-    // after load and an idle moment; the sky itself starts the gpu off this thread
     afterLoad().then(() => {
       const sky = mount(
         canvas,
@@ -63,7 +62,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
           reducedMotion: reduced,
           forceGl: params.has("gl"),
           hold: import.meta.env.DEV && params.has("hold"),
-          // smooth tone instead of the screens, for the stills, which must stay small
         },
       );
       if (import.meta.env.DEV && params.has("debug")) Object.assign(window, { sky });

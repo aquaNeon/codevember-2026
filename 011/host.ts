@@ -7,7 +7,6 @@ export type Sink = {
   fail: () => void;
 };
 
-// the calls the page makes on the scene, the same in a worker or in the page
 export const CALLS = [
   "size",
   "visibility",
@@ -29,9 +28,7 @@ export type FromWorker =
   { t: "age"; age: number; playing: boolean } | { t: "shown" } | { t: "fail" };
 
 // HOST
-// dom side of the specimen: size, visibility and pointer in, age out. the scene runs in a
-// worker when the canvas can be handed over, so compiling and drawing never block the page;
-// otherwise it runs here
+// scene runs in a worker when the canvas can transfer, otherwise on the page
 export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");

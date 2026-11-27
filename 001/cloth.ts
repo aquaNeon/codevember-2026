@@ -14,34 +14,34 @@ import type { Blobs } from "./blobs";
 import { benchY } from "./bench";
 
 // TEA TOWEL
-// small-step pbd grid that drops over the resting dough and gets whipped off for a new dough
+// small-step xpbd particle grid
 
-const SIDE = 36; // particles per edge
-const SIZE = 2.9; // world units
+const SIDE = 36;
+const SIZE = 2.9;
 const SUBSTEPS = 6;
 const GRAVITY = -9;
-const DAMP_PER_S = 3.2; // air drag, keeps the fall floaty
+const DAMP_PER_S = 3.2; // change air drag here
 const STRETCH_COMPLIANCE = 1e-6;
-const BEND_COMPLIANCE = 2e-4; // lower = stiffer linen
-const SKIN_MARGIN = 0.4; // how far outside the drawn skin the towel rests, as a share of the iso level
+const BEND_COMPLIANCE = 2e-4; // change lower for stiffer linen
+const SKIN_MARGIN = 0.4;
 const FLOOR_Y = 0.012;
 const DROP_Y = 1.9;
-const SETTLE_SPEED = 0.35; // below this for SETTLE_S the towel stops simulating
+const SETTLE_SPEED = 0.35;
 const SETTLE_S = 0.4;
 const CONTACT_DAMP = 0.55;
 const MAX_SPEED = 8;
-const LAND_S = 1.2; // after this the drag ramps up so the towel goes still
-const DRAG_RAMP = 10; // extra damping per second after landing
-const DRAG_MAX = 25; // velocity kept per substep while touching dough or bench
-const DOUGH_FRICTION = 0.6; // keeps the towel from sliding off the dough
+const LAND_S = 1.2;
+const DRAG_RAMP = 10;
+const DRAG_MAX = 25;
+const DOUGH_FRICTION = 0.6; // change towel grip on the dough here
 const LIFT_PULL = 0.25;
 const LIFT_SPEED = 6;
 const GONE_Y = 6;
 const TEX_PX = 1024;
-const SUB = 3; // render vertices per sim cell edge, smooth folds and silhouettes
+const SUB = 3; // change render verts per sim cell edge here
 const RSIDE = (SIDE - 1) * SUB + 1;
 const WEAVE_PX = 64;
-const WEAVE_THREADS = 8; // threads per weave tile
+const WEAVE_THREADS = 8;
 const WEAVE_REPEAT = 34;
 const LINEN = "#efe8dc";
 const STRIPE = "#44608f";
@@ -52,7 +52,6 @@ export class Cloth {
   private mat: MeshPhysicalMaterial;
   private tex: CanvasTexture | null = null;
   private weave: CanvasTexture | null = null;
-  // catmull-rom weights per sub step, and the rows resampled along x
   private cw = new Float32Array(SUB * 4);
   private rows = new Float32Array(SIDE * RSIDE * 3);
   private n = SIDE * SIDE;
@@ -99,7 +98,7 @@ export class Cloth {
     }
 
     // LINKS
-    // structural, shear and skip-one bend
+    // structural, shear and skip-one bend constraints
     const a: number[] = [];
     const b: number[] = [];
     const c: number[] = [];
@@ -172,7 +171,6 @@ export class Cloth {
     this.mesh.visible = false;
   }
 
-  // textures are drawn on first need, not at load
   prep() {
     if (this.tex) return;
     this.tex = new CanvasTexture(towel());
@@ -189,7 +187,6 @@ export class Cloth {
     this.mat.needsUpdate = true;
   }
 
-  // particles in the bottom layer, for the contact shadow on the board
   get points() {
     return this.x;
   }
@@ -198,7 +195,6 @@ export class Cloth {
     return this.mesh.visible ? this.n : 0;
   }
 
-  // a little skewed so it never lands square
   drop(cx: number, cz: number) {
     const cell = SIZE / (SIDE - 1);
     const rot = 0.3;
@@ -227,7 +223,6 @@ export class Cloth {
     this.sync();
   }
 
-  // yank the far edge up and away
   lift() {
     if (!this.covering || this.lifting) return;
     this.lifting = true;
@@ -245,11 +240,9 @@ export class Cloth {
     this.mesh.visible = false;
   }
 
-  // settle: the dough is still rising, so stay awake to follow it
   step(dt: number, skin: Blobs, doughMoving: boolean) {
     if (!this.mesh.visible) return false;
     if (this.asleep) {
-      // dough can still creep below the sleep threshold; wake as soon as it reaches the towel
       if (!doughMoving && !skin.touches(this.x, this.n, SKIN_MARGIN * 0.5)) return false;
       this.asleep = false;
       this.calm = 0;
@@ -276,7 +269,6 @@ export class Cloth {
         p[i + 2] = x[i + 2] + v[i + 2] * h;
       }
       if (this.lifting) {
-        // far row follows the hand
         for (let i = 0; i < SIDE; i++) {
           const o = ((SIDE - 1) * SIDE + i) * 3;
           const off = (i - (SIDE - 1) / 2) * (SIZE / (SIDE - 1)) * 0.6;
@@ -301,7 +293,6 @@ export class Cloth {
         p[j + 1] += dy * corr;
         p[j + 2] += dz * corr;
       }
-      // particles the dough pushed out lose most of their sideways slide
       this.pre.set(p);
       skin.push(p, n, SKIN_MARGIN);
       const pre = this.pre;
@@ -445,7 +436,7 @@ export class Cloth {
 }
 
 // TEXTURES
-// linen ground with slubs, two woven stripes near opposite edges, a folded hem with a stitch line
+// canvas-drawn linen: slubs, woven stripes, hem with stitch line
 function towel() {
   const c = document.createElement("canvas");
   c.width = c.height = TEX_PX;
@@ -454,7 +445,6 @@ function towel() {
   const P = TEX_PX;
   g.fillStyle = LINEN;
   g.fillRect(0, 0, P, P);
-  // slubs: thicker threads that catch the light a little differently
   let seed = 7;
   const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   for (let k = 0; k < 420; k++) {
@@ -466,7 +456,6 @@ function towel() {
     if (along) g.fillRect(from, at, len, 1.5);
     else g.fillRect(at, from, 1.5, len);
   }
-  // stripes: woven, so their edges break on the thread
   const stripe = (at: number, w: number) => {
     for (const y of [at, 1 - at - w]) {
       const y0 = y * P,
@@ -484,7 +473,6 @@ function towel() {
   };
   stripe(0.075, 0.034);
   stripe(0.128, 0.011);
-  // hem: a folded band, a little denser, a stitch line, a soft rolled edge
   const hem = 0.022 * P;
   g.fillStyle = "rgba(110,92,64,0.07)";
   g.fillRect(0, 0, P, hem);
@@ -508,7 +496,8 @@ function towel() {
   return c;
 }
 
-// plain weave height as a tangent space normal map
+// WEAVE
+// plain weave height as a tangent-space normal map
 function weave() {
   const c = document.createElement("canvas");
   c.width = c.height = WEAVE_PX;
@@ -523,7 +512,6 @@ function weave() {
         tj = Math.floor(y / cell);
       const u = (x % cell) / cell - 0.5,
         v = (y % cell) / cell - 0.5;
-      // warp on top where the cell parity is even, weft otherwise; each thread a rounded ridge
       const warp = Math.cos(u * Math.PI) * (0.8 + 0.2 * Math.cos(v * Math.PI * 2));
       const weft = Math.cos(v * Math.PI) * (0.8 + 0.2 * Math.cos(u * Math.PI * 2));
       h[y * P + x] = (ti + tj) % 2 ? weft : warp;

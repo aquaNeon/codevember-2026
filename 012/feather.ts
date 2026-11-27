@@ -16,30 +16,28 @@ import {
 import { blurPlume, TEX_H, TEX_W, type Look } from "./plume";
 
 // FEATHER
-// one feather falling in front of a sheet of paper. the flutter is designed, not simulated:
-// a pendulum phase drives the side-to-side glide, the tilt and the bank; the cursor adds a
-// gust that eases in and out, and now and then the feather rolls over
+// scripted flutter, not simulated: one pendulum phase drives glide, tilt and bank
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
 const FOV_DEG = 26;
 const CAM_Z = 10;
-const LENGTH = 1; // feather length, world units
-const VIEW_FIT = 2.7; // world height the feather falls through on a landscape screen
-const FALL = 0.2; // world units per second, change for a slower descent
-const SWING = 0.55; // half the side-to-side glide
-const SWING_HZ = 0.16; // full swings per second
-const LIFT = 0.07; // how much it rises at the end of each glide
-const TILT = 0.42; // in-plane tilt at the ends, radians
-const BANK = 0.75; // roll about the shaft through a swing
-const TUMBLE_S = 1.9; // one roll-over takes this long
-const TUMBLE_EVERY_S = [11, 19]; // a roll-over comes this often
-const GUST_GAIN = 0.55; // how much cursor speed becomes wind
-const GUST_R = 0.9; // the cursor's reach, world units
-const GUST_TAU_S = 1.3; // wind dies away over this long
+const LENGTH = 1;
+const VIEW_FIT = 2.7;
+const FALL = 0.2; // change for a slower descent
+const SWING = 0.55;
+const SWING_HZ = 0.16;
+const LIFT = 0.07;
+const TILT = 0.42;
+const BANK = 0.75;
+const TUMBLE_S = 1.9;
+const TUMBLE_EVERY_S = [11, 19];
+const GUST_GAIN = 0.55;
+const GUST_R = 0.9;
+const GUST_TAU_S = 1.3;
 const MAX_WIND = 2.2;
-const DRAFT = 0.6; // pull back toward the middle once it strays
-const PAPER_Z = -0.55; // the sheet sits this far behind the feather
+const DRAFT = 0.6;
+const PAPER_Z = -0.55;
 const SHADOW = 0.2;
 
 const VS = `
@@ -56,7 +54,7 @@ void main() {
   vec3 p = position;
   float v = uv.y;
   float side = (uv.x - 0.5) * 2.0;
-  // the shaft curves, the vanes cup, and the edges flutter more than the middle
+  // BEND
   p.z += uCurl * (v * v - 0.3);
   p.z += 0.035 * side * side;
   p.z += uFlutter * 0.03 * side * side * sin(uTime * 9.0 + v * 11.0 + side * 2.0);
@@ -108,16 +106,15 @@ void main() {
   vec4 tex = texture2D(uMap, vUv);
   if (tex.a < 0.004) discard;
   vec3 albedo = paint(tex.rgb / tex.a);
-  // a normal that always faces the eye; the light is either on this side or behind
+  // SHADING
+  // flat normal from screen derivatives, flipped to the eye; back light = transmission
   vec3 n = normalize(cross(dFdx(vPos), dFdy(vPos)));
   if (n.z < 0.0) n = -n;
   float ndl = dot(n, uLight);
   float diff = max(ndl, 0.0);
   float through = max(-ndl, 0.0);
   vec3 col = albedo * (0.62 + 0.5 * diff);
-  // seen against the light, thin barbs glow warm
   col += albedo * vec3(1.0, 0.86, 0.66) * through * (1.1 - tex.a * 0.5);
-  // a satin line along the shaft
   vec3 h = normalize(uLight + vec3(0.0, 0.0, 1.0));
   float sat = pow(max(dot(n, h), 0.0), 30.0);
   col += sat * 0.12;
@@ -125,7 +122,6 @@ void main() {
   gl_FragColor = vec4(min(col, vec3(1.0)) * a, a);
 }`;
 
-// scratch
 const euler = new Euler(0, 0, 0, "ZXY");
 const quat = new Quaternion();
 const pos = new Vector3();
@@ -159,13 +155,13 @@ export class Feather {
   private time = 0;
   private phase = 0;
   private y = 0.6;
-  private cx = 0; // centre of the glide, drifts with the wind
+  private cx = 0;
   private windX = 0;
   private windY = 0;
-  private spin = 0; // extra in-plane turn from a gust, eases back
+  private spin = 0;
   private spinV = 0;
-  private stir = 0; // how unsettled it is, from recent gusts
-  private tumble = 1; // 0..1 through a roll-over, 1 when none
+  private stir = 0;
+  private tumble = 1;
   private nextTumble = 9;
   private fallen = 0;
 
@@ -239,7 +235,7 @@ export class Feather {
     };
     this.shadowMat = new ShaderMaterial({ ...base, uniforms: uniforms(1) });
     this.mat = new ShaderMaterial({ ...base, uniforms: uniforms(0) });
-    // the shared uniforms are the same objects, so one write moves both
+    // SHARED UNIFORMS
     this.shadowMat.uniforms.uTime = this.mat.uniforms.uTime;
     this.shadowMat.uniforms.uFlutter = this.mat.uniforms.uFlutter;
     this.shadowMat.uniforms.uCurl = this.mat.uniforms.uCurl;
@@ -284,7 +280,6 @@ export class Feather {
     );
   }
 
-  // compiles off the main thread where the driver allows, then starts the loop
   async start() {
     await this.renderer.compileAsync(this.scene, this.camera);
     this.ready = true;
@@ -292,7 +287,7 @@ export class Feather {
   }
 
   // INPUT
-  // the cursor is a breath: its speed near the feather becomes wind
+  // cursor speed near the feather becomes wind
   private move = (e: PointerEvent) => {
     const r = this.rect;
     const x = ((e.clientX - r.left) / r.width - 0.5) * this.viewW;
@@ -324,7 +319,6 @@ export class Feather {
       this.windX *= MAX_WIND / m;
       this.windY *= MAX_WIND / m;
     }
-    // off-centre pushes turn it; a strong one may roll it over
     this.spinV += (dx * vy - dy * vx) * k * 0.25;
     this.stir = Math.min(1, this.stir + Math.hypot(vx, vy) * k * 0.08);
     if (this.stir > 0.85 && this.tumble >= 1 && Math.hypot(vx, vy) * fall > 6) this.tumble = 0;
@@ -352,7 +346,6 @@ export class Feather {
   private step(dt: number) {
     const s = this.scale;
     this.time += dt;
-    // the glide quickens a little when stirred, then settles back
     const rate = Math.PI * 2 * SWING_HZ * (1 + 0.5 * this.stir);
     this.phase += rate * dt;
     this.stir *= Math.exp(-dt / 2.5);
@@ -362,17 +355,14 @@ export class Feather {
     this.windX *= decay;
     this.windY *= decay;
     this.cx += this.windX * dt;
-    // drafts bring a stray back toward the middle, softly
     const edge = this.viewW * 0.5 - this.swing - 0.25 * s;
     const over = Math.abs(this.cx) - Math.max(0, edge * 0.6);
     if (over > 0) this.cx -= Math.sign(this.cx) * over * DRAFT * dt;
-    // fall speed: slower at the ends of a glide, quicker through the middle
     const c = Math.cos(this.phase);
     const sink = FALL * s * (0.55 + 0.75 * c * c);
     this.y += (this.windY - sink) * dt;
     this.fallen += sink * dt;
 
-    // spin from a gust springs back to rest
     this.spinV += -this.spin * 2.2 * dt;
     this.spinV *= Math.exp(-dt / 0.9);
     this.spin += this.spinV * dt;
@@ -386,7 +376,7 @@ export class Feather {
     }
 
     // WRAP
-    // gone past the bottom: it drifts in again from the top, somewhere near the middle
+    // re-enter from the top near the middle
     const margin = 0.42 * s;
     if (this.y < -this.viewH / 2 - margin) {
       this.y = this.viewH / 2 + margin;
@@ -403,10 +393,8 @@ export class Feather {
     const cs = Math.cos(this.phase);
     const x = this.cx + this.swing * sn;
     const y = this.y + LIFT * s * -Math.cos(2 * this.phase);
-    // ease in and out of the roll so it never snaps
     const tt = this.tumble;
     const roll = tt < 1 ? Math.PI * 2 * tt * tt * (3 - 2 * tt) : 0;
-    // tip right, quill left and a little low; the ends rise as it reaches them
     euler.set(
       0.25 * cs + 0.1 * Math.sin(this.time * 0.7),
       BANK * (0.4 + 0.6 * this.stir) * cs + roll + 0.1,
@@ -435,9 +423,9 @@ export class Feather {
     this.camera.updateProjectionMatrix();
     this.viewH = 2 * CAM_Z * Math.tan((FOV_DEG * Math.PI) / 360);
     this.viewW = this.viewH * aspect;
-    // the feather keeps its size against the shorter side
+    // FIT
+    // scale to the shorter side; narrow screens get a shorter glide
     this.scale = Math.min(this.viewH / VIEW_FIT, this.viewW / 2);
-    // narrow screens get a shorter glide so the feather stays in frame
     this.swing = Math.min(SWING * this.scale, this.viewW * 0.16);
     this.sized = true;
   }

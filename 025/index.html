@@ -40,8 +40,7 @@
     <meta name="theme-color" content="#140e0b" />
     <style>
       /* STUDIO */
-      /* this day only: a warm dark studio, so the type goes light.
-         doubled selector so it wins over the shared sheet that loads after it */
+      /* warm dark studio, light type; doubled selector beats the shared sheet */
       :root:root {
         --bone: #140e0b;
         --bone-hi: #140e0b;
@@ -72,7 +71,6 @@
         }
       }
       .cv-figure {
-        /* the pointer is the air, so a finger drags it instead of the page */
         touch-action: none;
       }
       .cv-figure canvas {
@@ -94,7 +92,8 @@
         color: var(--muted);
         text-align: right;
       }
-      /* the silk drifts behind the type; a faint dark halo keeps it readable */
+      /* LEGIBILITY */
+      /* faint dark halo keeps the type readable over the silk */
       .cv-top,
       .fig,
       .cv-title,

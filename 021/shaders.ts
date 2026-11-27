@@ -10,7 +10,7 @@ export const HEAD_RINGS = 9;
 export const HEAD_SIDES = 12;
 export const FLORETS = 16;
 
-// the page's own paper, so the canvas lands on it without a seam
+// SHARED
 const PAPER = `
 uniform vec2  uRes;
 uniform float uFade;
@@ -18,11 +18,12 @@ uniform vec3  uSun;
 uniform vec3  uEye;
 uniform float uMask;
 uniform float uWarm;
-uniform float uStraw; // the old stalk going pale as straw
+uniform float uStraw;
 uniform vec3  uFocus;
-uniform float uNear; // 1 when the camera is in close on the crown
+uniform float uNear;
 
-// the page's own paper, so the canvas lands on it without a seam
+// PAPER
+// matches the page background so the canvas has no seam
 vec3 paper(vec2 frag) {
   vec2 p = vec2(frag.x, uRes.y - frag.y);
   vec2 c = vec2(0.5, 0.38) * uRes;
@@ -31,21 +32,18 @@ vec3 paper(vec2 frag) {
   return mix(vec3(0.961, 0.945, 0.918), vec3(0.922, 0.898, 0.855), t);
 }
 
-// the soil's own falloff, by distance alone, so the bed stays whole toward the eye
+// DEPTH OF FIELD
+// soil by distance only; elsewhere what stands in front of the plant blurs sooner
 float blurSoil(vec3 p) {
   return smoothstep(0.22, mix(1.4, 0.8, uNear), distance(p.xz, uFocus.xz));
 }
 
-// how far out of focus a point is, by its distance from the plant in view; what stands
-// between the eye and the plant goes sooner, so the bed never crowds it from an end
 float blur(vec3 p) {
   vec2 d = p.xz - uFocus.xz;
   float front = max(dot(d, normalize(uEye.xz - uFocus.xz + 1e-4)) - 0.35, 0.0);
-  // and the closer in on the crown, the shallower the focus
   return smoothstep(0.22, mix(1.4, 0.8, uNear), length(d) + front * 1.2);
 }
 
-// and gone into the paper beyond this, so the bed can grow and clear itself out of sight
 float far(vec3 p) {
   return smoothstep(2.4, 3.6, distance(p.xz, uFocus.xz));
 }
@@ -68,8 +66,7 @@ float vnoise(vec2 p) {
 }
 
 // LIGHT
-// warm sun on the side facing it, cool sky fill in the shade, and thin tissue glowing
-// yellow-green where the sun is behind it and you look toward it. uWarm drifts with the season
+// wrapped sun, cool sky fill, back-lit translucency; uWarm shifts with the season
 vec3 paint(vec3 albedo, vec3 N, vec3 V, float trans, float ao) {
   float ndl = dot(N, uSun);
   float lit = smoothstep(0.12, 0.95, ndl * 0.5 + 0.5);
@@ -86,7 +83,6 @@ vec4 finish(vec3 c) {
   return vec4(mix(paper(gl_FragCoord.xy), c, uFade), 1.0);
 }
 
-// out of focus: washed toward the paper, as a plate fades its background
 vec4 finishSoft(vec3 c, float b, float f) {
   return vec4(mix(c, paper(gl_FragCoord.xy), min(1.0, b * 0.72 + f * 0.28)), 1.0);
 }
@@ -107,7 +103,7 @@ void main() {
 }`;
 
 // GROUND
-// a wash of garden soil laid on the paper, pooled darker at its edge
+// fbm soil wash over the paper, darker at the edge
 export const GROUND_VS = `${HEAD}
 layout(location = 0) in vec2 aXZ;
 uniform mat4 uViewProj;
@@ -138,8 +134,6 @@ float fbm(vec2 p) {
 void main() {
   vec2 g = vPos.xz;
   float n = fbm(g * 4.0);
-  // a bed the whole length of the row, wide enough that the plants' shadows fall on soil
-  // from any side; the edge wavers but never pinches, and far off it dissolves into the paper
   float r = abs(g.y) / 0.5 + (n - 0.5) * 0.24;
   float fw = fwidth(r);
   float m = 1.0 - smoothstep(1.0 - fw, 1.0 + fw, r);
@@ -152,16 +146,15 @@ void main() {
   float a = m * (0.42 + 0.18 * n) * (1.0 - 0.7 * blurSoil(vPos)) * (1.0 - gone);
   vec3 c = mix(paper(gl_FragCoord.xy), soil, a);
   // SHADOWS
-  // soft and cool, darker in the soil than on the bare paper, gone with the background
+  // blurred screen-space mask, tinted cool, kept to the soil
   float sh = texture(uShadowTex, gl_FragCoord.xy / uRes).r * (1.0 - far(vPos)) * (1.0 - 0.5 * blurSoil(vPos));
-  // and only on the soil, gone soft at its edge rather than lying on bare paper
   sh *= 1.0 - smoothstep(0.7, 0.95, r);
   c *= mix(vec3(1.0), mix(vec3(0.8, 0.79, 0.85), vec3(0.6, 0.59, 0.67), m), sh * 0.9);
   o = vec4(c, 1.0);
 }`;
 
 // STEMS
-// tubes along the spine texture, one instance per stem, branch or pedicel
+// instanced tubes along a spine texture, one per stem, branch or pedicel
 export const TUBE_VS = `${HEAD}
 uniform highp sampler2D uSpine;
 uniform mat4 uViewProj;
@@ -209,7 +202,7 @@ in float vAng;
 in float vAlong;
 out vec4 o;
 void main() {
-  // the shadow pass: every plant part flattened onto the soil, in white
+  // SHADOW PASS
   if (uMask > 0.5) {
     o = vec4(1.0);
     return;
@@ -228,7 +221,7 @@ void main() {
 }`;
 
 // LEAVES
-// one grid per leaf, shaped in here: outline, cup, fold, ruffled margin, droop
+// one grid per leaf, displaced in the vertex shader
 export const LEAF_VS = `${HEAD}
 layout(location = 0) in vec3 aBase;
 layout(location = 1) in vec3 aFwd;
@@ -272,7 +265,7 @@ vec3 leaf(float u, float v, out float w) {
   w *= 1.0 + ruf * 0.035 * sin(u * 23.0 + sd * 17.0);
   float d = v * w;
   // CUP
-  // the blade as an arc across, folded up tight while young
+  // cross-section bent into an arc, tighter while young
   float k = aShape.w + (1.0 - unf) * 2.2 + clasp * 0.6 * (1.0 - smoothstep(0.0, 0.2, u));
   float kk = k / max(w, 1e-4);
   float ad = abs(d);
@@ -282,12 +275,11 @@ vec3 leaf(float u, float v, out float w) {
   // RUFFLES
   float e = pow(smoothstep(0.5, 1.0, abs(v)), 1.6);
   float s = u * L;
-  // soft rounded ruffles, a gentle crinkle riding on them
   float wave = sin(s * 170.0 + sd * 31.0) * 0.8 + sin(s * 330.0 + sd * 13.0) * 0.2;
   lift += ruf * unf * e * wave * 0.008 * min(1.0, L / 0.12);
   lift += ruf * unf * 0.0012 * sin(s * 130.0 + sd * 9.0) * sin(d * 150.0 + sd * 3.0) * (1.0 - e);
   // DROOP
-  // rosette leaves move together so a stack can't close on itself
+  // rosette leaves share a sway phase so stacked leaves can't intersect
   float ph = ros > 0.5 ? (aBase.x + aBase.z) * 9.0 : sd * 40.0;
   float droop = aShape.z + uWind * aMore.y * 0.22 * sin(uTime * 6.3 + ph);
   float kb = droop / max(L, 1e-4);
@@ -331,7 +323,7 @@ in vec4  vInfo;
 in float vAge;
 out vec4 o;
 void main() {
-  // the shadow pass: every plant part flattened onto the soil, in white
+  // SHADOW PASS
   if (uMask > 0.5) {
     o = vec4(1.0);
     return;
@@ -348,7 +340,7 @@ void main() {
   float ros = 1.0 - step(0.5, kind);
   float d = av * vW;
   // VEINS
-  // a broad pale midrib, then laterals arching toward the tip and fading at the margin
+  // midrib plus laterals arching toward the tip
   float mw = mix(0.0045, 0.001, sqrt(u)) * (L / 0.16) * mix(0.6, 1.0, ros);
   float fd = fwidth(d) + 1e-6;
   float mid = 1.0 - smoothstep(mw - fd, mw + fd, d);
@@ -359,8 +351,6 @@ void main() {
   float lat = (1.0 - smoothstep(lw - fq, lw + fq, dq)) * smoothstep(0.03, 0.12, av) * (1.0 - smoothstep(0.65, 0.95, av));
   float vein = max(mid, lat * 0.7);
   // PIGMENT
-  // older outer leaves deeper, the heart a fresh lime
-  // the muted watercolour greens of the stem leaves, the hearts a lighter yellow-green
   vec3 pale = vec3(0.84, 0.88, 0.62);
   vec3 leafc = mix(vec3(0.48, 0.65, 0.36), vec3(0.66, 0.77, 0.44), vAge);
   vec3 deep = mix(vec3(0.30, 0.46, 0.25), vec3(0.42, 0.58, 0.30), vAge);
@@ -371,14 +361,14 @@ void main() {
   col *= 0.92 + 0.14 * pig;
   col = mix(col, vec3(0.86, 0.92, 0.68), vein * 0.6);
   // AGE
-  // yellowing creeps in from the margin, then browns
+  // yellow then brown, spreading in from the margin
   float yel = smoothstep(0.0, 0.5, dry + (av - 0.5) * 0.35 + (pig - 0.5) * 0.3);
   float brn = smoothstep(0.55, 1.0, dry + (av - 0.6) * 0.3 + (pig - 0.5) * 0.3);
   col = mix(col, vec3(0.86, 0.77, 0.40), yel);
   col = mix(col, vec3(0.64, 0.52, 0.34), brn);
   col = mix(col, vec3(0.86, 0.79, 0.6) * (0.92 + 0.12 * pig), uStraw * 0.85);
   // BLISTERS
-  // the savoy puckering between the veins, as light only
+  // savoy puckering between veins, bump-mapped from screen-space derivatives
   float bl = sin(3.14159 * fract(q)) * sin(3.14159 * fract(d * 140.0 + q * 0.5)) * (0.6 + 0.4 * vnoise(vec2(q * 3.0, d * 90.0)));
   bl *= smoothstep(0.05, 0.2, av) * (1.0 - vein) * mix(0.35, 1.0, ros);
   vec3 dpx = dFdx(vPos);
@@ -394,13 +384,13 @@ void main() {
   vec3 H = normalize(uSun + V);
   c += pow(max(dot(N, H), 0.0), 40.0) * 0.1 * (1.0 - dry);
   // EDGE
-  // distance to the margin in metres, so the coverage and the line stay crisp at any size
+  // margin distance in metres with fwidth AA, crisp at any size
   float m = (1.0 - av) * vW;
   float fm = fwidth(m) + 1e-6;
   float a = smoothstep(-fm, fm, m);
   if (a < 0.02) discard;
   // INK
-  // pigment pools along the edge, then a fine line drawn round it
+  // pigment pooling inside the edge, then a thin ink line
   c *= 1.0 - 0.12 * (1.0 - smoothstep(0.0, 0.006, m));
   float ink = 1.0 - smoothstep(0.6, 1.7, m / fm);
   float b = blur(vPos);
@@ -409,7 +399,7 @@ void main() {
 }`;
 
 // HEADS
-// the involucre: a little vase of bracts, closed as a bud, open in flower, folded back in seed
+// involucre of bracts: closed in bud, open in flower, reflexed in seed
 const HEAD_ATTRS = `
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aAxis;
@@ -476,7 +466,7 @@ in vec2 vYA;
 in vec4 vInfo;
 out vec4 o;
 void main() {
-  // the shadow pass: every plant part flattened onto the soil, in white
+  // SHADOW PASS
   if (uMask > 0.5) {
     o = vec4(1.0);
     return;
@@ -487,7 +477,7 @@ void main() {
   float y = vYA.x;
   float ba = fract(vYA.y * 8.0) - 0.5;
   // BRACT TIPS
-  // the rim breaks into points once the head opens or folds back
+  // rim cut into points once the head opens or reflexes
   float cut = clamp(vInfo.x * 0.7 + vInfo.z, 0.0, 1.0);
   float half_ = 0.5 - 0.5 * smoothstep(0.6, 1.0, y) * cut;
   float fb = fwidth(ba) + 1e-5;
@@ -505,7 +495,7 @@ void main() {
 }`;
 
 // FLORETS
-// pale yellow straps, five tiny teeth at each tip, fanning out for a day
+// ligulate straps with five teeth at the tip
 export const FLORET_VS = `${HEAD}
 ${HEAD_ATTRS}
 out vec3 vPos;
@@ -555,7 +545,7 @@ in vec2 vUV;
 in float vOut;
 out vec4 o;
 void main() {
-  // the shadow pass: every plant part flattened onto the soil, in white
+  // SHADOW PASS
   if (uMask > 0.5) {
     o = vec4(1.0);
     return;
@@ -572,7 +562,6 @@ void main() {
   if (back) N = -N;
   vec3 col = mix(vec3(0.93, 0.76, 0.24), vec3(0.98, 0.92, 0.56), smoothstep(0.0, 0.55, s));
   col *= 1.0 - 0.05 * cos(v * 3.14159 * 3.0);
-  // a lilac stripe down the back of each strap
   if (back) col = mix(col, vec3(0.74, 0.64, 0.80), (1.0 - smoothstep(0.0, 0.45, abs(v))) * 0.55 * vOut);
   vec3 c = paint(col, N, normalize(uEye - vPos), 0.7, mix(0.72, 1.0, s));
   c *= 1.0 - 0.12 * smoothstep(0.75, 1.0, abs(v));
@@ -580,7 +569,7 @@ void main() {
 }`;
 
 // SEEDS
-// each seed a billboard drawn in the fragment: a fan of fine hairs on a beak, the achene below
+// billboards; pappus, beak and achene drawn in the fragment shader
 export const SEED_VS = `${HEAD}
 layout(location = 0) in vec3 aPos;
 layout(location = 1) in vec3 aDir;
@@ -651,7 +640,7 @@ void main() {
   float ang = atan(vQ.y, vQ.x);
   float hs = fract(vH);
   // HAIRS
-  // a full star seen end on, a fan from the side
+  // pappus: a full star end-on, a fan from the side
   float spread = mix(3.1416, 2.1, vF);
   float N = 22.0;
   float st = 2.0 * spread / N;
@@ -659,13 +648,12 @@ void main() {
   float ha = -spread + (idx + 0.5 + (hash11(idx + hs * 91.0) - 0.5) * 0.6) * st;
   float dist = abs(sin(ang - ha)) * r;
   float hl = vR * (0.72 + 0.28 * hash11(idx * 1.7 + hs * 37.0));
-  // a white core with a warm shadow either side, so each hair reads on the paper
   float len = 1.0 - smoothstep(hl * 0.8, hl, r);
   float hair = (1.0 - smoothstep(0.4, 1.1, dist)) * len;
   float lit = (1.0 - smoothstep(0.3, 0.8, dist)) * len;
   hair *= (1.0 - smoothstep(spread, spread + 0.25, abs(ang))) * step(0.0, cos(ang - ha));
   float core = (1.0 - smoothstep(0.0, max(vR * 0.22, 1.0), r)) * 0.7;
-  // BEAK and ACHENE
+  // BEAK AND ACHENE
   float on = step(-vB, vQ.x) * step(vQ.x, 0.0);
   float beak = (1.0 - smoothstep(0.2, 0.6, abs(vQ.y))) * on * 0.6;
   float fly = step(1.5, vH);
@@ -673,19 +661,17 @@ void main() {
   float ach = (1.0 - smoothstep(0.7, 1.0, length(aq))) * fly;
   float a = max(max(hair * 0.92, core), max(beak, ach * 0.85)) * vA * uFade;
   if (a < 0.004) discard;
-  // warm grey at the root of each hair to white at its tip, so it reads on the paper
   vec3 col = mix(vec3(0.74, 0.68, 0.6), vec3(1.0, 0.997, 0.985), clamp(lit / max(hair, 1e-3), 0.0, 1.0));
   col = mix(vec3(0.84, 0.81, 0.76), col, smoothstep(0.05, 0.4, r / max(vR, 1.0)));
   col *= 0.95 + 0.05 * hash11(hs * 13.0 + idx);
   col = mix(col, vec3(0.74, 0.70, 0.60), beak * (1.0 - hair));
   col = mix(col, vec3(0.52, 0.42, 0.30), ach);
-  // backlit, the tips of the hairs catch the sun
   col = mix(col, vec3(1.0, 0.9, 0.66), vBack * vBack * smoothstep(0.5, 1.0, r / max(vR, 1.0)) * hair * 0.7);
   o = vec4(col * a, a);
 }`;
 
 // SOFTEN
-// a separable blur of the quarter-size shadow mask, wide enough to read as a wash
+// separable 9-tap blur of the quarter-size shadow mask
 export const SOFT_FS = `${HEAD}
 uniform sampler2D uTex;
 uniform vec2 uStep;

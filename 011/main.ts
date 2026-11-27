@@ -3,13 +3,13 @@ import { mountNav } from "../shared/nav";
 import { mount } from "./host";
 
 const DAY = 11;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200; // change max idle wait here
 const YEARS = 40;
-const AUTOPLAY_MS = 900; // after the fade in
-const REDUCED_AGE = 0.45; // reduced motion opens part way, without playing
-const KNOBS = ["humidity", "salt", "scale", "flake"] as const; // scale has no knob, it stays at 50
+const AUTOPLAY_MS = 900;
+const REDUCED_AGE = 0.45;
+const KNOBS = ["humidity", "salt", "scale", "flake"] as const;
 
-// what the steel looks like at an age, for the readout
+// READOUT
 const SURFACE: [number, string][] = [
   [0.04, "Bright"],
   [0.14, "Tarnished"],
@@ -69,7 +69,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
     const age0 = params.has("age") ? Number(params.get("age")) : reduced ? REDUCED_AGE : 0;
     if (scrub) scrub.value = String(age0 * YEARS);
     readout(age0);
-    // wait for load and an idle moment; the scene itself runs off the main thread
     afterLoad().then(() => {
       const block = mount(
         canvas,
@@ -79,7 +78,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
             readout(age);
             setPlaying(on);
           },
-          // the first frame is up: fade it in over the still, then let the years run
           shown: () => {
             canvas.setAttribute("data-cv-shown", "");
             root.setAttribute("data-cv-live", "");

@@ -25,8 +25,7 @@ void main() {
 `;
 
 // ENGRAVING
-// tone from light, then up to three families of lines whose width swells with darkness:
-// two follow the object (planes through it), the third is a screen diagonal for deep shade
+// tone from light, then up to three line families whose width swells with darkness
 export const INK_FS = `
 precision highp float;
 
@@ -54,7 +53,8 @@ float lines(float ph, float w) {
   float aa = fwidth(ph);
   float d = abs(fract(ph) - 0.5);
   float ink = (1.0 - smoothstep(w - aa, w + aa, d)) * clamp(w / aa, 0.0, 1.0);
-  // too dense to resolve: settle on the average tone instead of moire
+  // ANTI-MOIRE
+  // unresolvable lines fade to their average tone
   return mix(ink, 2.0 * w, smoothstep(0.35, 0.7, aa));
 }
 
@@ -71,7 +71,8 @@ void main() {
   float spec = pow(max(dot(reflect(-uLight, n), v), 0.0), 28.0);
   float t = uTone * (0.1 + 0.62 * max(nl, 0.0) + 0.28 * (nl * 0.5 + 0.5)) + spec * 0.7;
 
-  // the table under the instrument: a soft pool of shade, nothing beyond
+  // TABLE
+  // soft shade pool, nothing beyond
   if (uPool > 0.5) {
     float r = length((vWorld.xz - vec2(0.5, -0.32)) * vec2(1.0, 1.25));
     t = mix(0.34, 1.25, smoothstep(0.35, 1.45, r));
@@ -81,14 +82,16 @@ void main() {
   float w2 = 0.3 * clamp((0.62 - t) / 0.62, 0.0, 1.0);
   float w3 = 0.28 * clamp((0.3 - t) / 0.3, 0.0, 1.0);
 
-  // a slow swell along each line, like a hand-pushed burin
+  // BURIN
+  // slow width swell along each line
   float wob = 0.06 * sin(dot(vObj, vec3(9.1, 7.3, 8.7)));
   float k = uDensity * uScale;
   float ink = lines(dot(vObj, uAxisA) * k + wob, w1);
   ink = max(ink, lines(dot(vObj, uAxisB) * k, w2));
   ink = max(ink, lines((gl_FragCoord.x - gl_FragCoord.y) / uSpacing, w3));
 
-  // degree scale on the ring: signs, five degrees, single degrees
+  // DEGREE RING
+  // signs, five degrees, single degrees
   if (uTicks > 0.5 && n.y > 0.5) {
     float r = length(vObj.xz);
     float a = atan(vObj.z, vObj.x) / 6.2831853;
@@ -166,7 +169,7 @@ void main() {
 `;
 
 // ORBITS
-// dotted paths printed after the plate, hidden wherever the machine stands in front
+// dotted paths after the plate, depth-tested against it
 export const ORBIT_FS = `
 precision highp float;
 
@@ -186,7 +189,8 @@ void main() {
 }
 `;
 
-// one round dot per point, the same size wherever it sits on the ellipse
+// ORBIT DOTS
+// round points, constant size along the ellipse
 export const ORBIT_VS = `
 precision highp float;
 

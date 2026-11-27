@@ -5,7 +5,6 @@ export type Sink = {
   fail: () => void;
 };
 
-// the calls the page makes on the drawing, the same in a worker or in the page
 export const CALLS = [
   "size",
   "visibility",
@@ -24,8 +23,7 @@ export type ToWorker =
 export type FromWorker = { t: "shown" } | { t: "fail" };
 
 // HOST
-// dom side of the drawing: size and visibility in. the strings are drawn in a worker when the
-// canvas can be handed over, so painting the wood never blocks the page; otherwise here
+// DOM side; strings drawn in a worker when the canvas can be transferred, else here
 export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");
@@ -104,7 +102,8 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
     driver = null;
   }
 
-  // calls made before the drawing is up are dropped; the page replays its state on shown
+  // EARLY CALLS
+  // dropped until the driver is up; the page replays its state on shown
   return {
     hold: (i: number, p: number, d: number) => driver?.hold(i, p, d),
     release: (i: number) => driver?.release(i),

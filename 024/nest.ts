@@ -1,7 +1,5 @@
 // NEST
-// the renderer, the clock and the loop. no dom in here, so it runs in a worker on an offscreen
-// canvas or on the page as a fallback. the weaving is a pure function of the clock, so
-// scrolling runs it either way; the loop sleeps once nothing can change on screen
+// no DOM, so it runs in a worker or inline; weaving is a pure function of the clock
 
 import { FINE_SEG, Form, SEG, STRIDE, TOP_Y, WIN } from "./form";
 import { busy, finish, pass, raf, software, unraf, type Opts, type Pass } from "./gl";
@@ -22,37 +20,37 @@ const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
 const SHADOW_PX = 2048;
 const COV_PX = 256;
-const SHADOW_R = 1.75; // half size of the light's box, world units
+const SHADOW_R = 1.75;
 const STEM_SEG = 40;
 const STEM_SIDES = 8;
 const FOV_TAN = Math.tan((13 * Math.PI) / 180);
 const TAU = Math.PI * 2;
-const WALL_Z = -0.74; // clear of the back of the nest
+const WALL_Z = -0.74;
 const PIVOT_Y = TOP_Y;
 
 // CLOCK
 // one cycle: the ring alone, the weaving, the finished nest held, then pulled apart
 const CYCLE_S = 84;
 const PHASE = { start: 0.035, built: 0.6, hold: 0.79, gone: 0.975 };
-const START_AT = 0.2; // where a visit opens, mid-weave
-const REST_AT = 0.7; // where it comes to rest after the untouched cycles
+const START_AT = 0.2;
+const REST_AT = 0.7;
 const AUTO_CYCLES = 2;
-const SCRUB_PER_PX = 1 / 14000; // cycles per pixel scrolled; change speed here
+const SCRUB_PER_PX = 1 / 14000; // change scrub speed here
 const CLOCK_TAU_S = 0.7;
-const AGE_PER_BUILD = 1; // fresh green fades over the build, keeps fading while held
+const AGE_PER_BUILD = 1;
 
 // TURN AND SWAY
 const YAW_MAX = 1.3;
 const YAW_PER_PX = 0.0055;
 const YAW_TAU_S = 0.5;
-const IDLE_YAW = 0.16; // a slow turn of its own, back and forth
+const IDLE_YAW = 0.16;
 const IDLE_YAW_HZ = 0.021;
-const SWAY_K = (TAU / 2.6) ** 2; // a pendulum of about 2.6 s
+const SWAY_K = (TAU / 2.6) ** 2;
 const SWAY_C = 2 * 0.22 * Math.sqrt(SWAY_K);
-const AIR_PER_PX = 0.0009; // pointer speed into a breath of air
+const AIR_PER_PX = 0.0009;
 const AIR_TAU_S = 1.1;
 const AIR_MAX = 0.9;
-const SWAY_PER_AIR = 0.06; // rad of lean per unit of air
+const SWAY_PER_AIR = 0.06;
 
 const SLOW_MS = 26;
 const MIN_SCALE = 0.6;
@@ -89,7 +87,7 @@ export class Nest {
   private coarseIdx: number;
   private fineVao: WebGLVertexArrayObject;
   private fineIdx: number;
-  private lod = 1; // share of the fine strands drawn
+  private lod = 1;
   private stemVao: WebGLVertexArrayObject;
   private stemIdx: number;
   private shadowFbo: WebGLFramebuffer;
@@ -115,9 +113,9 @@ export class Nest {
   // TURN, SWAY, AIR
   private yaw = 0;
   private yawGoal = 0;
-  private sx = 0; // lean about z, swings it sideways
+  private sx = 0;
   private vx = 0;
-  private sz = 0; // lean about x, toward and away
+  private sz = 0;
   private vz = 0;
   private air = 0;
   private airZ = 0;
@@ -227,8 +225,7 @@ export class Nest {
     ];
 
     // STRANDS
-    // a flat strip of (u, side) pairs, one instance per strand: a long strip for the coarse
-    // ones, a short one for the fine, both reading the same instance buffer
+    // flat (u, side) strip instanced per strand: long for coarse, short for fine, one buffer
     const ib = this.buf(gl.ARRAY_BUFFER, this.form.data, gl.STATIC_DRAW);
     const strip = (seg: number, first: number) => {
       const sv = new Float32Array((seg + 1) * 4);
@@ -300,7 +297,6 @@ export class Nest {
     // LIGHT AND WALL
     norm3(this.keyL, 0.78, 0.42, 0.5);
     norm3(this.back, -0.7, 0.25, -0.66);
-    // warm clay, linear
     this.tint[0] = 0.467;
     this.tint[1] = 0.367;
     this.tint[2] = 0.25;
@@ -381,8 +377,7 @@ export class Nest {
   }
 
   // INPUT
-  // a drag turns it sideways and, pushed up, weaves on like a scroll; the pointer passing by
-  // is a breath of air
+  // drag turns it and, pushed up, scrubs like a scroll; pointer motion is air
   press(x: number, y: number) {
     this.pressed = true;
     this.dragX = x;
@@ -421,7 +416,6 @@ export class Nest {
     this.hoverY = -1;
   }
 
-  // scrolling down weaves on, up unweaves
   wheel(px: number) {
     this.scrub(px);
   }
@@ -433,8 +427,8 @@ export class Nest {
     this.wake();
   }
 
-  // the scroll runs between the bare ring and the finished nest; it never pulls it apart.
-  // caught mid-unravel, any scroll weaves it back
+  // SCRUB
+  // clamped between bare ring and finished nest; mid-unravel, any scroll weaves back
   private scrub(px: number) {
     if (this.hold) return;
     const base = Math.floor(this.kGoal);
@@ -506,7 +500,6 @@ export class Nest {
       this.kGoal += dt / CYCLE_S;
       if (Math.floor(this.kGoal) > before) this.cycles++;
       const c = this.kGoal - Math.floor(this.kGoal);
-      // once scrolled, it weaves on by itself only as far as the finished nest
       if ((this.steered || this.cycles >= AUTO_CYCLES) && c >= REST_AT && c < PHASE.hold) {
         this.kGoal = Math.floor(this.kGoal) + REST_AT;
         this.resting = true;
@@ -543,13 +536,13 @@ export class Nest {
       this.vz += fz * h;
       this.sz += this.vz * h;
     }
-    // free ends only trail the nest's own swing; pushed by the pointer they all lean one way
     this.wind[0] = this.vx * 0.04;
     this.wind[1] = 0;
     this.wind[2] = this.vz * 0.04;
     this.wind[3] = this.time;
 
-    // the nest hangs from the knot: lean, then turn, about it
+    // PIVOT
+    // lean, then yaw, about the knot
     spin(this.tmpA, 0, 0, 0, 1, -this.sx, 0, PIVOT_Y, 0);
     spin(this.tmpB, 0, 1, 0, 0, this.sz, 0, PIVOT_Y, 0);
     mul(this.model, this.tmpA, this.tmpB);
@@ -573,7 +566,6 @@ export class Nest {
     this.frames++;
     if (ms > SLOW_MS) this.slow++;
     if (this.frames < 40) return;
-    // fewer fine strands first, then fewer pixels
     if (this.slow > 24) {
       if (this.lod > MIN_LOD) this.lod = Math.max(MIN_LOD, this.lod * 0.85);
       else if (this.scale > MIN_SCALE) {
@@ -615,8 +607,7 @@ export class Nest {
   }
 
   // CAMERA
-  // level with the nest's middle and a little below, so the tube's mouth shows; on a wide
-  // screen the nest stands right of the title, on a tall one in the middle
+  // eye a little below the middle so the mouth shows; wide: right of the title, tall: centred
   private frameCam() {
     const a = this.cssW / this.cssH;
     const wide = a >= 1;
@@ -638,7 +629,6 @@ export class Nest {
     view(this.tmpA, this.eye, this.right, this.up, this.fwd);
     persp(this.tmpB, FOV_TAN, a, D * 0.4, D * 2.5, sx, sy);
     mul(this.camVP, this.tmpB, this.tmpA);
-    // the wall: enough of it to fill the frame at its depth
     const far = D - WALL_Z;
     const hh = FOV_TAN * far * 1.6;
     const hw = hh * a * 1.2;
@@ -646,7 +636,6 @@ export class Nest {
     this.wallRect[1] = ty - hh;
     this.wallRect[2] = hw;
     this.wallRect[3] = ty + hh;
-    // the key's pool sits up and right of the nest, where the light falls
     this.pool[0] = 0.4;
     this.pool[1] = 0.5;
   }

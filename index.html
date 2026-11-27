@@ -62,7 +62,7 @@
       }
 
       /* ROWS */
-      /* the list cascades in under the masthead, one row a beat after the last */
+      /* staggered by --cv-i */
       [data-cv-days] > li {
         animation: cv-rise 0.8s cubic-bezier(0.2, 0.7, 0.1, 1) calc(1.3s + var(--cv-i) * 30ms)
           backwards;
@@ -108,7 +108,6 @@
           width 0.55s var(--ease),
           margin 0.55s var(--ease);
       }
-      /* hairline that wipes along the bottom of the active row */
       .row::after {
         content: "";
         position: absolute;
@@ -148,7 +147,7 @@
       }
 
       /* PEEK */
-      /* still of the day that trails the cursor, mouse only */
+      /* cursor-following thumb, fine pointer only */
       .peek {
         position: fixed;
         top: 0;
@@ -171,7 +170,6 @@
         transform: translate3d(var(--x, 0), var(--y, 0), 0) scale(1);
         translate: none;
       }
-      /* first frame of a show: jump to the pointer, only the rise animates */
       .peek[data-cv-snap] {
         transition:
           opacity 0.25s ease,

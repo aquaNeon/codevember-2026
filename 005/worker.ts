@@ -6,7 +6,6 @@ const scope = self as unknown as DedicatedWorkerGlobalScope;
 const send = (msg: FromWorker) => scope.postMessage(msg);
 let scene: Lichen | null = null;
 
-// the hud only needs to hear when something changes
 let shownN = -1;
 let shownGrowing = false;
 

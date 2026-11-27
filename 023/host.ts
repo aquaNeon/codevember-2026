@@ -7,7 +7,8 @@ export type Sink = {
   fail: () => void;
 };
 
-// the calls the page makes on the sphere, the same in a worker or on the page
+// CALLS
+// same api in a worker or on the page
 export const CALLS = [
   "size",
   "visibility",
@@ -28,8 +29,7 @@ export type FromWorker = { t: "hud"; h: Hud } | { t: "shown" } | { t: "fail" };
 const KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]);
 
 // HOST
-// the dom side: size, visibility, pointer and keys in, the hud out. the sphere runs in a
-// worker when the canvas can be handed over, so compiling and marching never block the page
+// dom side: size, visibility, pointer, keys in; hud out; worker when transferable
 export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");
@@ -118,7 +118,7 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink, opts: Opts) {
     io.observe(canvas);
     const onMotion = () => d.motion(mq.matches);
 
-    // drag turns it; hovering warms the crust under the pointer
+    // POINTER
     const down = (e: PointerEvent) => {
       if (pointer !== -1) return;
       pointer = e.pointerId;

@@ -1,7 +1,6 @@
 import type { Pendulum } from "./pendulum";
 import type { ToWorker } from "./stage";
 
-// one message from the page onto the scene, wherever the scene runs
 export function apply(p: Pendulum, m: ToWorker) {
   if (m.t === "size") p.size(m.w, m.h, m.dpr);
   else if (m.t === "show") p.show(m.v);

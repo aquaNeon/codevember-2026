@@ -3,7 +3,7 @@ import { Pendulum } from "./pendulum";
 import type { FromWorker, ToWorker } from "./stage";
 
 // WORKER
-// the whole scene lives here, so waking a cold gpu never blocks the page
+// waking a cold gpu here never blocks the page
 
 let p: Pendulum | null = null;
 const send = (m: FromWorker) => postMessage(m);

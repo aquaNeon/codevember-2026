@@ -1,12 +1,10 @@
 // PLANT
-// one lettuce from rosette to seed, posed for any growth day g. every part is a smooth
-// function of g, so scrubbing either way is exact; only the sway and seeds in the air
-// carry state between frames. units are metres and days
+// every part is a smooth function of growth day g, so scrubbing is exact; metres, days
 
 export const END_D = 70;
-export const G0_D = -50; // a new plant's day zero: the seed in the soil
-export const SPINE_N = 40; // points along the stem and each branch
-export const TWIG_N = 8; // points along a pedicel
+export const G0_D = -50;
+export const SPINE_N = 40;
+export const TWIG_N = 8;
 export const MAX_NODES = 60;
 export const MAX_BRANCH = 16;
 export const MAX_TWIGS = 96;
@@ -19,9 +17,9 @@ export const LEAF_STRIDE = 24;
 export const HEAD_STRIDE = 14;
 export const SEED_STRIDE = 10;
 
-const GOLDEN = 2.399963; // 137.5°, the phyllotaxis angle
-const NUT_DAYS = 1.5; // one sweep of the nodding tip
-export const NUT_MAX_D = 0.9; // hurried, the nod sweeps no faster than at this many days a second
+const GOLDEN = 2.399963;
+const NUT_DAYS = 1.5;
+export const NUT_MAX_D = 0.9;
 const KIND_ROSETTE = 0;
 const KIND_STEM = 1;
 const KIND_BRACT = 2;
@@ -32,7 +30,7 @@ export type Stage =
 
 export class Plant {
   // GENOME
-  // drawn once per cycle
+  // randomised once per cycle
   boltD = 11;
   hMax = 1.1;
   private panicle = 12;
@@ -42,7 +40,6 @@ export class Plant {
   private leanX = -0.6;
   private leanZ = 0;
   private nutPhase = 0;
-  // the nod's sweep, when the garden drives it in real time; NaN follows the day
   nutAt = NaN;
   openD = 40;
   seedD = 50;
@@ -52,7 +49,7 @@ export class Plant {
 
   private nBirth = new Float32Array(MAX_NODES);
   private nInter = new Float32Array(MAX_NODES);
-  private nStep = new Float32Array(MAX_NODES); // resting rise, before any bolting
+  private nStep = new Float32Array(MAX_NODES);
   private nElong = new Float32Array(MAX_NODES);
   private nElongDur = new Float32Array(MAX_NODES);
   private nLen = new Float32Array(MAX_NODES);
@@ -65,7 +62,7 @@ export class Plant {
   private nAz = new Float32Array(MAX_NODES);
   private nSen = new Float32Array(MAX_NODES);
   private nSeed = new Float32Array(MAX_NODES);
-  private nS = new Float32Array(MAX_NODES); // arc length up the stem, this pose
+  private nS = new Float32Array(MAX_NODES);
 
   private bNode = new Uint8Array(MAX_BRANCH);
   private bLen = new Float32Array(MAX_BRANCH);
@@ -79,20 +76,19 @@ export class Plant {
   private tAz = new Float32Array(MAX_TWIGS);
   private tBirth = new Float32Array(MAX_TWIGS);
 
-  private hKind = new Uint8Array(MAX_HEADS); // 0 stem tip, 1 branch tip, 2 pedicel
+  private hKind = new Uint8Array(MAX_HEADS);
   private hRef = new Uint8Array(MAX_HEADS);
   private hBirth = new Float32Array(MAX_HEADS);
   private hOpen = new Float32Array(MAX_HEADS);
   private hSize = new Float32Array(MAX_HEADS);
   private hSeed = new Float32Array(MAX_HEADS);
-  // the head this pose: top point, axis, frame, puff
   private hx = new Float32Array(MAX_HEADS * 3);
   private ha = new Float32Array(MAX_HEADS * 3);
   private hPuff = new Float32Array(MAX_HEADS);
 
-  private sRel = new Float32Array(MAX_SEEDS); // day it lets go
+  private sRel = new Float32Array(MAX_SEEDS);
   private sHash = new Float32Array(MAX_SEEDS);
-  private sFly = new Uint8Array(MAX_SEEDS); // 0 on the head, 1 in the air, 2 gone
+  private sFly = new Uint8Array(MAX_SEEDS);
   private sPos = new Float32Array(MAX_SEEDS * 3);
   private sVel = new Float32Array(MAX_SEEDS * 3);
   private sDir = new Float32Array(MAX_SEEDS * 3);
@@ -107,16 +103,16 @@ export class Plant {
   seedData = new Float32Array(MAX_SEEDS * SEED_STRIDE);
   seedN = 0;
   flying = 0;
-  loose = 0; // ripe seeds still on the heads
+  loose = 0;
   private shook = 0;
   branchN = 0;
   twigN = 0;
-  top = 0; // highest point, m
+  top = 0;
   dry = 0;
-  open = 0; // heads in flower
+  open = 0;
   private H = 0;
   private stemT = new Float32Array(SPINE_N * 3);
-  // scratch for lookups along a curve
+  // SCRATCH
   private px = 0;
   private py = 0;
   private pz = 0;
@@ -125,7 +121,7 @@ export class Plant {
   private tz = 0;
   private pr = 0;
 
-  ox = 0; // where it stands in the bed
+  ox = 0;
   oz = 0;
 
   constructor(seed: number) {
@@ -143,7 +139,6 @@ export class Plant {
     this.hMax = 0.78 + rnd() * 0.18;
     this.nodes = R + S + P;
     const az0 = rnd() * Math.PI * 2;
-    // a lean toward the light, which comes from the left
     this.leanX = -(0.6 + 0.4 * rnd());
     this.leanZ = (rnd() - 0.5) * 0.7;
     this.nutPhase = rnd() * Math.PI * 2;
@@ -156,19 +151,17 @@ export class Plant {
       this.nStep[k] = 0;
       if (k < R) {
         // ROSETTE
-        // the oldest leaves are outermost and lowest; the heart is still unfolding on day 0
         const f = k / (R - 1);
         this.nKind[k] = KIND_ROSETTE;
         this.nBirth[k] = -48 + k * 3.3;
         this.nLen[k] =
           (0.13 + 0.07 * Math.sin((Math.PI * (k + 2)) / (R + 3))) * (0.9 + 0.2 * rnd());
-        this.nWid[k] = (0.49 + 0.05 * rnd()) * (1 - 0.45 * f); // half-width over length, the heart narrower
+        this.nWid[k] = (0.49 + 0.05 * rnd()) * (1 - 0.45 * f);
         // NESTING
-        // each inner leaf sits higher, stands steeper and arches less than the one outside
-        // it, so the stack never crosses: all three are monotonic in k, no jitter
+        // elevation, steepness and arch monotonic in k, so inner leaves never cross outer
         this.nElev[k] = 0.22 + 0.85 * f ** 1.6;
         this.nDroop[k] = 0.95 - 0.75 * f;
-        this.nCup[k] = -0.25 + 0.3 * f; // outer leaves domed, edges down; the heart cupped
+        this.nCup[k] = -0.25 + 0.3 * f;
         this.nRuffle[k] = 0.9 + 0.25 * rnd();
         this.nSen[k] = 34 + k * 0.45;
         const top = k - (R - 6);
@@ -179,7 +172,6 @@ export class Plant {
         if (top >= 0) bolt += this.nInter[k];
       } else if (k < R + S) {
         // STEM LEAVES
-        // clasping, smaller and narrower the higher they sit
         const j = k - R;
         const f = j / S;
         this.nKind[k] = KIND_STEM;
@@ -197,7 +189,6 @@ export class Plant {
         bolt += this.nInter[k];
       } else {
         // PANICLE
-        // a bract at every node and a branch above it
         const j = k - R - S;
         const f = j / (P - 1);
         this.nKind[k] = KIND_BRACT;
@@ -215,11 +206,10 @@ export class Plant {
         bolt += this.nInter[k];
       }
     }
-    // the bolting internodes add up to the height this plant reaches
     const scale = (this.hMax - 0.04) / bolt;
     for (let k = R - 6; k < this.nodes; k++) this.nInter[k] *= scale;
 
-    // BRANCHES and PEDICELS
+    // BRANCHES AND PEDICELS
     let t = 0;
     let h = 0;
     const last = this.nodes - 1;
@@ -262,7 +252,7 @@ export class Plant {
     this.seedD = 99;
     this.lastD = 0;
     // FLOWERING
-    // buds wait for one another, then the whole spray opens within a few days
+    // buds sync, then the whole spray opens within a few days
     let born = 0;
     for (let i = 0; i < h; i++) born = Math.max(born, this.hBirth[i]);
     const F0 = born + 3;
@@ -284,7 +274,6 @@ export class Plant {
     }
   }
 
-  // the day each review stage is clearest
   stageDay(name: string) {
     if (name === "rosette") return 2;
     if (name === "bolt") return this.boltD + 9;
@@ -310,7 +299,6 @@ export class Plant {
   // GROWTH
   private inter(k: number, g: number) {
     if (g < this.nBirth[k]) return 0;
-    // a new node eases its first rise in, so the leaves above never jump
     return (
       this.nStep[k] * ease(g - this.nBirth[k]) +
       this.nInter[k] * ease((g - this.nElong[k]) / this.nElongDur[k])
@@ -324,7 +312,7 @@ export class Plant {
   }
 
   // POSE
-  // sx, sz: the sway, as a lean at the top in radians; t: seconds, for the flutter
+  // sx, sz: sway lean at the top in radians; t: seconds
   pose(g: number, sx: number, sz: number, t: number, wind: number) {
     this.stem(g, sx, sz);
     this.leafs(g);
@@ -339,15 +327,14 @@ export class Plant {
       s += this.inter(k, g);
     }
     const H = (this.H = s + 0.012);
-    // NOD and NUTATION
-    // while it races up, the soft tip hooks over and sweeps round in slow circles
+    // NOD AND NUTATION
+    // a fast-rising tip hooks over and circles slowly
     const rate = (this.heightAt(g + 0.3) - this.heightAt(g - 0.3)) / 0.6;
     const nod = 0.95 * Math.min(1, rate / 0.07);
     const ph = (Number.isNaN(this.nutAt) ? nutOf(g) : this.nutAt) + this.nutPhase;
     const nx = (Math.cos(ph) + this.leanX * 0.8) * nod;
     const nz = (Math.sin(ph) + this.leanZ * 0.8) * nod;
     const zoneA = H - Math.min(0.17, H * 0.5);
-    // a rosette doesn't rock on its stalk; the sway comes in as the stalk rises
     const swayOn = smooth(0.12, 0.4, H);
     const ds = H / (SPINE_N - 1);
     const rB = 0.0022 + 0.0066 * ease((g - this.boltD) / 18);
@@ -395,7 +382,6 @@ export class Plant {
     }
   }
 
-  // a point up the stem at arc length s, into px.. and tx..
   private atStem(s: number) {
     const f = Math.min(SPINE_N - 1.001, Math.max(0, (s / this.H) * (SPINE_N - 1)));
     const i = Math.floor(f);
@@ -422,7 +408,6 @@ export class Plant {
     this.tz = tz;
   }
 
-  // a point along a curve row, at fraction q of its n points
   private atRow(row: number, n: number, q: number) {
     const f = Math.min(n - 1.001, Math.max(0, q * (n - 1)));
     const i = Math.floor(f);
@@ -462,12 +447,10 @@ export class Plant {
     let n = 0;
     for (let k = 0; k < this.nodes; k++) {
       const kind = this.nKind[k];
-      // a stalk leaf shows once the stalk has carried its node clear of the heart
       const age = g - this.nBirth[k] - (kind === KIND_ROSETTE ? 0 : 1.5);
       if (age <= 0) continue;
       const dur = kind === KIND_ROSETTE ? 13 : kind === KIND_STEM ? 8 : 4;
       const grow = ease(age / dur);
-      // a new leaf eases out of the node rather than appearing at a size
       const pop = ease(age / 1.2);
       const unf = ease((age - dur * 0.1) / (dur * 0.75));
       const sen = ease((g - this.nSen[k]) / 13);
@@ -479,7 +462,6 @@ export class Plant {
           0.3 * sen -
           (kind === KIND_ROSETTE ? 0.16 * boltP * (1 - this.nElev[k]) : 0),
       );
-      // the rosette's heart, carried up as the stalk bolts, opens out like the stalk's leaves
       if (kind === KIND_ROSETTE && this.nElong[k] > -99) {
         const lift = ease(
           ((this.inter(k, g) - this.nStep[k]) / Math.max(this.nInter[k], 1e-6)) * 1.5,
@@ -487,14 +469,12 @@ export class Plant {
         elev = mix(elev, Math.min(elev, 0.6), lift);
       }
       let droop = mix(-0.45, this.nDroop[k], unf) + 0.55 * sen;
-      // a stalk leaf's tip may dip only a little below level, clear of the leaf beneath
       if (kind !== KIND_ROSETTE) droop = Math.min(droop, elev + 0.05);
 
       this.atStem(this.nS[k]);
       const tx = this.tx;
       const ty = this.ty;
       const tz = this.tz;
-      // outward, square to the stem
       let dx = Math.cos(this.nAz[k]);
       let dy = 0;
       let dz = Math.sin(this.nAz[k]);
@@ -511,7 +491,6 @@ export class Plant {
       const fx = dx * ce + tx * se;
       const fy = dy * ce + ty * se;
       const fz = dz * ce + tz * se;
-      // side = T x D
       let ax = ty * dz - tz * dy;
       let ay = tz * dx - tx * dz;
       let az = tx * dy - ty * dx;
@@ -519,7 +498,6 @@ export class Plant {
       ax /= al;
       ay /= al;
       az /= al;
-      // a little twist about the midrib on the stalk; none in the rosette, where it would cut
       const tw = kind === KIND_ROSETTE ? 0 : (this.nSeed[k] - 0.5) * 0.3;
       const ct = Math.cos(tw);
       const st = Math.sin(tw);
@@ -531,12 +509,11 @@ export class Plant {
       az = az * ct + nz * st;
       const r = this.pr * (kind === KIND_ROSETTE ? 1.05 : 1.3) + 0.0008;
       // SOIL
-      // the midrib bends down at most until its tip clears the soil, with room for the ruffle
+      // droop capped so the tip clears the soil
       if (droop > 0.01) {
         const by = this.py + dy * r;
-        const clear = 0.026 + 0.006 * k - by; // inner tips rest higher than outer
+        const clear = 0.026 + 0.006 * k - by;
         const e0 = Math.asin(Math.max(-1, Math.min(1, fy)));
-        // solved, not stepped, so the droop eases as the leaf grows instead of snapping
         if (dropOf(e0, droop) * len < clear) {
           let lo = 0;
           let hi = droop;
@@ -578,7 +555,6 @@ export class Plant {
   }
 
   // BRANCHES
-  // each leaves the stem at an angle, then turns up toward the light as it lengthens
   private branches(g: number, sx: number, sz: number, t: number, wind: number) {
     const sp = this.spine;
     const P = this.panicle;
@@ -599,7 +575,6 @@ export class Plant {
       const fh = Math.min(1, this.nS[k] / this.H);
       let hx = Math.cos(this.nAz[k]);
       let hz = Math.sin(this.nAz[k]);
-      // start direction, then its angle from upright and the horizontal heading
       const ca = Math.cos(this.bAngle[b]);
       const sa = Math.sin(this.bAngle[b]);
       const d0x = tx * ca + hx * sa;
@@ -624,7 +599,6 @@ export class Plant {
         sp[o + 2] = z;
         sp[o + 3] = len > 0.002 ? (0.0021 * (1 - 0.6 * q) + 0.0005) * Math.sqrt(grow) : 0;
         const qm = (i + 0.5) / (SPINE_N - 1);
-        // young tips hang a little before they firm up
         const phi = phi0 * (1 - 0.55 * qm) + (1 - grow) * 0.7 * qm * qm;
         tilt(hx * phi + swx * qm, hz * phi + swz * qm);
         x += dX * ds;
@@ -648,7 +622,6 @@ export class Plant {
       const tx = this.tx;
       const ty = this.ty;
       const tz = this.tz;
-      // a frame round the branch
       let ux = -tz;
       const uy = 0;
       let uz = tx;
@@ -698,7 +671,7 @@ export class Plant {
   }
 
   // HEADS
-  // bud, a day in flower, closed while the seed ripens, then a puff
+  // bud, a day in flower, closed while ripening, then a puff
   private flowers(g: number) {
     const D = this.headData;
     let n = 0;
@@ -715,7 +688,6 @@ export class Plant {
       if (kind === 0) this.atRow(0, SPINE_N, 1);
       else if (kind === 1) this.atRow(1 + ref, SPINE_N, 1);
       else this.atRow(TWIG_ROW + ref, TWIG_N, 1);
-      // heads hold themselves a little more upright than their stalks
       let ax = this.tx;
       let ay = this.ty + 0.35;
       let az = this.tz;
@@ -745,7 +717,6 @@ export class Plant {
       D[k + 11] = grow;
       D[k + 12] = dryH;
       D[k + 13] = 0;
-      // where the seeds sit: the top of the involucre
       const lh = 0.026 * sz * (1 + 0.25 * mat) * (1 - 0.6 * puff);
       this.hx[h * 3] = this.px + ax * lh;
       this.hx[h * 3 + 1] = this.py + ay * lh;
@@ -763,7 +734,7 @@ export class Plant {
   }
 
   // SEEDS
-  // on the head until their day, then in the air in real time
+  // attached until their release day, then simulated in real time
   seeds(g: number, dt: number, t: number, wx: number, wz: number, breeze: number, gust: number) {
     const S = this.seedData;
     let n = 0;
@@ -779,7 +750,6 @@ export class Plant {
       const ax = this.ha[h * 3];
       const ay = this.ha[h * 3 + 1];
       const az = this.ha[h * 3 + 2];
-      // a frame round the head axis
       let ux = -az;
       let uz = ax;
       let ul = Math.hypot(ux, uz);
@@ -834,7 +804,6 @@ export class Plant {
         if (this.sFly[j] === 2) continue;
         if (this.sFly[j] === 0) {
           // LET GO
-          // not all at once: each seed tugs free a moment after the last
           this.sFly[j] = 1;
           this.sAge[j] = -((this.sHash[j] * 7.31) % 1) * 1.6;
         }
@@ -862,7 +831,7 @@ export class Plant {
           }
         }
         // DRIFT
-        // each seed its own: size, drag, sink, spin, carried on a curl-noise flow
+        // per-seed drag, sink and spin, advected by a curl-noise field
         const h1 = this.sHash[j];
         const h2 = (h1 * 7.31) % 1;
         const h3 = (h1 * 13.7) % 1;
@@ -877,7 +846,8 @@ export class Plant {
         const fy = y * 1.7;
         const fz = z * 1.7 + h2 * 0.9;
         const tt = t * 0.55;
-        // curl of A = (sin y + sin z, sin z + sin x, sin x + sin y), each with its own phase
+        // CURL NOISE
+        // curl of A = (sin y + sin z, sin z + sin x, sin x + sin y), per-axis phase
         const dAzdy = 2.5 * Math.cos(2.5 * fy + 0.4 * tt + 3.0);
         const dAydz = 1.9 * Math.cos(1.9 * fz + 0.5 * tt + 2.1);
         const dAxdz = 2.3 * Math.cos(2.3 * fz + 0.9 * tt + 1.3);
@@ -895,7 +865,7 @@ export class Plant {
         P[j3 + 1] = y + V[j3 + 1] * dt;
         P[j3 + 2] = z + V[j3 + 2] * dt;
         // TUMBLE
-        // the pappus rights itself like a parachute, rocking round as it spins
+        // pappus self-rights like a parachute, rocking as it spins
         const D = this.sDir;
         const r = 1 - Math.exp(-dt / (0.25 + 0.5 * h3));
         const ph = t * (h2 - 0.5) * 5 + h1 * 6.283;
@@ -935,7 +905,7 @@ export class Plant {
   }
 
   // SHAKE
-  // each shake takes a further share of what is ripe, in a quick burst, until the heads are bare
+  // each shake releases a further share of ripe seed in a quick burst
   shake(g: number) {
     this.shook += 0.3;
     let n = 0;
@@ -954,13 +924,11 @@ export class Plant {
   }
 
   // FALL
-  // after a pose, the whole plant tipped about its foot by a toward (dx, dz), scaled by k
-  // and let down into the soil by sink. rigid, so nothing it does can cross itself
+  // rigid rotation about the foot by a toward (dx, dz), scaled by k, sunk by sink
   fell(a: number, dx: number, dz: number, k: number, sink: number) {
     const c = Math.cos(a);
     const s = Math.sin(a);
     const t = 1 - c;
-    // rotation about (dz, 0, -dx), which tips up toward (dx, 0, dz)
     const ax = dz;
     const az = -dx;
     const R = FR;
@@ -1004,7 +972,6 @@ export class Plant {
     }
   }
 
-  // a gust takes the loosest seeds from every ripe head
   blow(g: number, strength: number) {
     let n = 0;
     for (let h = 0; h < this.heads; h++) {
@@ -1012,7 +979,6 @@ export class Plant {
       for (let s = 0; s < SEEDS_PER_HEAD; s++) {
         const j = h * SEEDS_PER_HEAD + s;
         if (g >= this.sRel[j]) continue;
-        // seeds due soonest go first
         const ready = 1 - Math.min(1, (this.sRel[j] - g) / 8);
         if (this.sHash[j] < strength * (0.2 + 0.55 * ready)) {
           this.sRel[j] = g - 1e-3;
@@ -1025,7 +991,6 @@ export class Plant {
 }
 
 // FELL
-// the rotation, scale and drop of the last fell(), for its points and directions
 const FR = new Float32Array(9);
 let fK = 1;
 let fBx = 0;
@@ -1050,13 +1015,12 @@ function fellDir(A: Float32Array, o: number) {
   A[o + 2] = R[6] * x + R[7] * y + R[8] * z;
 }
 
-// the nod's sweep on day g, radians
 export function nutOf(g: number) {
   return (g / NUT_DAYS) * Math.PI * 2;
 }
 
 // TILT
-// a lean vector (radians, toward x and z) to a unit direction, into dX dY dZ
+// lean (radians toward x and z) to a unit direction in dX dY dZ
 let dX = 0;
 let dY = 1;
 let dZ = 0;
@@ -1068,7 +1032,8 @@ function tilt(x: number, z: number) {
   dZ = z * s;
 }
 
-// height of a leaf tip over its base, per unit length: rising at e, bending down by d
+// LEAF DROP
+// tip height over base per unit length: rising at e, bending down by d
 function dropOf(e: number, d: number) {
   return (Math.cos(e - d) - Math.cos(e)) / d;
 }

@@ -1,7 +1,5 @@
 // CAMERA
-// shared by the renderer and the first-paint sketch, so the sketch lines up with the room.
-// square to the back wall so its floor line stays level; landscape looks level from low,
-// portrait steps back and up so the wall behind the sculpture still fits
+// shared with sketch.ts; portrait steps back and up to fit the wall
 const EYE_WIDE = [0.2, 1.15, 6.0] as const;
 const AIM_WIDE = [0.2, 1.5, 0.3] as const;
 const FOCAL_WIDE = 3.0;
@@ -40,11 +38,9 @@ export function aim(c: Camera, aspect: number) {
   u[0] = r[1] * f[2] - r[2] * f[1];
   u[1] = r[2] * f[0] - r[0] * f[2];
   u[2] = r[0] * f[1] - r[1] * f[0];
-  // keep enough of the wall across a narrow screen
   c.focal = Math.min(FOCAL_WIDE, Math.max(FOCAL_TALL, aspect * 2.3));
 }
 
-// a world point to css px on a w x h canvas; z is the depth along the view
 export function project(c: Camera, x: number, y: number, z: number, w: number, h: number) {
   const dx = x - c.eye[0];
   const dy = y - c.eye[1];

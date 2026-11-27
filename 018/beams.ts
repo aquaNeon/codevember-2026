@@ -3,33 +3,30 @@ import { orient } from "./motion";
 import { SCENE, SUN } from "./scene";
 
 // BEAMS
-// one sunbeam per sunlit face, traced through the solid on the cpu: refract in, bounce off
-// the inside until it can leave, leave once for red and once for violet, land on the wall.
-// every way a beam can switch paths (crossing a face edge, tipping into total reflection,
-// turning from the sun) is faded through zero, so flecks fade out and in but never jump
+// cpu trace per sunlit face; path switches fade through zero so flecks never jump
 
-export const STRIDE = 7; // red xy, violet xy, radius, gain, seed (negative: plain light)
+// LAYOUT
+// per fleck: red xy, violet xy, radius, gain, seed (negative: plain light)
+export const STRIDE = 7;
 const BOUNCES = 5;
 const MIN_GAIN = 0.02;
-const EDGE_FADE = 0.3; // of a beam's radius, how close to an edge a beam starts to fade
-const TIR_FADE = 0.2; // how far below the critical angle a leaving beam starts to fade
+const EDGE_FADE = 0.3;
+const TIR_FADE = 0.2;
 const GAIN = 7;
 // SWAY
-// each face feels only its own share of the swing, so the flecks slide at different rates
-// and stretch on their own instead of riding the crystal as one block
+// per-face share of the swing, so flecks slide and stretch independently
 const SWAY = [0.12, 0.55];
-const TRAVEL = 0.18; // how much of the crystal's own travel the flecks share
+const TRAVEL = 0.18;
 // GLIDE
-// each fleck trails its beam by its own few frames, so the field drifts rather than snaps
+// per-fleck lag, so the field drifts instead of snapping
 const LAG_S = [0.08, 0.3];
 // LOOK
-// small soft flecks: a short run of colour a few radii long, never a string
 const RADIUS_M = [0.007, 0.036];
-const RUN = [0.6, 3.4]; // red to violet run, in radii
-const MAX_STRETCH = 1.8; // grazing beams lengthen up to this
+const RUN = [0.6, 3.4];
+const MAX_STRETCH = 1.8;
 const STRENGTH = [0.35, 1.1];
-const FLECKS = 3; // most flecks on the wall at once
-const LEVEL_RAD = 1.35; // swing angle by which the flecks are gone
+const FLECKS = 3;
+const LEVEL_RAD = 1.35;
 
 const IOR = SCENE.ior;
 const IOR_R = SCENE.ior - SCENE.spread / 2;
@@ -38,24 +35,23 @@ const IOR_V = SCENE.ior + SCENE.spread / 2;
 export class Beams {
   readonly data: Float32Array;
   count = 0;
-  restY: number = SCENE.restY; // where the stone's top hangs at rest
+  restY: number = SCENE.restY;
   private s = new Float32Array(3);
   private hit = new Float32Array(2);
   private r = new Float32Array(9);
   private dirX = 0;
   private dirY = 0;
 
-  private look: Float32Array; // radius, run, strength, lag per face and bounce
-  private sway: Float32Array; // per face
-  private raw: Float32Array; // this frame's fleck per slot
-  private eased: Float32Array; // what is drawn, per slot
+  private look: Float32Array;
+  private sway: Float32Array;
+  private raw: Float32Array;
+  private eased: Float32Array;
   private alive: Uint8Array;
   private slots: number;
   private seed: Float32Array;
   private top = new Int32Array(FLECKS + 1);
   private topG = new Float32Array(FLECKS + 1);
 
-  // extra: slots after the flecks the host fills itself
   constructor(
     private c: Crystal,
     extra: number,
@@ -80,10 +76,10 @@ export class Beams {
       this.sway[i] = SWAY[0] + (SWAY[1] - SWAY[0]) * hash(i * 13 + 7);
   }
 
-  // the crystal's lean and twist, and its origin in the world
   trace(ax: number, az: number, twist: number, at: Float32Array, dt: number) {
     this.alive.fill(0);
-    // flecks belong to a hanging stone: they fade out as a big swing goes past level
+    // LEVEL FADE
+    // flecks fade out as a swing passes level
     ax -= Math.PI * 2 * Math.round(ax / (Math.PI * 2));
     const up = smooth(LEVEL_RAD, LEVEL_RAD * 0.6, Math.abs(ax));
     const c = this.c;
@@ -141,7 +137,8 @@ export class Beams {
 
         const ci = dx * mx + dy * my + dz * mz;
         const sin2 = 1 - ci * ci;
-        // fades to nothing as violet nears total reflection; what does not leave reflects on
+        // EXIT
+        // fades out as violet nears total internal reflection; the rest reflects on
         const leave = smooth(1, 1 - TIR_FADE, IOR_V * IOR_V * sin2);
         if (leave > 0) {
           this.emit(at, px, py, pz, dx, dy, dz, mx, my, mz, ci, gain * leave, i * BOUNCES + b);
@@ -155,9 +152,8 @@ export class Beams {
     this.ease(dt);
   }
 
-  // every slot glides toward this frame's fleck and fades out when its beam is gone. cloudy
-  // quartz scatters most of the light, so only the strongest few reach the wall as colour,
-  // each dimmed by the next in line so one taking another's place fades instead of popping
+  // EASE
+  // slots glide toward this frame; top few shown, each dimmed by the next so swaps fade
   private ease(dt: number) {
     const raw = this.raw;
     const e = this.eased;
@@ -170,7 +166,6 @@ export class Beams {
       const was = e[o + 5];
       const a = dt > 0 ? 1 - Math.exp(-dt / this.look[k * 4 + 3]) : 1;
       if (this.alive[k]) {
-        // a fleck coming back from nothing appears where it is, it does not fly in
         const snap = was < MIN_GAIN ? 1 : a;
         for (let q = 0; q < 5; q++) e[o + q] += (raw[o + q] - e[o + q]) * snap;
         e[o + 5] = was + (raw[o + 5] - was) * a;
@@ -200,7 +195,6 @@ export class Beams {
     }
   }
 
-  // distance from a point on face j to its nearest rim edge
   private edge(j: number, px: number, py: number, pz: number, nx: number, ny: number, nz: number) {
     const r = this.c.corners;
     const n = this.c.rimCount[j];
@@ -212,7 +206,6 @@ export class Beams {
       const ex = r[b] - r[a];
       const ey = r[b + 1] - r[a + 1];
       const ez = r[b + 2] - r[a + 2];
-      // inward perpendicular in the face plane: n x e
       let ix = ny * ez - nz * ey;
       let iy = nz * ex - nx * ez;
       let iz = nx * ey - ny * ex;
@@ -245,7 +238,6 @@ export class Beams {
     const look = this.look;
     const radius = look[k * 4];
     gain *= look[k * 4 + 2];
-    // exit point, with only a share of the crystal's travel off its resting place
     const wx = rot[0] * px + rot[3] * py + rot[6] * pz + at[0] * TRAVEL;
     const wy = rot[1] * px + rot[4] * py + rot[7] * pz + this.restY + (at[1] - this.restY) * TRAVEL;
     const wz = SCENE.crystalZ;
@@ -253,7 +245,6 @@ export class Beams {
     const out = this.raw;
     const h = this.hit;
 
-    // red and violet leave at their own angles
     let zr = this.land(wx, wy, wz, dx, dy, dz, mx, my, mz, ci, IOR_R);
     if (zr >= 0) return;
     const rx = h[0];
@@ -261,14 +252,14 @@ export class Beams {
     const zv = this.land(wx, wy, wz, dx, dy, dz, mx, my, mz, ci, IOR_V);
     if (zv >= 0) return;
 
-    // grazing beams fade before they would run along the wall
+    // GRAZING
+    // fade before beams run along the wall
     zr = -0.5 * (zr + zv);
     gain *= smooth(0.12, 0.35, zr) * Math.sqrt(zr) * GAIN;
     if (gain < MIN_GAIN) return;
 
     // RUN
-    // the true split, held to a short run: barely bent beams still show their colours, wide
-    // ones never become strings. grazing beams land a little longer
+    // true split clamped to a short run; grazing beams land a little longer
     let sx = h[0] - rx;
     let sy = h[1] - ry;
     const sl = Math.hypot(sx, sy);
@@ -293,8 +284,8 @@ export class Beams {
     this.alive[k] = 1;
   }
 
-  // refracts out of the face with this ior and finds the wall; returns the world z of the
-  // direction (negative when it heads for the wall), hit in this.hit
+  // LAND
+  // refract out and hit the wall (this.hit); returns dir z, negative toward the wall
   private land(
     wx: number,
     wy: number,

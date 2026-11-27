@@ -21,35 +21,35 @@ const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
 const BG_SCALE = 0.5;
 const FOV_TAN = Math.tan((38 * Math.PI) / 360);
-const CAM_Z = 3.55; // pulled back so the frond has water round it
-const BLADE_N = 128; // spine samples per blade
-const MAIN_F = 64; // sideways field samples along the main stipe
+const CAM_Z = 3.55;
+const BLADE_N = 128;
+const MAIN_F = 64;
 const SEG_S = 200;
 const SEG_U = 22;
 const RING_S = 192;
 const RING_A = 20;
-const MOTES = 1000; // raise for denser marine snow
+const MOTES = 1000; // change for denser marine snow
 const STEP_S = 1 / 120;
-const STILL_T_S = 14; // the moment shown under reduced motion
+const STILL_T_S = 14;
 const STIPE_R = 0.02;
-const DEPTH_STEP = 0.002; // ndc depth between blade layers
+const DEPTH_STEP = 0.002;
 const KERNEL = [0.1, 0.35, 0.75, 1, 0.75, 0.35, 0.1];
-const RIPPLE_PX = 1.1; // css px the frame wobbles by
-const FRINGE_PX = 1.3; // css px of colour split at the corners
-const GRAIN_PX = 1.5; // css px per grain clump
-const BLUR_PX = 2.2; // raise for a wider soft focus, css px
-const ZIG_RAD = 0.07; // the stipe bends away from each float by this much
-const ZIG_ROUND = 0.4; // each bend is rounded over this fraction of the gap to the next node
-const GAP_R = 0.84; // each gap along the stipe is this much shorter than the one before
-const SIZE_R = 0.82; // and each blade this much shorter than the one before
-const FIRST_AT = 0.26; // first float, fraction of the stipe
+const RIPPLE_PX = 1.1;
+const FRINGE_PX = 1.3;
+const GRAIN_PX = 1.5;
+const BLUR_PX = 2.2; // change for a wider soft focus
+const ZIG_RAD = 0.07;
+const ZIG_ROUND = 0.4;
+const GAP_R = 0.84;
+const SIZE_R = 0.82;
+const FIRST_AT = 0.26;
 
 // FIELD
-// out of plane billow on each blade, a sideways swing along it, the stipe and the bulbs bobbing
-const WAVE_C = 0.7; // world units per second
-const FLOW_U = 0.55; // the wake drifts toward the tips this fast
-const H_K = 8; // spring back, rad^2/s^2
-const H_D = 2.4; // damping per second
+// damped springs: blade billow, sideways swing, stipe bend, bulb bob
+const WAVE_C = 0.7;
+const FLOW_U = 0.55;
+const H_K = 8;
+const H_D = 2.4;
 const LAT_K = 4.5;
 const LAT_D = 2.1;
 const BOB_K = 6;
@@ -59,26 +59,26 @@ const PUSH_TILT = 3.5;
 const PUSH_LAT = 2.6;
 const PUSH_MAIN = 1;
 const PUSH_BOB = 4;
-const MAIN_K = 16; // the stipe is stiff and critically damped
+const MAIN_K = 16;
 const MAIN_D = 8;
-const SPEED_CAP = 2.4; // screens per second before the push saturates
-const REACH = 0.13; // push radius, fraction of screen height
+const SPEED_CAP = 2.4;
+const REACH = 0.13;
 const VEL_TAU_S = 0.07;
 const GUST_S = 0.45;
 const STATE_MS = 160;
 
 type Layout = {
-  x: number; // stipe root, world
+  x: number;
   y: number;
   z: number;
-  a0: number; // stipe heading at the root, rad
-  ak: number; // and its change per unit
-  len: number; // stipe length
-  flow: number; // heading the blades settle into
-  fork: number; // heading of a bulb off the stipe, relative to it
-  ls: number; // blade length scale
-  ws: number; // blade width scale
-  spread: number; // how far the oldest blades fan out from the youngest
+  a0: number;
+  ak: number;
+  len: number;
+  flow: number;
+  fork: number;
+  ls: number;
+  ws: number;
+  spread: number;
 };
 
 const H_N = NB * FIELD_U * FIELD_S;
@@ -148,12 +148,11 @@ export class Kelp {
   private aspect = 1;
   private lay: Layout = layout(1);
   private dsMain = 1;
-  private zig = new Float32Array(SPINE_W); // stipe heading kink at each node
+  private zig = new Float32Array(SPINE_W);
   private mvp = new Float32Array(16);
   private proj = new Float32Array(16);
 
   // FROND
-  // per blade: where it sits on the stipe and how big it is
   private att = new Float32Array(NB);
   private len = new Float32Array(NB);
   private wid = new Float32Array(NB);
@@ -163,8 +162,8 @@ export class Kelp {
   private b0 = new Float32Array(NB * 4);
   private b1 = new Float32Array(NB * 4);
   private b2 = new Float32Array(NB * 4);
-  private grow = new Float32Array(NB); // 0 oldest, 1 youngest mature, above that budding
-  private splay = new Float32Array(NB); // how far the stalk forks off the stipe
+  private grow = new Float32Array(NB);
+  private splay = new Float32Array(NB);
 
   // SPINES
   // three rows each (position, lateral, normal): the stipe first, then every blade
@@ -199,7 +198,7 @@ export class Kelp {
   private has = false;
   private dx = 0;
   private dy = 0;
-  private vx = 0; // smoothed cursor velocity, css px per second
+  private vx = 0;
   private vy = 0;
   private gust = 0;
   private gx = 0;
@@ -211,7 +210,6 @@ export class Kelp {
   onShown: () => void = () => {};
   onState: (current: number) => void = () => {};
 
-  // no dom in here, so the whole scene can live in a worker
   constructor(
     private canvas: HTMLCanvasElement | OffscreenCanvas,
     opts: { reducedMotion: boolean; forceGl: boolean; dpr: number },
@@ -363,7 +361,6 @@ export class Kelp {
     this.wake();
   }
 
-  // pointer positions are css px from the canvas top left; fresh starts a stroke
   move(x: number, y: number, fresh: boolean) {
     if (this.has && !fresh) {
       this.dx += x - this.px;
@@ -379,7 +376,6 @@ export class Kelp {
     this.has = false;
   }
 
-  // a sweep of water across the middle of the frond, for the keyboard
   push(dirX: number, dirY: number) {
     this.gust = GUST_S;
     this.gx = dirX;
@@ -410,7 +406,7 @@ export class Kelp {
   };
 
   // CURSOR
-  // pointer travel since the last frame becomes a smoothed velocity that dies out when it stops
+  // pointer travel per frame, exponentially smoothed into a velocity
   private cursor(dt: number) {
     if (dt <= 0) return;
     const k = 1 - Math.exp(-dt / VEL_TAU_S);
@@ -418,7 +414,8 @@ export class Kelp {
     let ry = this.dy / dt;
     this.dx = this.dy = 0;
     if (this.gust > 0) {
-      // the keyboard drags a virtual cursor across the frond's middle
+      // KEYBOARD
+      // virtual cursor dragged across the frond's middle
       const p = 1 - this.gust / GUST_S;
       const o = (Math.round(SPINE_W * 0.6) * 4) | 0;
       project(this.spine[o], this.spine[o + 1], this.spine[o + 2], this.aspect);
@@ -481,7 +478,6 @@ export class Kelp {
 
     // BLADES
     for (let n = 0; n < NB; n++) {
-      // the stipe frame where this bulb grows out
       const fi = this.att[n] / dsm;
       const i = Math.min(fi | 0, SPINE_W - 2);
       const fr = fi - i;
@@ -491,11 +487,10 @@ export class Kelp {
       y = sp[o + 1] + (sp[o + 5] - sp[o + 1]) * fr;
       z = sp[o + 2] + (sp[o + 6] - sp[o + 2]) * fr;
       const am = Math.atan2(-sp[o1], sp[o1 + 1]);
-      const P0 = this.stalk[n] * 0.3; // the stalk peels off the stipe over this length
+      const P0 = this.stalk[n] * 0.3;
       const P = this.stalk[n];
       const len = this.len[n];
       const ds = this.ds[n];
-      // the apical blade swings round slowly into the flow, a scimitar
       const lam = this.splay[n] > 0 ? 0.14 + 0.12 * len : 0.75 * len;
       const ph = n * 0.85;
       const row = 3 + n * 3;
@@ -541,7 +536,8 @@ export class Kelp {
         ptx = tx;
         pty = ty;
         ptz = tz;
-        // lateral in the plane, normal toward the camera, then twisted about the tangent
+        // FRAME
+        // lateral in plane, normal toward camera, then twisted about the tangent
         const cp = Math.cos(psi);
         const spsi = Math.sin(psi);
         const nx0 = -sb * ca;
@@ -621,13 +617,13 @@ export class Kelp {
           this.torqueP[n] -= (peak * mag * s) / FIELD_S;
           if (peak > 0.05) this.stirred = true;
         }
-        // the bulb itself takes the water too
         const ob = (row * SPINE_W + 8) * 4;
         const fb = this.fall(sp[ob], sp[ob + 1], sp[ob + 2], inv);
         const ol = ob + SPINE_W * 4;
         const acrossB = (ux * sp[ol] + uy * sp[ol + 1]) / (Math.hypot(sp[ol], sp[ol + 1]) || 1);
         this.torqueY[n] += acrossB * fb * mag * 0.6;
         const jm = Math.round((this.att[n] / this.lay.len) * (MAIN_F - 1));
+        // STIPE PUSH
         // spread over a few samples so the stipe bends instead of kinking
         for (let d = -3; d <= 3; d++) {
           const jj = jm + d;
@@ -676,7 +672,6 @@ export class Kelp {
     }
   }
 
-  // how much of the push reaches a world point
   private fall(x: number, y: number, z: number, inv: number) {
     project(x, y, z, this.aspect);
     const qx = (SCR[0] * 0.5 + 0.5) * this.cssW - this.px;
@@ -765,7 +760,7 @@ export class Kelp {
   }
 
   // STATE
-  // the current readout, a drift plus the cursor's surge
+  // readout: base drift plus the cursor's surge
   private report(dt: number) {
     this.stateT += dt * 1000;
     const v = Math.round(
@@ -791,7 +786,6 @@ export class Kelp {
     this.frond();
     perspective(this.proj, this.aspect);
     this.mvp.set(this.proj);
-    // the camera sits at +z, looking down -z
     this.mvp[14] = this.proj[10] * -CAM_Z + this.proj[14];
     this.mvp[15] = CAM_Z;
     this.depth0 = this.mvp[14] / CAM_Z;
@@ -815,12 +809,12 @@ export class Kelp {
   }
 
   // FROND
-  // oldest blade lowest on the stipe and biggest; toward the tip they crowd and shrink
+  // oldest and largest at the root; spacing and size shrink toward the tip
   private frond() {
     const L = (this.lay = layout(this.aspect));
     this.dsMain = L.len / (SPINE_W - 1);
     // SPACING
-    // gaps shrink in one steady geometric run, so the last float lands on the stipe's end
+    // geometric gaps, scaled so the last float lands on the stipe's end
     let sum = 0;
     for (let n = 0; n < NB - 1; n++) sum += Math.pow(GAP_R, n);
     let pos = FIRST_AT;
@@ -836,7 +830,6 @@ export class Kelp {
       this.grow[n] = g;
       // APEX
       // the stipe runs on into the curved apical blade
-      // every float on the upper side, each stalk leaving at its own angle
       this.splay[n] = apex ? 0 : 1 + 0.2 * Math.sin(n * 2.3);
       this.ds[n] = (this.len[n] + this.stalk[n]) / (BLADE_N - 1);
       const o = n * 4;
@@ -855,7 +848,7 @@ export class Kelp {
       this.b2[o + 2] = 0.82 + 0.06 * Math.sin(n * 1.9);
     }
     // ZIGZAG
-    // past each node the stipe turns a little, one way then the other, in a soft arc
+    // alternating heading kink at each node, rounded over ZIG_ROUND
     const side = Math.sign(L.fork);
     for (let i = 0; i < SPINE_W; i++) {
       const sg = i * this.dsMain;
@@ -933,7 +926,8 @@ export class Kelp {
       STIPE_R * Math.sqrt(this.lay.ws),
     );
     gl.bindVertexArray(this.tubeVao);
-    // the tube winding faces inward; culling it hides the open ends where a stalk leaves the stipe
+    // CULL
+    // tube winding faces inward; front-culling hides the open stalk ends
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.FRONT);
     gl.uniform1f(ut.uMain, 1);
@@ -954,7 +948,7 @@ export class Kelp {
     gl.drawElementsInstanced(gl.TRIANGLES, this.bladeCount, gl.UNSIGNED_INT, 0, NB);
 
     // LAYERS
-    // every blade hidden behind another tints the one in front, like light through two sheets
+    // occluded blades multiply into the one in front
     gl.useProgram(this.dimProg);
     const ud = this.udm;
     gl.uniformMatrix4fv(ud.uMvp, false, this.mvp);
@@ -965,11 +959,11 @@ export class Kelp {
     gl.uniform4fv(ud.uB1, this.b1);
     gl.uniform2f(ud.uDepth, this.depth0, DEPTH_STEP);
     gl.depthFunc(gl.GREATER);
-    // pulled a hair toward the camera so no blade tints itself
     gl.enable(gl.POLYGON_OFFSET_FILL);
     gl.polygonOffset(-1, -8);
     gl.depthMask(false);
-    // once per pixel: a stack of blades reads as two layers, not a black hole
+    // STENCIL
+    // once per pixel, so a stack of blades reads as two layers, not black
     gl.stencilFunc(gl.EQUAL, 0, 0xff);
     gl.stencilOp(gl.KEEP, gl.KEEP, gl.INCR);
     gl.blendFunc(gl.ZERO, gl.SRC_COLOR);
@@ -1166,8 +1160,7 @@ export class Kelp {
 }
 
 // LAYOUT
-// wide screens: the stipe arcs in from the lower left and the comb of blades streams up and
-// right; tall screens: it climbs and the blades stream upward
+// wide: stipe arcs in from lower left, blades stream up-right; tall: blades stream up
 function layout(aspect: number): Layout {
   const k = Math.min(1, Math.max(0, (aspect - 0.5) / 1.1));
   const mix = (a: number, b: number) => a + (b - a) * k;
@@ -1197,7 +1190,6 @@ const smooth = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 
-// one spine sample: position, lateral, normal, each in its own row
 function store(
   sp: Float32Array,
   row: number,
@@ -1226,7 +1218,8 @@ function store(
   sp[o + 2] = nz;
 }
 
-// catmull-rom through a run of samples, clamped at the ends
+// CATMULL-ROM
+// clamped at the ends
 function spline(a: Float32Array, base: number, n: number, q: number) {
   const j = Math.min(Math.max(q | 0, 0), n - 2);
   const t = q - j;
@@ -1244,7 +1237,6 @@ function spline(a: Float32Array, base: number, n: number, q: number) {
 }
 
 const SCR = new Float64Array(2);
-// world to ndc, camera at +z
 function project(x: number, y: number, z: number, aspect: number) {
   const d = CAM_Z - z;
   SCR[0] = x / (d * FOV_TAN * aspect);
@@ -1263,7 +1255,6 @@ function perspective(m: Float32Array, aspect: number) {
   m[14] = (2 * far * near) / (near - far);
 }
 
-// a (ns + 1) x (nu + 1) vertex grid: blades get u in -1..1, tubes an angle around
 function grid(ns: number, nu: number, ring: boolean) {
   const v = new Float32Array((ns + 1) * (nu + 1) * 2);
   let o = 0;
@@ -1295,6 +1286,7 @@ function params(gl: WebGL2RenderingContext, filter: number) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 }
 
+// RAF
 // workers without rAF fall back to a timer
 const raf = (fn: (now: number) => void) =>
   typeof requestAnimationFrame === "function"
@@ -1303,7 +1295,6 @@ const raf = (fn: (now: number) => void) =>
 const unraf = (id: number) =>
   typeof cancelAnimationFrame === "function" ? cancelAnimationFrame(id) : clearTimeout(id);
 
-// uniform locations by name, looked up once at link time
 function uniforms(gl: WebGL2RenderingContext, p: WebGLProgram, names: readonly string[]) {
   const out: Record<string, WebGLUniformLocation | null> = {};
   for (const n of names) out[n] = gl.getUniformLocation(p, n);

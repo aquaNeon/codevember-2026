@@ -1,32 +1,30 @@
 // SMEAR
-// a word that melts down the screen. the letters are a texture; a ping-pong pass carries
-// paint downward at a speed that differs per column, so it runs in streaks.
-// the cursor is heat, not a hand: paint under it runs faster and heavier, letters near it
-// droop and stay drooped. a last pass colours the paint by how far it has run
+// ping-pong advection down per-column speeds; cursor heat speeds flow and droops letters
 
 const MAX_DPR = 2;
-const SIM_SCALE = 0.5; // the paint is soft, half resolution looks the same
+const SIM_SCALE = 0.5;
 const MAX_DT_S = 1 / 20;
-const FLOW = 0.055; // screen heights per second for an average column, change for faster runs
-const FADE_PER_S = 0.018; // how quickly old paint thins out
-const SAG_S = 25; // letters droop to their resting sag over this long
-const SAG = 0.045; // resting sag at the bottom of a letter, in screen heights
-const HEAT_R = 0.09; // how far the cursor's warmth reaches, in screen heights
-const HEAT_RUN = 5; // warm paint runs this many times faster, change for a heavier pour
-const HEAT_KEEP_S = 1.8; // how long paint stays warm once the cursor has left
-const DROOP_RATE = 0.03; // screen heights per second a letter right under the cursor droops
-const DROOP_MAX = 0.2; // the most a letter can droop
-const DROOP_REACH = 0.12; // how far above or below the letters the cursor still melts them
-const COLS = 96; // droop is kept per column across the screen
-const EASE_S = 0.03; // the warmth trails the cursor a little
-const WARM_UP_S = 0.45; // a spot needs this long under the cursor before it really gets going
-const COOL_S = 1.0; // and takes about this long to cool once the cursor has moved on
-const SETTLE_STEPS = 420; // reduced motion: steps run before the one still frame
+const FLOW = 0.055; // change for faster runs
+const FADE_PER_S = 0.018;
+const SAG_S = 25;
+const SAG = 0.045;
+const HEAT_R = 0.09;
+const HEAT_RUN = 5; // change for a heavier pour
+const HEAT_KEEP_S = 1.8;
+const DROOP_RATE = 0.03;
+const DROOP_MAX = 0.2;
+const DROOP_REACH = 0.12;
+const COLS = 96;
+const EASE_S = 0.03;
+const WARM_UP_S = 0.45;
+const COOL_S = 1.0;
+const SETTLE_STEPS = 420;
 
 export const PALETTES = ["acid", "dusk", "tide", "chrome", "ember"] as const;
 export type Palette = (typeof PALETTES)[number];
 
-// five colours along the run: at the letter, just below, middle, late, last
+// PALETTES
+// five rgb stops along run distance
 const STOPS: Record<Palette, number[]> = {
   acid: [0.95, 1, 0.3, 0.6, 1, 0.35, 0.2, 1, 0.58, 0.1, 0.7, 1, 0.1, 0.1, 0.5],
   dusk: [1, 0.86, 0.62, 1, 0.48, 0.36, 0.95, 0.2, 0.55, 0.45, 0.12, 0.78, 0.12, 0.03, 0.26],
@@ -52,19 +50,17 @@ float noise(float x) {
 }`;
 
 // LETTER SHAPE
-// where to read the word from: a resting sag plus the droop the cursor has melted into
-// each column. the droop stretches the letter from its top down, so it hangs, not slides
+// text uv offset by rest sag plus per-column droop, scaled from the top of the word
 const LETTER = `
 uniform float uSag;
-uniform sampler2D uDroop; // one row, a column's droop over DROOP_MAX
-uniform vec2  uBand; // top and bottom of the word, uv
+uniform sampler2D uDroop;
+uniform vec2  uBand;
 float droopAt(float x) {
   return texture(uDroop, vec2(x, 0.5)).r * ${DROOP_MAX.toFixed(3)};
 }
 vec2 letterUv(vec2 uv, float aspect) {
   float rest = uSag * (0.4 + 0.6 * noise(uv.x * aspect * 9.0 + 7.0));
   float d = droopAt(uv.x);
-  // the further down the letter, the more of the droop it carries
   float k = clamp((uBand.x - uv.y) / max(uBand.x - uBand.y + d, 1e-3), 0.0, 1.0);
   return uv + vec2(0.0, rest + d * k);
 }`;
@@ -79,7 +75,7 @@ uniform vec2  uRes;
 uniform float uAspect;
 uniform float uDt;
 uniform float uClear;
-uniform vec3  uHeat; // cursor uv, strength
+uniform vec3  uHeat;
 out vec4 outColor;
 ${NOISE}
 ${LETTER}
@@ -87,15 +83,12 @@ void main() {
   vec2 uv = gl_FragCoord.xy / uRes;
   float c = uv.x * uAspect;
 
-  // warmth: the cursor heats what is round it, and paint keeps that warmth as it runs
   vec2 d = (uv - uHeat.xy) * vec2(uAspect, 1.0);
   float heat = uHeat.z * exp(-dot(d, d) / ${(HEAT_R * HEAT_R).toFixed(5)});
 
-  // a few fast runners among many slow columns
   float n = 0.7 * noise(c * 14.0 + 3.1) + 0.3 * noise(c * 33.0);
   float speed = ${FLOW.toFixed(4)} * (0.12 + 1.6 * pow(n, 2.4));
   vec4 here = texture(uPrev, uv);
-  // warmth builds up where the cursor rests instead of switching on
   float warm = here.b;
   speed *= 1.0 + ${HEAT_RUN.toFixed(1)} * warm;
 
@@ -106,7 +99,6 @@ void main() {
   float cooled = prev.b * keep;
   float carried = cooled + max(0.0, heat - cooled) * (1.0 - exp(-uDt / ${WARM_UP_S.toFixed(2)}));
 
-  // fresh paint at the letters, it has not run yet
   float t = texture(uText, letterUv(uv, uAspect)).r;
   run = mix(run, 0.0, t);
   paint = max(paint, t);
@@ -133,28 +125,26 @@ vec3 ramp(float t) {
   return mix(uStops[3], uStops[4], (t - 0.65) / 0.35);
 }
 vec3 paint(vec2 uv) {
-  // the streaks waver as they run, more the further they have gone
   float far = texture(uState, uv).g;
   float ph = noise(uv.x * uAspect * 7.0) * 6.28;
   uv.x += 0.006 * far * sin(uv.y * 9.0 + ph + uTime * 0.35);
   vec4 s = texture(uState, uv);
-  // a soft brushed grain across the streaks, wide enough not to read as lines
   float fibre = 0.86 + 0.14 * noise(uv.x * uAspect * 90.0);
-  // warm paint glows toward the bright end of the ramp
   float run = s.g * 1.5 * (1.0 - 0.55 * s.b);
   float fade = smoothstep(1.2, 0.15, run);
   return ramp(run) * s.r * fade * fibre * (1.0 + 0.35 * s.b);
 }
 void main() {
   vec2 uv = gl_FragCoord.xy / uRes;
-  // fringes: the warm and cool ends of the ramp slip apart a little
+  // CHROMATIC FRINGE
   vec2 shift = vec2(uSimTexel.x * 0.7, 0.0);
   vec3 col;
   col.r = paint(uv + shift).r;
   col.g = paint(uv).g;
   col.b = paint(uv - shift).b;
 
-  // the letters themselves: dark faces with a bright rim, drooped like the paint source
+  // LETTER FACE
+  // dark fill, rim from text gradient
   vec2 tuv = letterUv(uv, uAspect);
   float t = texture(uText, tuv).r;
   vec2 e = uSimTexel * 1.5;
@@ -162,11 +152,10 @@ void main() {
   float gy = texture(uText, tuv + vec2(0.0, e.y)).r - texture(uText, tuv - vec2(0.0, e.y)).r;
   float rim = clamp(length(vec2(gx, gy)) * 1.6, 0.0, 1.0);
   vec3 face = vec3(0.02, 0.015, 0.02) + ramp(0.02) * rim * 1.1;
-  // a soft sheen across the top of each face
   face += ramp(0.12) * smoothstep(0.0, -0.6, gy) * t * 0.35;
   col = mix(col, face, smoothstep(0.35, 0.9, t));
 
-  // grain
+  // GRAIN
   float g = hash2(gl_FragCoord.xy + fract(uTime) * 91.0) - 0.5;
   col += g * 0.06;
   outColor = vec4(max(col, 0.0), 1.0);
@@ -191,12 +180,12 @@ export class Smear {
   private floatTargets: boolean;
   private word: string;
   private textCanvas = document.createElement("canvas");
-  private band = new Float32Array(2); // word top and bottom, uv
+  private band = new Float32Array(2);
   private droop = new Float32Array(COLS);
   private droopBytes = new Uint8Array(COLS);
   private droopTex: WebGLTexture;
   private droopDirty = true;
-  private colHeat = new Float32Array(COLS); // eased warmth per column, drives the droop
+  private colHeat = new Float32Array(COLS);
 
   private raf = 0;
   private last = 0;
@@ -208,9 +197,9 @@ export class Smear {
   private cleanups: (() => void)[] = [];
 
   // CURSOR
-  private px = 0.5; // eased warmth position
+  private px = 0.5;
   private py = 0.5;
-  private tx = 0.5; // raw pointer
+  private tx = 0.5;
   private ty = 0.5;
   private inside = false;
   private fresh = true;
@@ -237,11 +226,9 @@ export class Smear {
       throw new Error("software gl");
     }
     this.gl = gl;
-    // half floats keep the run distance smooth; plain bytes still work, only coarser
     this.floatTargets =
       !!gl.getExtension("EXT_color_buffer_float") ||
       !!gl.getExtension("EXT_color_buffer_half_float");
-    // compile in the background where the driver allows; the first frame waits for it
     this.parallel = !!gl.getExtension("KHR_parallel_shader_compile");
     this.flow = pass(gl, FLOW_FS);
     this.show = pass(gl, SHOW_FS);
@@ -289,7 +276,6 @@ export class Smear {
   }
 
   // PUBLIC
-  // a new word starts clean: old paint is washed off and every letter pours from scratch
   setWord(word: string) {
     this.word = word;
     this.reset();
@@ -303,7 +289,6 @@ export class Smear {
     this.wake();
   }
 
-  // washes the screen and pours the word again
   pour() {
     this.reset();
     this.wake();
@@ -317,7 +302,6 @@ export class Smear {
   }
 
   // INPUT
-  // the cursor is a source of heat; it does not have to move to melt things
   private move = (e: PointerEvent) => {
     const r = this.rect;
     this.tx = (e.clientX - r.left) / r.width;
@@ -348,7 +332,6 @@ export class Smear {
     g.fillStyle = "#000";
     g.fillRect(0, 0, c.width, c.height);
     const word = this.word || " ";
-    // fit the word to about three quarters of the width, never taller than a third of the screen
     let size = c.height * 0.34;
     g.font = `400 ${size}px "Instrument Serif", Georgia, serif`;
     const w = g.measureText(word).width;
@@ -358,13 +341,11 @@ export class Smear {
     g.textBaseline = "alphabetic";
     g.fillStyle = "#fff";
     g.strokeStyle = "#fff";
-    // a stroke round the fill gives the hairlines enough body to run
     g.lineWidth = size * 0.035;
     g.lineJoin = "round";
     const y = c.height * 0.36 + size * 0.3;
     g.strokeText(word, c.width / 2, y);
     g.fillText(word, c.width / 2, y);
-    // where the word sits, in uv with y up; the droop stretches between these
     const m = g.measureText(word);
     this.band[0] = 1 - (y - m.actualBoundingBoxAscent) / c.height;
     this.band[1] = 1 - (y + Math.max(m.actualBoundingBoxDescent, size * 0.02)) / c.height;
@@ -376,7 +357,6 @@ export class Smear {
   }
 
   // LOOP
-  // the melt never stops, so the loop runs while the canvas is on screen
   private wake() {
     if (!this.raf && this.visible && !document.hidden) this.raf = requestAnimationFrame(this.frame);
   }
@@ -385,6 +365,7 @@ export class Smear {
     this.raf = 0;
     if (!this.visible || document.hidden) return;
     if (!this.linked) {
+      // PARALLEL COMPILE
       // COMPLETION_STATUS_KHR, polled so linking never blocks the main thread
       const busy = (p: Pass) => !this.gl.getProgramParameter(p.prog, 0x91b1);
       if (this.parallel && (busy(this.flow) || busy(this.show))) {
@@ -409,7 +390,6 @@ export class Smear {
 
   private step(dt: number) {
     this.time += dt;
-    // warmth comes up gently and lingers a moment when the cursor leaves
     this.heat +=
       ((this.inside ? 1 : 0) - this.heat) * (1 - Math.exp(-dt / (this.inside ? 0.35 : 0.6)));
     const e = 1 - Math.exp(-dt / EASE_S);
@@ -418,7 +398,7 @@ export class Smear {
     const aspect = this.canvas.width / this.canvas.height;
 
     // DROOP
-    // letters within reach of the cursor soften column by column and stay that way
+    // per-column heat eases up fast, down slow; droop rate grows with droop
     const top = this.band[0];
     const bottom = this.band[1];
     const dy = this.py > top ? this.py - top : this.py < bottom ? bottom - this.py : 0;
@@ -428,11 +408,9 @@ export class Smear {
     for (let i = 0; i < COLS; i++) {
       const dx = (i / (COLS - 1) - this.px) * aspect;
       const target = near * Math.exp(-(dx * dx) / (HEAT_R * HEAT_R));
-      // each column warms over a moment and cools slower, so a quick pass barely marks it
       const h = this.colHeat[i];
       this.colHeat[i] = h + (target - h) * (target > h ? up : down);
       if (this.colHeat[i] < 0.005) continue;
-      // already soft wax gives way faster, so a held cursor ends in a long drip
       const d = this.droop[i];
       this.droop[i] = Math.min(DROOP_MAX, d + dt * DROOP_RATE * this.colHeat[i] * (1 + d * 6));
       this.droopDirty = true;
@@ -499,7 +477,7 @@ export class Smear {
     this.draw3();
   }
 
-  // reduced motion: let it run out of sight, then show one frame
+  // REDUCED MOTION
   private settle() {
     if (!this.linked || !this.paint.length) return;
     for (let i = 0; i < SETTLE_STEPS; i++) this.step(1 / 30);
@@ -598,7 +576,6 @@ function texture(gl: WebGL2RenderingContext) {
   return t;
 }
 
-// starts compiling a fullscreen pass; nothing here waits on the driver
 function pass(gl: WebGL2RenderingContext, fs: string): Pass {
   const prog = gl.createProgram();
   if (!prog) throw new Error("no program");
@@ -618,7 +595,6 @@ function pass(gl: WebGL2RenderingContext, fs: string): Pass {
   return { prog, u: {}, shaders };
 }
 
-// once linked: check it, free the shaders, look up every uniform it declares
 function finish(gl: WebGL2RenderingContext, p: Pass) {
   if (!gl.getProgramParameter(p.prog, gl.LINK_STATUS)) {
     const log = p.shaders.map((sh) => gl.getShaderInfoLog(sh)).join("\n");

@@ -2,16 +2,15 @@ import { R_CENTRE, R_OUT } from "./path";
 
 const f = (n: number) => n.toFixed(4);
 
-export const STONES = 6; // four in the garden, two at the gate
-export const S_ENCODE = 65000; // arc length steps stored per path
+export const STONES = 6;
+export const S_ENCODE = 65000;
 const PIVOT_MAX = "4.0";
 
 // MAP
-// the lane strip, rasterised once per resize at half resolution into 16-bit integers:
-// arc length (0 = no lane), distance from the lane's middle, distance to the turn's pivot, soft
+// lane strip at half res, 16-bit: s (0 = no lane), d from middle, pivot distance, soft
 export const MAP_VS = `#version 300 es
 layout(location = 0) in vec4 aVert;
-layout(location = 1) in vec2 aPivot; // pivot distance, soft
+layout(location = 1) in vec2 aPivot;
 uniform vec2  uRes;
 uniform vec2  uCentre;
 uniform float uUnit;
@@ -67,9 +66,7 @@ float noise(vec2 p) {
 }`;
 
 // HEIGHT
-// sand, walls, stones, moss and the rake as one height field in lane units. drawn twice:
-// full resolution for the relief, and half resolution (AUX) for materials, freshness and a
-// height copy whose mips give the contact darkening
+// one height field in lanes; full res relief, half res AUX materials with mips for AO
 const height = (aux: boolean) => `#version 300 es
 precision highp float;
 precision highp int;
@@ -81,7 +78,7 @@ uniform vec2  uCentre;
 uniform float uUnit;
 uniform float uMapScale;
 uniform float uLen;
-uniform float uSpiral; // arc length where the centre spiral starts
+uniform float uSpiral;
 uniform vec4  uGate;
 uniform vec4  uStone[${STONES}];
 uniform vec4  uShape[${STONES}];
@@ -99,8 +96,8 @@ const float G_REST   = 0.006;
 const float G_FRESH  = 0.040;
 const float G_GARDEN = 0.024;
 const float SMIN_K   = 0.9;
-const float RINGS    = 1.5; // width of the raked band around islands
-const float SEAM_CLEAR = 0.32; // straight rake lines in the seam stop this far from a lane
+const float RINGS    = 1.5;
+const float SEAM_CLEAR = 0.32;
 ${RAKE}
 ${NOISE}
 
@@ -116,14 +113,13 @@ float segDist(vec2 p, vec2 a, vec2 b) {
   return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
 }
 
-vec2 gFrag; // garden position of this fragment
+vec2 gFrag;
 
 // LANE MAP
 // bilinear by hand over the half-res integer map, weighted by which texels hold a lane
 ivec2 mapSize;
 bool lit(ivec2 p) { return texelFetch(uMap, clamp(p, ivec2(0), mapSize - 1), 0).r > 0u; }
 
-// share of the four nearest texels that hold a lane, smooth across the edge
 float coverage(vec2 mp) {
   vec2 b = floor(mp);
   vec2 fr = mp - b;
@@ -160,18 +156,21 @@ vec4 readMap(vec2 mp) {
 float fresh(float s) { return texture(uFresh, vec2(s / uLen, 0.5)).r; }
 
 float lane(float s, float ad, float pivot, float fr, float sf) {
-  // wall ends swell into a round nub where the lane turns about them; the spiral has none
+  // WALL NUB
+  // wall ends swell into a nub round the turn pivot; none on the spiral
   float wall = max(smoothstep(0.64, 1.0, ad), 1.0 - smoothstep(0.04, 0.3, pivot)) * (1.0 - sf);
-  // on the spiral the tines span the whole lane, so the wraps meet groove to groove
   float span = mix(INNER, 1.0, sf);
   float g = groove((ad + span) / (2.0 * span) * TINES);
   g = mix(g, g * g * (1.6 - 0.6 * g), fr);
-  // tines that would pivot on the spot at a tight turn leave smooth sand instead
+  // PIVOT
+  // tines that would pivot in place at tight turns leave smooth sand
   float inner = (1.0 - smoothstep(span - 0.06, span, ad) * (1.0 - sf)) * smoothstep(0.1, 0.3, pivot);
   float depth = mix(G_REST, G_FRESH, fr);
-  // spiral wraps meet at a ridge whose height does not depend on how fresh either side is
+  // SPIRAL RIDGE
+  // wraps meet at a ridge independent of either side's freshness
   float h = BERM * wall - depth * (g - 0.25 * (1.0 - sf)) * inner;
-  // the outer wrap rises into the centre's rim, except where the lane comes in
+  // RIM
+  // outer wrap rises into the centre rim, except at the lane entry
   float r = length(gFrag);
   h = mix(h, BERM, smoothstep(R_CENTRE - 0.32, R_CENTRE - 0.06, r) * sf * smoothstep(uSpiral + 1.0, uSpiral + 2.0, s));
   return mix(BERM, h, smoothstep(0.0, 0.45, s));
@@ -206,7 +205,8 @@ void main() {
     float rr = st.z * (1.0 + 0.07 * sin(2.0 * a + st.w) + 0.045 * sin(3.0 * a + 2.0 * st.w) + 0.02 * sin(5.0 * a + 3.0 * st.w));
     float x = rho / rr;
     float dome = sqrt(max(0.0, 1.0 - x * x));
-    // weathered granite: broad lumps, ridged facets and a few hairline fissures
+    // GRANITE
+    // broad lumps, ridged facets, hairline fissures
     float bumps = noise(q * 2.4 + st.w) * 0.55 + noise(q * 7.0 - st.w) * 0.3 + noise(q * 19.0 + st.w) * 0.15;
     float ridge = 1.0 - abs(noise(q * 4.2 + 3.0 * st.w) * 2.0 - 1.0);
     float fissure = pow(1.0 - abs(noise(q * vec2(2.2, 6.5) + st.w) * 2.0 - 1.0), 14.0);
@@ -244,7 +244,8 @@ void main() {
   } else {
     // GARDEN
     float rise = 1.0 - smoothstep(0.0, 0.32, field);
-    // a few rings around each island, then plain sand so the type stays clear
+    // RINGS
+    // a few around each island, then plain sand so the type stays clear
     float rings = smoothstep(0.18, 0.4, field) * (1.0 - smoothstep(RINGS - 0.6, RINGS, field));
     h = BERM * rise - G_GARDEN * groove(field / PITCH) * rings;
   }
@@ -256,11 +257,9 @@ void main() {
   vec2 q = g - uRake.xy;
   q = vec2(dot(q, uRake.zw), dot(q, vec2(-uRake.w, uRake.z)));
   float px = 1.0 / uUnit;
-  // sand heaped in front of the tines
   if (m.x > 0.0) h += 0.022 * exp(-pow((q.x - 0.13) / 0.07, 2.0)) * (1.0 - smoothstep(0.3, 0.36, abs(q.y))) * max(0.0, 1.0 - uLift * 4.0);
   float bar = (1.0 - smoothstep(BAR_W - px, BAR_W, abs(q.x))) * (1.0 - smoothstep(BAR_L - px, BAR_L, abs(q.y)));
   float barH = uLift + BAR_Z - 0.02 + 0.05 * sqrt(max(0.0, 1.0 - pow(q.x / BAR_W, 2.0)));
-  // tines, one over each groove, trailing the bar
   float ty = (fract(q.y / 0.175 + 0.5) - 0.5) * 0.175;
   float tine = (1.0 - smoothstep(0.022 - px, 0.022, length(vec2(q.x + 0.1, ty)))) * step(abs(q.y), 0.35);
   float tineH = uLift + 0.09;
@@ -270,7 +269,8 @@ void main() {
 
 #ifdef AUX
   float wood = max(max(tine, bar), handle);
-  // height for the blur, stone, moss above a half and freshness below it, wood
+  // AUX
+  // rgba: height for blur, stone, moss above 0.5 / freshness below, wood
   oHeight = vec4((h + 0.1) / 1.2, stone, 0.5 + 0.5 * moss - 0.5 * fr, wood);
 #else
   if (tine > 0.0 && tineH > h) h = mix(h, tineH, tine);
@@ -314,7 +314,8 @@ float segDist(vec2 p, vec2 a, vec2 b) {
   return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));
 }
 
-// a raised segment's shadow, projected onto the ground along the sun
+// ROD SHADOW
+// raised segment's shadow projected onto the ground along the sun
 float rod(vec2 g, float h, vec2 a, float za, vec2 b, float zb, float w, vec2 dir, float tanEl) {
   vec2 sa = a - dir * max(za - h, 0.0) / tanEl;
   vec2 sb = b - dir * max(zb - h, 0.0) / tanEl;
@@ -338,7 +339,8 @@ void main() {
   // SHADOW
   float sh = 1.0;
   float t = 0.0;
-  // dithered start so thin casters leave soft shadows, not bands
+  // DITHER
+  // jittered start so thin casters leave soft shadows, not bands
   float jit = fract(52.9829 * fract(dot(gl_FragCoord.xy, vec2(0.06711, 0.00584))));
   float stp = 0.012 * uUnit * mix(1.0, 1.24, jit);
   vec2 dir = normalize(uSun.xy);
@@ -350,7 +352,8 @@ void main() {
     if (sp.x < 0.0 || sp.y < 0.0 || sp.x > uRes.x || sp.y > uRes.y) break;
     float du = t / uUnit;
     float ray = h + du * tanEl;
-    // the ground only; the rake is too thin to march and gets its own shadow below
+    // GROUND ONLY
+    // the rake is too thin to march; it gets its own shadow below
     float hs = texture(uAux, sp / uRes).a > 0.02 ? -1.0 : texture(uHeight, sp / uRes).r;
     sh = min(sh, clamp((ray - hs) / (du * PENUMBRA), 0.0, 1.0));
     if (sh <= 0.0) break;

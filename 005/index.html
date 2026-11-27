@@ -32,7 +32,6 @@
         background: #c8c5bd;
       }
       /* SLATE */
-      /* variant b: dark stone, light type */
       :root[data-cv-slate]:root {
         --ink: #ece6dc;
         --muted: #a39d93;
@@ -47,7 +46,7 @@
         opacity: 0.1;
       }
       /* FIRST PAINT */
-      /* bare stone in css straight away; the live canvas fades in over it */
+      /* css stone paints first; the canvas fades in over it */
       .still {
         position: absolute;
         inset: 0;
@@ -95,7 +94,7 @@
         display: none;
       }
       /* STILL */
-      /* no webgl: three colonies drawn in css */
+      /* no webgl: three colonies in css */
       [data-cv-still] .still {
         background:
           radial-gradient(circle at 62% 40%, #d98d2e 0 5vmin, #f0bf5c 5.6vmin, transparent 6.2vmin),

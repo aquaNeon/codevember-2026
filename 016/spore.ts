@@ -36,23 +36,22 @@ const MAX_DT_S = 0.05;
 const STEP_S = 1 / 120;
 const SEGMENTS = { around: 192, down: 168 };
 const FOV_DEG = 24;
-const FIT_W = 4.6; // world width that must stay in frame
-const FIT_H = 5.4; // and height
+const FIT_W = 4.6;
+const FIT_H = 5.4;
 const AIM_Y = 1.75;
-const AIM_X = -0.2; // nudges the cluster right of the title
-// portrait: no title beside the figures, so centre them, and look lower so they rise into the space under the title
+const AIM_X = -0.2;
 const TALL = { aimX: 0, aimY: 1.5 };
 const CAM_PITCH_RAD = 0.2;
 const SPORE_LIFE_S = 7;
 const DEPTH = 0.3;
-const PRESS = { hz: 5, zeta: 0.75 }; // the dimple goes in fast
-const REFILL = { hz: 0.42, zeta: 0.82 }; // and fills back up slowly
+const PRESS = { hz: 5, zeta: 0.75 }; // change press speed here
+const REFILL = { hz: 0.42, zeta: 0.82 }; // change refill speed here
 const SETTLE = 2e-4;
 const TAP_S = 0.22;
 const EMITTERS = 8;
-const INK_REF_PX = 166; // css px per world unit on a 1440x900 screen, where the ink marks were tuned
-const LABEL_Y = -0.18; // plate labels sit just under each foot
-const SECTION_TURN_RAD = -0.3; // turns the cut face a little toward the camera
+const INK_REF_PX = 166;
+const LABEL_Y = -0.18;
+const SECTION_TURN_RAD = -0.3; // change cut face turn here
 
 export type Look = "gouache" | "plate";
 
@@ -62,6 +61,7 @@ const YOUNG: Form = [0.62, 0.06, 0.05, 0];
 const MATURE: Form = [1.2, 0.2, 0.14, 0.2];
 const AGED: Form = [0.9, 0.3, 0.2, 1];
 
+// SPOTS
 // x, z, scale, cut open, form
 type Spot = readonly [number, number, number, boolean, Form];
 
@@ -74,7 +74,7 @@ const LOOKS = {
     ] as Spot[],
     puff: { count: 190, spreadS: 0.45, speed: 2.6, cone: 0.38 }, // change the exhale here
     maxSpores: 6144,
-    tallW: 3.9, // portrait screens crop the sides a little
+    tallW: 3.9, // change portrait width here
     colors: {
       top: "#f3ecdd",
       foot: "#dcc6a2",
@@ -94,7 +94,7 @@ const LOOKS = {
     ] as Spot[],
     puff: { count: 1600, spreadS: 0.5, speed: 2.6, cone: 0.42 },
     maxSpores: 24576,
-    tallW: 5.1, // the plate keeps all three figures inside the ruled frame
+    tallW: 5.1,
     colors: {
       top: "#f2e9d3",
       foot: "#dcbc84",
@@ -108,7 +108,7 @@ const LOOKS = {
   },
 } as const;
 
-// scratch, reused by input handlers
+// SCRATCH
 const ray = new Vector3();
 const org = new Vector3();
 const hit = new Vector3();
@@ -146,7 +146,6 @@ export class Spore {
   private tallW: number;
   private puffCfg: { count: number; spreadS: number; speed: number; cone: number };
   private dpr = { value: 1 };
-  // ink marks scale with how big the figures are drawn, so a small phone plate is not coarser
   private inkScale = { value: 1 };
   private sporeUniforms: Record<string, { value: unknown }>;
   private time = 0;
@@ -172,10 +171,8 @@ export class Spore {
   onPuff: (n: number) => void = () => {};
   onCursor: (cursor: string) => void = () => {};
   onShown: () => void = () => {};
-  // css px positions of each figure's label, x0, y0, x1, y1, ...
   onLabels: (xy: number[]) => void = () => {};
 
-  // no dom in here, so the whole scene can live in a worker; the host feeds it size, visibility and input
   constructor(
     canvas: HTMLCanvasElement | OffscreenCanvas,
     opts: { look: Look; reducedMotion: boolean; forceGl: boolean },
@@ -195,7 +192,7 @@ export class Spore {
       r.forceContextLoss();
       throw new Error("software gl");
     }
-    r.debug.checkShaderErrors = import.meta.env.DEV; // reading every shader log stalls the first frame
+    r.debug.checkShaderErrors = import.meta.env.DEV;
     r.setClearColor(0x000000, 0);
     this.renderer = r;
 
@@ -256,7 +253,6 @@ export class Spore {
       this.disposables.push(mat);
 
       // CUTAWAY
-      // the cut face, so the spore mass inside shows
       if (cut) {
         mesh.rotation.y = SECTION_TURN_RAD;
         const faceGeo = new ShapeGeometry(section(form), 4);
@@ -282,14 +278,15 @@ export class Spore {
     }
 
     // SPORES
-    // one ring buffer of points; each one knows where and when it was born, the shader does the rest
+    // ring buffer of points with birth position and time; motion runs in the shader
     const sg = new BufferGeometry();
     this.origin = new BufferAttribute(new Float32Array(this.max * 3), 3);
     this.vel = new BufferAttribute(new Float32Array(this.max * 3), 3);
     const births = new Float32Array(this.max * 2);
     for (let i = 0; i < this.max; i++) births[i * 2] = -1e3;
     this.birth = new BufferAttribute(births, 2);
-    // position is unused but three wants it for the draw count
+    // DRAW COUNT
+    // position is unused but three takes the draw count from it
     sg.setAttribute("position", this.origin);
     sg.setAttribute("aOrigin", this.origin);
     sg.setAttribute("aVel", this.vel);
@@ -330,7 +327,7 @@ export class Spore {
   }
 
   // PUBLIC
-  // px, py, pw, ph: the plate panel inside the canvas, in css px; the figures are fitted and centred in it
+  // px, py, pw, ph: plate panel inside the canvas, css px; figures fit inside it
   size(w: number, h: number, dpr: number, px: number, py: number, pw: number, ph: number) {
     this.w = Math.max(1, w);
     this.h = Math.max(1, h);
@@ -355,11 +352,9 @@ export class Spore {
     this.reducedMotion = reduced;
   }
 
-  // a tap on the big one's shoulder, for keys and the button
   poke() {
     hit.set(-0.35, 0.35, 0.87).normalize();
     const k = this.press(0, hit);
-    // a tap holds for a beat so the dimple has time to go in
     this.shrooms[0].slots[k].until = this.time + TAP_S;
   }
 
@@ -373,7 +368,6 @@ export class Spore {
     s.target = DEPTH;
     s.held = true;
     s.until = 0;
-    // an empty puffball has less to give
     this.puff(i, Math.max(0.25, 1 - m.deflate.value));
     this.wake();
     return k;
@@ -398,8 +392,7 @@ export class Spore {
   }
 
   // INPUT
-  // ray against each head as a sphere; nearest hit wins, as a unit direction in body space
-  // x, y in css px from the canvas corner
+  // ray vs each head as a sphere; nearest hit wins, unit direction in body space
   private pick(x: number, y: number) {
     const cam = this.camera;
     ray.set((x / this.w) * 2 - 1, 1 - (y / this.h) * 2, 0.5);
@@ -408,7 +401,6 @@ export class Spore {
     let near = Infinity;
     for (let i = 0; i < this.shrooms.length; i++) {
       const m = this.shrooms[i];
-      // the cut one is a specimen, not a living puffball
       if (m.cut) continue;
       const s = m.s;
       const ox = (cam.position.x - m.x) / s;
@@ -467,7 +459,6 @@ export class Spore {
     if (!this.sized) this.resize();
     const moving = this.step(dt);
     this.renderer.render(this.scene, this.camera);
-    // nothing breathes here: once the air is clear and the heads are full, the loop sleeps
     if (moving || this.time < this.airUntil) this.wake();
     else this.last = 0;
   };
@@ -478,7 +469,6 @@ export class Spore {
     let moving = false;
 
     // SPRINGS
-    // designed: in quick on the press, back up slow like air seeping in
     this.acc += dt;
     while (this.acc >= STEP_S) {
       this.acc -= STEP_S;
@@ -512,7 +502,6 @@ export class Spore {
     }
 
     // EXHALE
-    // each puff leaves the pore over a short breath, strong first then trailing off
     const from = this.head;
     let born = 0;
     for (let j = 0; j < EMITTERS; j++) {
@@ -521,7 +510,6 @@ export class Spore {
       moving = true;
       e.t += dt;
       const f = Math.min(1, e.t / this.puffCfg.spreadS);
-      // share of the puff that should be out by now, front-loaded
       const due = Math.round(e.total * (1 - (1 - f) * (1 - f)));
       let n = due - (e.total - e.left);
       if (f >= 1) n = e.left;
@@ -546,7 +534,6 @@ export class Spore {
     o[i * 3] = m.x + (Math.random() - 0.5) * 0.06 * s;
     o[i * 3 + 1] = (m.form[0] + (poreY(m.form) - m.form[0]) * sq) * s;
     o[i * 3 + 2] = m.z + (Math.random() - 0.5) * 0.06 * s;
-    // a cone around up, narrower and faster at the start of the breath
     const cone = P.cone * (0.5 + 1.2 * f);
     const a = Math.random() * Math.PI * 2;
     const rad = Math.sqrt(Math.random()) * cone;
@@ -559,7 +546,8 @@ export class Spore {
     b[i * 2 + 1] = Math.random();
   }
 
-  // one upload range per frame for what was born; a wrap past the end sends the whole buffer
+  // UPLOAD
+  // one range per frame; a wrap past the end sends the whole buffer
   private upload(from: number, count: number) {
     const wrap = from + count > this.max;
     for (let k = 0; k < 3; k++) {
@@ -582,7 +570,8 @@ export class Spore {
     const cam = this.camera;
     cam.aspect = aspect;
     const v = (FOV_DEG * Math.PI) / 360;
-    // fit the figures to the panel, not the whole canvas
+    // PANEL FIT
+    // fit to the panel, then move the projection centre to its centre
     const [px, py, pw, ph] = this.panel;
     const tall = aspect < 0.8;
     const fitW = tall ? this.tallW : FIT_W;
@@ -594,7 +583,6 @@ export class Spore {
     const ay = tall ? TALL.aimY : AIM_Y;
     cam.position.set(ax, ay + Math.sin(CAM_PITCH_RAD) * dist, Math.cos(CAM_PITCH_RAD) * dist);
     cam.lookAt(ax, ay, 0);
-    // and move the projection centre to the panel's centre
     if (this.framed) cam.setViewOffset(w, h, w / 2 - (px + pw / 2), h / 2 - (py + ph / 2), w, h);
     else cam.clearViewOffset();
     cam.updateProjectionMatrix();
@@ -604,7 +592,6 @@ export class Spore {
     this.inkScale.value = Math.min(1.3, Math.max(0.5, unitPx / INK_REF_PX));
 
     // LABELS
-    // each plate figure gets its number under its foot
     const xy: number[] = [];
     for (let i = 0; i < this.shrooms.length; i++) {
       const m = this.shrooms[i];
@@ -624,7 +611,8 @@ export class Spore {
   }
 }
 
-// the body's outline in its own xy plane, same curve as the shader, for the cut face
+// SECTION
+// body outline in its xy plane, same curve as the shader
 function section(form: Form) {
   const N = 128;
   const shape = new Shape();
@@ -643,6 +631,7 @@ function section(form: Form) {
   return shape;
 }
 
+// RAF
 // workers without rAF fall back to a timer
 const raf = (fn: (now: number) => void) =>
   typeof requestAnimationFrame === "function"

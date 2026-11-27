@@ -4,7 +4,7 @@ import type { Hud } from "./cave";
 import { mount } from "./host";
 
 const DAY = 22;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200;
 
 const root = document.querySelector<HTMLElement>("[data-cv]");
 
@@ -44,7 +44,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();
   else {
-    // after load and an idle moment; the cave itself starts the gpu off this thread
     afterLoad().then(() => {
       const cave = mount(
         canvas,

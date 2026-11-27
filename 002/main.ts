@@ -2,7 +2,7 @@ import "../shared/style.css";
 import { mountNav } from "../shared/nav";
 
 const DAY = 2;
-const IDLE_MS = 1200; // longest wait before the scene starts anyway
+const IDLE_MS = 1200;
 const STILL_WIDE = "../stills/002-wide.webp";
 const STILL_TALL = "../stills/002-tall.webp";
 const HINT = {
@@ -12,7 +12,6 @@ const HINT = {
   mending: "Reforming",
 };
 
-// real time since the snap, in the unit that suits it
 function stamp(t: number) {
   if (t < 1e-3) return `${(t * 1e6).toFixed(1)} µs`;
   if (t < 1) return `${(t * 1e3).toFixed(1)} ms`;
@@ -36,7 +35,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
     if (root.hasAttribute("data-cv-still")) return;
     root.removeAttribute("data-cv-live");
     root.setAttribute("data-cv-still", "");
-    // a capture of the live room, wide or tall to match the screen
     const frame = root.querySelector<HTMLElement>(".still");
     if (!frame) return;
     const img = document.createElement("img");
@@ -49,7 +47,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   if (!canvas || !("WebGL2RenderingContext" in window) || params.has("still")) still();
   else {
     const at = params.has("t") ? Math.max(0, Number(params.get("t")) || 0) : -1;
-    // after load and an idle moment; the scene itself starts the gpu off this thread
     afterLoad(() => import("./stage"))
       .then(({ Stage }) => Stage.create(canvas, at))
       .then((stage) => {
@@ -60,7 +57,7 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
           still();
         };
         // TIMELINE
-        // while the thumb is held the scene follows it, not the other way round
+        // scene follows the thumb while it is held
         let seeking = false;
         stage.onState = (m) => {
           if (time) time.textContent = stamp(m.real);

@@ -1,19 +1,17 @@
 import { COUNT, STRINGS } from "./layout";
 
 const MASTER_GAIN = 0.85;
-const PLUCK_GAIN = 0.55; // per string at full pull; change loudness here
-const WET_GAIN = 0.16; // room
+const PLUCK_GAIN = 0.55; // change loudness here
+const WET_GAIN = 0.16;
 const ROOM_S = 1.6;
-const DAMP_S = 0.012; // a re-pluck mutes the ringing note this fast
+const DAMP_S = 0.012;
 const MAX_S = 4.6;
 const CACHE_MAX = 48;
 
 type Note = { src: AudioBufferSourceNode; gain: GainNode; f: number };
 
 // VOICE
-// karplus-strong strings through a small wooden body: two body modes, a soft top end, a
-// short room and a gentle limiter. started on the first gesture; every note node is dropped
-// when it ends
+// Karplus-Strong strings into two body modes, soft top end, short room, gentle limiter
 export class Voice {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
@@ -27,7 +25,8 @@ export class Voice {
     return this.ctx !== null;
   }
 
-  // call from a user gesture
+  // UNLOCK
+  // call from a user gesture (autoplay policy)
   wake() {
     if (!this.ctx) {
       const AC = window.AudioContext;
@@ -80,7 +79,6 @@ export class Voice {
     this.keep.push(body1, body2, top, room, wet, limit, master);
   }
 
-  // decaying stereo noise, darker as it fades
   private roomBuffer(ctx: AudioContext) {
     const sr = ctx.sampleRate;
     const n = Math.floor(sr * ROOM_S);
@@ -98,7 +96,8 @@ export class Voice {
     return buf;
   }
 
-  // i: string, f: pitch, p: pluck point 0..1, amt: 0..1 how hard
+  // PLUCK
+  // p: pluck point 0..1, amt: 0..1 how hard
   pluck(i: number, f: number, p: number, amt: number, t60: number) {
     const ctx = this.ctx;
     if (!ctx || this.muted) return;
@@ -125,7 +124,6 @@ export class Voice {
     this.notes[i] = note;
   }
 
-  // a peg turned while the note rings slides its pitch
   bend(i: number, f: number) {
     const note = this.notes[i];
     if (!this.ctx || !note) return;
@@ -141,8 +139,7 @@ export class Voice {
   }
 
   // KARPLUS-STRONG
-  // a noise burst, shaped by where it was plucked, circulating through a delay line of one
-  // period with an averaging filter; an allpass makes up the fractional sample so it tunes true
+  // noise burst in a one-period delay loop with averaging filter; allpass for the fraction
   private string(ctx: AudioContext, f: number, p: number, bright: number, t60: number) {
     const pq = Math.round(Math.min(0.9, Math.max(0.1, p)) * 10);
     const bq = Math.round(bright * 4);
@@ -168,7 +165,8 @@ export class Voice {
       lp += a * (Math.random() * 2 - 1 - lp);
       line[t] = lp;
     }
-    // pluck point: a comb that removes the harmonics with a node there
+    // PLUCK POSITION
+    // comb filter: removes harmonics with a node at the pluck point
     const off = Math.max(1, Math.round((pq / 10) * n));
     const tmp = Float32Array.from(line);
     let mean = 0;

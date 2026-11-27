@@ -17,8 +17,7 @@ const ARROWS: Record<string, [number, number]> = {
 };
 
 // HOST
-// dom side of the scene: events, size and visibility in, state out. the scene runs in a
-// worker when the canvas can be handed over, so compiling and drawing never block the page
+// dom side: events, size and visibility in, state out; scene in a worker when transferable
 export function mount(canvas: HTMLCanvasElement, sink: Sink) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");
@@ -101,7 +100,7 @@ export function mount(canvas: HTMLCanvasElement, sink: Sink) {
     const onMotion = () => d.motion(mq.matches);
 
     // POINTER
-    // the cursor is the current: only its travel matters, so a press just starts a stroke
+    // only travel matters; a press starts a new stroke
     const opts = { passive: true };
     const down = (e: PointerEvent) => {
       rect = canvas.getBoundingClientRect();

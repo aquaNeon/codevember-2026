@@ -1,7 +1,6 @@
 import type { Cocoon } from "./cocoon";
 import type { ToWorker } from "./stage";
 
-// one message from the page onto the scene, wherever the scene runs
 export function apply(c: Cocoon, m: ToWorker) {
   if (m.t === "size") c.size(m.w, m.h, m.dpr);
   else if (m.t === "show") c.show(m.v);

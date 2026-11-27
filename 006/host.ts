@@ -16,7 +16,6 @@ export type Out =
   | { t: "ready" }
   | { t: "fail" };
 
-// the same message handler serves the worker and the on-page fallback
 export function host(post: (m: Out) => void) {
   let o: Orrery | null = null;
   return (m: In) => {

@@ -5,7 +5,6 @@ export type Sink = {
   fail: () => void;
 };
 
-// what the host may call on the scene, in the page or across the worker boundary
 export type Call = "size" | "show" | "down" | "move" | "up" | "leave" | "poke" | "motion";
 type Driver = Pick<Membrane, Call | "dispose">;
 
@@ -17,8 +16,7 @@ export type FromWorker =
   { t: "poke"; n: number } | { t: "cursor"; c: string } | { t: "shown" } | { t: "fail" };
 
 // HOST
-// dom side of the sac: events, size and visibility in, state out. the scene runs in a worker
-// when the canvas can be handed over, so context start and shader compile never block the page
+// scene in a worker via OffscreenCanvas when available, else on the main thread
 export function mount(canvas: HTMLCanvasElement, look: Look, sink: Sink) {
   const cleanups: (() => void)[] = [];
   const mq = matchMedia("(prefers-reduced-motion: reduce)");

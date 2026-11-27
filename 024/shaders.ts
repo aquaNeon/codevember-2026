@@ -24,8 +24,7 @@ float vn3(vec3 x) {
 `;
 
 // LIGHT
-// one warm key low from the right, raking across the weave and throwing the shadow left; a
-// cool fill; a warm light held low behind on the left that comes through the thin green blades
+// warm low key from the right, cool fill, warm back light through the thin green blades
 const LIGHT = `
 uniform vec3  uKey;
 uniform vec3  uBack;
@@ -43,7 +42,8 @@ const vec2 TAPS[8] = vec2[8](
 );
 
 float shadowAt(vec3 p, vec3 n, float soft) {
-  // pushed off the face that looks toward the light, more so the more it grazes it
+  // NORMAL OFFSET
+  // bias along the lit-side normal, larger at grazing angles
   float c = dot(n, uKey);
   vec3 nl = c < 0.0 ? -n : n;
   vec4 q = uLight * vec4(p + nl * (0.008 + 0.012 * (1.0 - abs(c))), 1.0);
@@ -62,9 +62,7 @@ vec3 tone(vec3 c) {
 `;
 
 // BLADES
-// one flat strip per blade, bent along its path over the nest. it threads in from where it is
-// tied: the visible length runs out to uBuild, its free end held proud, then it pulls tight
-// and the end tucks into a loop or stays out as a loose end
+// one ribbon per blade along its surface path; grows to uBuild, slack, then pulls tight
 export const BLADE_VS = (defs: string) => `${HEAD}${defs}
 layout(location = 0) in vec2 aMesh;
 layout(location = 1) in vec4 aA;
@@ -99,28 +97,23 @@ float gDoor;
 
 vec2 pathAt(float u) {
   if (aB.w > 1.5) {
-    // round the doorway
     float k = aA.z + aD.x * 12.0 * sin(u * aD.y * 6.2832 + aB.z * 6.2832);
     return doorRing(k, aA.x + aA.w * u);
   }
   float s = aA.x + aA.z * u + aD.x * sin(u * aD.y * 6.2832 + aB.z * 6.2832);
   vec2 sp = vec2(s, aA.y + aA.w * u);
-  // a few strays cross the doorway
   bool stray = fract(aB.z * 53.0) < 0.025 && (int(aC.y + 0.5) & 8) != 0;
   return stray ? sp : door(sp, gHor, gDoor);
 }
 
-// where the strand sits off the surface at u; flex is how free it is to move
 float offAt(float u, vec2 sp) {
   float r = radiusAt(clamp(sp.x, 0.0, 1.0));
-  // over and under: one field for the whole nest, read with opposite signs by strands that
-  // slant opposite ways, so where two cross one rides over the other
+  // OVER AND UNDER
+  // one field, opposite sign per slant direction, so crossing strands alternate
   float g = sin(sp.x * 70.0) * sin(sp.y * r * 34.0);
   gOver = gSide * g;
   float off = aB.x + gSide * 0.005 * g;
-  // at the doorway's edge the strands curl in over it
   off -= 0.05 * gEdge * gEdge;
-  // slack while it threads, the free end held out, then pulled tight
   float slack = 1.0 - gTight;
   off += slack * 0.025 * sin(3.14159 * clamp(u / max(gH, 0.01), 0.0, 1.0));
   float head = sstep(gH - 0.22, gH, u) * slack;
@@ -129,7 +122,6 @@ float offAt(float u, vec2 sp) {
   return max(off, -0.5 * r);
 }
 
-// the loose ends, poking out at their own angles
 vec3 looseAt(float u, vec3 ns) {
   int fl = int(aC.y + 0.5);
   float e = 0.0;
@@ -154,7 +146,6 @@ vec3 point(float u, out vec3 ns) {
   return p + ns * offAt(u, sp) + looseAt(u, ns);
 }
 
-// a neighbour along it, reusing the normal: enough for the tangent
 vec3 near(float u, vec3 ns) {
   vec2 sp = pathAt(u);
   return surf(sp.x, sp.y) + ns * offAt(u, sp) + looseAt(u, ns);
@@ -166,14 +157,12 @@ void main() {
   gH = grow * grow * (3.0 - 2.0 * grow);
   gTight = b < 0.0 ? 1.0 : sstep(b + uWin * 0.8, b + uWin * 1.7, uBuild);
   gSide = aB.w > 0.5 ? 1.0 : sign(aA.w * 4.0 + aA.z + 1e-4);
-  // which way it gets round the doorway: over or under it if it runs across, else beside it
   gHor = abs(aA.w) * DOOR_RR > abs(aA.z) * DOOR_SPD;
   gDoor = gHor
     ? sign(aA.x + aA.z * 0.5 - DOOR_S + 1e-4)
     : sign(wrapPi(aA.y + aA.w * 0.5 - DOOR_PH) + 1e-4);
   int fl = int(aC.y + 0.5);
   float m = aMesh.x;
-  // a tucked end gets more of the strip, so its loop stays round
   bool loops = (fl & 1) != 0;
   float uu = loops ? (m < 0.78 ? m / 0.78 * 0.86 : 0.86 + (m - 0.78) / 0.22 * 0.14) : m;
   float u = uu * gH;
@@ -187,7 +176,8 @@ void main() {
   float over = gOver;
   vec3 T = normalize(Pn - Pp);
 
-  // the tuck: the end goes out, round and back under
+  // TUCK
+  // the end loops out, round and back under
   if (loops) {
     float la = clamp((u - 0.86) / 0.14, 0.0, 1.0) * gTight;
     float a = la * 6.2832;
@@ -195,7 +185,6 @@ void main() {
     T = normalize(T * cos(a) + ns * sin(a) * sstep(0.0, 0.05, la));
   }
 
-  // a breath of air stirs whatever is free
   float flut = 0.6 + 0.4 * sin(uWind.w * 5.0 + aB.z * 40.0 + u * 4.0);
   P += uWind.xyz * flex * flut;
 
@@ -206,7 +195,6 @@ void main() {
   vec3 Wd = cos(tw) * W + sin(tw) * ns;
   vec3 n = normalize(cross(T, Wd));
 
-  // a square base, a pointed tip; the threading end is a tip too
   float tip = pow(clamp((gH - u) / 0.07, 0.0, 1.0), 0.6);
   float width = aB.y * tip * mix(0.75, 1.0, clamp(u / 0.03, 0.0, 1.0));
   P += Wd * aMesh.y * width * 0.5;
@@ -220,7 +208,6 @@ void main() {
   vUv = vec2(u, aMesh.y);
   vAo = sstep(-0.05, 0.01, aB.x);
   vOver = over;
-  // fresh strands are green and dry slowly; the neck, the oldest, is already straw
   float green = b < 0.0 ? 0.0 : 1.0 - clamp((uAge - b) / 1.5, 0.0, 1.0);
   green = clamp(green * mix(0.75, 1.25, aC.w), 0.0, 1.0);
   vK = vec4(aB.z, green, aC.w, aC.y);
@@ -267,24 +254,21 @@ void main() {
   vec3 fresh = mix(vec3(0.24, 0.44, 0.06), vec3(0.5, 0.62, 0.12), hue);
   fresh = mix(fresh, vec3(0.64, 0.66, 0.22), step(0.78, hue) * 0.8);
   fresh = mix(fresh, vec3(0.36, 0.4, 0.14), step(hue, 0.12) * 0.7);
-  // each strand its own shade, and a few went in dry
   float shade0 = mix(0.62, 1.12, fract(seed * 17.0));
   float dry = step(0.86, fract(seed * 31.0));
   green *= 1.0 - dry * 0.85;
   vec3 base = mix(straw, fresh, green);
   base = mix(base, vec3(0.56, 0.54, 0.2), green * (1.0 - green) * 1.3);
-  // parallel veins, a paler midrib, darker margins, a little mottling along it
+  // VEINS
+  // parallel veins, paler midrib, darker margins; faded below a pixel via fwidth
   float av = abs(v);
-  // veins fade out before they get finer than a pixel
   float vf = 1.0 - smoothstep(0.6, 1.4, fwidth(v * 14.0));
   base *= 1.0 + 0.1 * vf * sin(v * 14.0 + seed * 3.0);
   base *= 1.0 + 0.1 * (1.0 - smoothstep(0.0, 0.18, av));
   base *= 1.0 - 0.42 * smoothstep(0.66, 1.0, av);
-  // streaks run with the blade, and now and then a weathered patch
   base *= 0.86 + 0.24 * vn3(vec3(u * 60.0, v * 1.5, seed * 40.0));
   base *= 1.0 - 0.2 * smoothstep(0.7, 0.85, vn3(vec3(u * 9.0, v * 0.6, seed * 17.0)));
   base *= shade0;
-  // picked by eye in srgb, lit in linear
   base = pow(base, vec3(2.2));
 
   // LIGHT
@@ -294,22 +278,22 @@ void main() {
   vec3 ns = normalize(vNs);
   vec3 T = normalize(vT);
   float inside = smoothstep(0.15, -0.25, dot(n, ns));
-  // where it dips under a crossing blade it sits in that blade's shade
   float ao = (0.45 + 0.55 * vAo) * mix(1.0, 0.28, inside) * (0.62 + 0.38 * smoothstep(-0.9, 0.6, vOver));
   float sh = shadowAt(vPos, n, 2.2);
   float ndl = dot(n, uKey);
   float diff = clamp(ndl * 1.1, 0.0, 1.0);
   float thin = 0.3 + 0.7 * green;
   vec3 trans = vec3(1.0, 0.95, 0.45) * thin * clamp(-ndl, 0.0, 1.0) * 0.8;
-  // fibre-aligned sheen: kajiya-kay on the blade's run, a sharp white lobe and a tinted one
+  // SHEEN
+  // Kajiya-Kay along the blade: a sharp white lobe and a tinted one
   vec3 H = normalize(uKey + V);
   float th = dot(T, H);
   float sinTH = sqrt(max(1.0 - th * th, 0.0));
   float spec = pow(sinTH, 70.0) * 0.16;
   vec3 spec2 = base * pow(sinTH, 14.0) * 0.14;
   float front = smoothstep(-0.1, 0.3, ndl);
-  // the back light, only on the outside of the nest that faces it
-  // a rim at the outline, and light through the thin green blades there
+  // BACK LIGHT
+  // rim on the side facing uBack, transmitted through thin green blades
   float rim = pow(1.0 - abs(dot(ns, V)), 2.0);
   float bk = smoothstep(-0.2, 0.5, dot(ns, uBack)) * ao * rim;
   float bl = dot(n, uBack);
@@ -377,11 +361,10 @@ void main() {
 }`;
 
 // WALL
-// warm plaster behind the nest: a broad pool of the key and the nest's shadow, blurred from
-// a small coverage map so it is softer than anything on the nest itself
+// warm plaster: key pool and the nest's shadow from a blurred low-res coverage map
 export const WALL_VS = `${HEAD}
 uniform mat4 uViewProj;
-uniform vec4 uWall; // x0, y0, x1, y1
+uniform vec4 uWall;
 uniform float uWallZ;
 out vec3 vPos;
 void main() {
@@ -436,7 +419,8 @@ void main() {
 
 export const STRIP_SEG = SEG;
 
-// the resolved frame onto the canvas, whose format a blit cannot be trusted to match
+// COPY
+// shader copy, since a blit cannot be trusted to match the canvas format
 export const COPY_FS = `${HEAD}
 uniform sampler2D uTex;
 out vec4 o;

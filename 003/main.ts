@@ -20,7 +20,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
 
   if (!canvas || params.has("still")) still();
   else {
-    // the word is cut from the serif, it has to be loaded before the first frame
     Promise.all([import("./smear"), document.fonts.load('400 100px "Instrument Serif"')])
       .then(([{ Smear, PALETTES }]) => {
         const smear = new Smear(canvas, WORD);

@@ -26,13 +26,13 @@ import { CAVE, SAFE, build, frame, sample, type Tunnel } from "./tunnel";
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
-const FOV_DEG = 66; // vertical, landscape
-const MAX_FOV_DEG = 88; // portrait widens it up to this
+const FOV_DEG = 66;
+const MAX_FOV_DEG = 88;
 const NEAR_M = 0.04;
 const FAR_M = 95;
-const AHEAD_M = 86; // chunks drawn ahead of the bat, as far as a front reaches
+const AHEAD_M = 86;
 const BEHIND_M = 6;
-const WATER_NEAR_M = 70; // a pool this close gets its mirror pass
+const WATER_NEAR_M = 70;
 const WATER_REACH_M = 34;
 const FLY_M_S = 3.1;
 const FLY_CHAMBER_M_S = 2.2;
@@ -40,18 +40,18 @@ const LOOK_M = 6;
 const STEER_TAU_S = 0.75;
 const ROLL_TAU_S = 0.5;
 const SPEED_TAU_S = 1.2;
-const BANK = 0.22; // roll per unit of lateral drift
-const START_FRAC = 0.02; // where the flight starts, fraction of the loop
-const OPENING_S = [1.1, 1.27]; // the one call the bat makes on its own, a double click
-const IDLE_S = 6; // quiet this long after the last echo fades and the hint speaks up
-const MIN_GAP_S = 0.15; // clicks faster than this fold into the last call
-const PUSH_M_S_PER_PX = 0.022; // a wheel notch of 100 px adds about 2 m/s
-const MAX_PUSH_M_S = 8.5; // on top of the cruise; walls stay readable, never a jump
-const PUSH_TAU_S = 1.1; // how long the push coasts
-const RUSH_FOV = 0.08; // the view widens this much at full push
+const BANK = 0.22; // change bank strength here
+const START_FRAC = 0.02;
+const OPENING_S = [1.1, 1.27];
+const IDLE_S = 6; // change hint delay here
+const MIN_GAP_S = 0.15;
+const PUSH_M_S_PER_PX = 0.022; // change wheel gain here
+const MAX_PUSH_M_S = 8.5;
+const PUSH_TAU_S = 1.1; // change coast time here
+const RUSH_FOV = 0.08;
 const PING_AHEAD_M = 0.25;
 const HUD_S = 0.2;
-const FREEZE_M = 4.5; // past the middle of the first pool
+const FREEZE_M = 4.5;
 const FREEZE_AGES_S = [1.5, 0.75, 0.2];
 const FREEZE_T_S = 30;
 const BONE = 0x04070a;
@@ -233,14 +233,13 @@ export class Cave {
   }
 
   // INPUT
-  // the cursor steers, -1..1 from the middle of the canvas; a tap adds a ping
+  // steer in -1..1 from canvas centre
   steer(x: number, y: number) {
     this.tx = Math.max(-1, Math.min(1, x));
     this.ty = Math.max(-1, Math.min(1, y));
     this.wake();
   }
 
-  // scroll px forward flies on, back slows to a hover; the push coasts out on its own
   wheel(px: number) {
     if (this.reduced || !this.shown) return;
     this.push = Math.max(-this.speed, Math.min(MAX_PUSH_M_S, this.push + px * PUSH_M_S_PER_PX));
@@ -255,7 +254,6 @@ export class Cave {
     this.call();
   }
 
-  // a call from the user: out at once, the hud ticks with it
   private call() {
     if (this.reduced || !this.shown || this.time - this.lastPing < MIN_GAP_S) return;
     this.ping();
@@ -264,8 +262,7 @@ export class Cave {
   }
 
   // PING
-  // a ping is fixed once sent, where and when, and runs its whole course. it takes a spent
-  // slot; only if none is spent does it take the one furthest into its fade
+  // first expired slot, else the oldest
   private ping() {
     let slot = -1;
     let oldest = 0;
@@ -292,7 +289,7 @@ export class Cave {
   }
 
   // REDUCED MOTION
-  // one held frame: the bat over the first pool, three pings out, a few bats caught
+  // one held frame over the first pool, three pings out
   private freeze() {
     const ch = this.tunnel.chambers[0];
     this.s = ch.s + FREEZE_M;
@@ -337,7 +334,6 @@ export class Cave {
     const aspect = this.cssW / this.cssH;
     const cam = this.camera;
     cam.aspect = aspect;
-    // keep at least a 58 degree wide view on tall screens
     const minH = 2 * Math.atan(Math.tan((58 * Math.PI) / 360) / aspect);
     this.fov = Math.min(MAX_FOV_DEG, Math.max(FOV_DEG, (minH * 180) / Math.PI));
     cam.fov = this.fov;
@@ -363,14 +359,12 @@ export class Cave {
     this.pose(dt);
 
     // OPENING
-    // one call so the cave shows what a ping does; every one after is the user's
     if (this.opening < OPENING_S.length && this.time >= OPENING_S[this.opening]) {
       this.opening++;
       this.ping();
     }
 
     // LENS
-    // a push widens the view into a rush
     const rush = Math.max(0, this.push) / MAX_PUSH_M_S;
     const lens = 1 + RUSH_FOV * rush * rush;
     if (Math.abs(lens - this.lens) > 1e-4) {
@@ -390,7 +384,7 @@ export class Cave {
   }
 
   // HUD
-  // how far the last front has run, and how long its echo would take at the real speed of sound
+  // echo delay at the real speed of sound, 343 m/s
   private report() {
     const last = this.pings[this.newest];
     const age = this.time - last.w;
@@ -408,7 +402,7 @@ export class Cave {
   }
 
   // CAMERA
-  // on the centre line plus the steer, inside the box the spikes keep clear of
+  // centre line plus steer, inside the SAFE box
   private pose(dt: number) {
     const f = this.f;
     const g = this.g;
@@ -430,7 +424,6 @@ export class Cave {
       g.c[1] + g.s[1] * lx + g.u[1] * ly,
       g.c[2] + g.s[2] * lx + g.u[2] * ly,
     );
-    // bank into the drift and into the bend ahead
     const drift = dt > 0 ? (ox - this.lastOx) / dt : 0;
     this.lastOx = ox;
     const bend = g.t[0] * f.s[0] + g.t[1] * f.s[1] + g.t[2] * f.s[2];
@@ -443,7 +436,7 @@ export class Cave {
   }
 
   // SCENE
-  // only the chunks near the bat, the pool's mirror when one is close, the bats where they are
+  // cull chunks by ring distance; mirror pass only near a pool
   private place() {
     const t = this.tunnel;
     const ring = this.s / t.ds;

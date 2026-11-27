@@ -3,7 +3,7 @@ import { Magma } from "./magma";
 import type { FromWorker, ToWorker } from "./host";
 
 // WORKER
-// the whole magma lives here, so waking a cold gpu never blocks the page
+// waking a cold gpu never blocks the page
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 const send = (msg: FromWorker) => scope.postMessage(msg);

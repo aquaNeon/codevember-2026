@@ -3,7 +3,7 @@ import { Cocoon } from "./cocoon";
 import type { FromWorker, ToWorker } from "./stage";
 
 // WORKER
-// the whole scene lives here, so waking a cold gpu never blocks the page
+// scene runs here so gpu warm-up never blocks the main thread
 
 let c: Cocoon | null = null;
 const send = (m: FromWorker) => postMessage(m);

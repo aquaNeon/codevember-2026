@@ -1,29 +1,30 @@
 import { WING, scallops } from "./bats";
 
-const SPEED_M_S = 28; // slowed far below sound so the front can be watched, still well ahead of the bat
-const RANGE_M = 95; // as far as a front runs: the far plane
-const HOLD_S = 1.8; // the faint memory after the flash
-const END_S = HOLD_S * 2; // when a surface has let go of a ping entirely
+// SONAR
+const SPEED_M_S = 28; // change front speed here
+const RANGE_M = 95;
+const HOLD_S = 1.8; // change afterglow here
+const END_S = HOLD_S * 2;
 
 export const SONAR = {
-  MAX_PINGS: 48, // a full lifetime of the fastest clicking, so no front is ever cut short
+  MAX_PINGS: 48,
   SPEED_M_S,
   RANGE_M,
-  LIFE_S: RANGE_M / SPEED_M_S + END_S, // a slot is free once its farthest surface has let go
-  GLOW_S: 0.45, // the flash as the front passes
+  LIFE_S: RANGE_M / SPEED_M_S + END_S,
+  GLOW_S: 0.45, // change flash length here
   HOLD_S,
   END_S,
-  FALL: 0.00017, // energy lost with distance: a wall at 70 m returns about 55% of a near one
-  FLOOR: 0.17, // the weakest return, so the end of what is drawn always shows
-  CELL_PX: 3.2, // stipple cell, css px
-  MIN_CELL_M: 0.012, // up close the points stop shrinking and spread apart
+  FALL: 0.00017, // change distance falloff here
+  FLOOR: 0.17,
+  CELL_PX: 3.2, // change stipple size here
+  MIN_CELL_M: 0.012,
 };
 
 const f = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
 const v2 = (p: number[]) => `vec2(${f(p[0])}, ${f(p[1])})`;
 
 // COMMON
-// the ping field and the stipple, shared by the rock, the water and the bats
+// ping field and stipple, shared by rock, water and bats
 const COMMON = `
 #define MAX_PINGS ${SONAR.MAX_PINGS}
 uniform vec4  uPings[MAX_PINGS];
@@ -47,8 +48,8 @@ const vec3  DEEP   = vec3(0.07, 0.36, 0.46);
 const vec3  CYAN   = vec3(0.3, 0.82, 0.98);
 const vec3  PALE   = vec3(0.86, 0.97, 1.0);
 
-// x: echo held behind the fronts, y: the fronts, z: how fresh
-// every branch here depends on uniforms only, so the derivative of each distance holds
+// SONAR
+// x held echo, y fronts, z freshness; uniform-only branches keep fwidth valid
 vec3 sonar(vec3 p, vec3 n, float two) {
   vec3 o = vec3(0.0);
   for (int i = 0; i < MAX_PINGS; i++) {
@@ -61,14 +62,12 @@ vec3 sonar(vec3 p, vec3 n, float two) {
     float x = age * SPEED - r;
     float dn = dot(n, d / r);
     float face = mix(max(dn, 0.0), abs(dn), two);
-    // brightness hangs on distance only; each surface fades from the moment the front reached it
     float reach = 1.0 - smoothstep(RANGE * 0.9, RANGE, r);
     float e = reach / (1.0 + r * r * FALL);
     float since = x / SPEED;
     float life = 1.0 - smoothstep(HOLD, END, since);
     float glow = x > 0.0 ? (0.55 * exp(-since / GLOW) + 0.45 * exp(-since / HOLD)) * life : 0.0;
     float front = 1.0 - smoothstep(aa * 1.0, aa * 2.4, abs(x));
-    // fainter returns trailing the front
     float tail = (1.0 - smoothstep(aa * 0.4, aa * 1.3, abs(x - 0.6))) * 0.3
                + (1.0 - smoothstep(aa * 0.4, aa * 1.3, abs(x - 1.5))) * 0.12;
     o.x += glow * max(e * (0.45 + 0.55 * face), FLOOR * reach);
@@ -91,12 +90,12 @@ float dotsAt(vec3 p, float cell, float rad, float aa) {
   vec3 id = floor(q);
   vec3 h = vec3(pcg3(uvec3(ivec3(id) + 65536))) / 4294967295.0;
   float d = length(q - id - h);
-  // a few points return more than the rest
   rad *= 0.7 + 0.6 * h.x;
   return 1.0 - smoothstep(rad - aa, rad + aa, d);
 }
 
-// a point cloud that keeps the same density on screen at any distance, two scales crossfaded
+// STIPPLE
+// constant screen density: two octave cell sizes crossfaded by log2 depth
 float stipple(vec3 p, float depth, float amount) {
   float lod = log2(max(depth * uPx * CELL, MIN_CELL));
   float fl = floor(lod);
@@ -146,7 +145,6 @@ void main() {
   if (vWorld.y < uWater.y && distance(vWorld.xz, uWater.xz) < uWater.w) discard;
 #endif
   vec3 s = sonar(vWorld, normalize(vNormal), 0.0);
-  // soft ceiling, so stacked calls brighten without washing out
   float amt = 1.0 - exp(-1.3 * s.x);
   float st = stipple(vWorld, vDepth, amt);
   vec3 col = tone(s.z) * (st * (0.2 + 1.2 * amt) + amt * 0.03) + PALE * min(s.y, 1.0);
@@ -158,7 +156,6 @@ void main() {
 `;
 
 // WATER
-// a still pool: it hands back the fronts as rings and darkens what it mirrors
 export const WATER_VS = `
 varying vec3 vWorld;
 varying float vDepth;
@@ -179,7 +176,6 @@ varying float vDepth;
 void main() {
   if (distance(vWorld.xz, uWater.xz) > uWater.w) discard;
   vec3 s = sonar(vWorld, vec3(0.0, 1.0, 0.0), 0.0);
-  // a sparse scatter of glints where the surface catches the ping
   float st = stipple(vWorld, vDepth * 1.6, min(s.x * 1.4, 1.0));
   vec3 col = mix(CYAN, PALE, 0.5) * min(s.y * 1.6, 1.0) + CYAN * st * 0.5;
   gl_FragColor = vec4(col, 0.3);
@@ -187,7 +183,7 @@ void main() {
 `;
 
 // BATS
-// one sheet per bat, bent at the shoulder and the wrist; the outline is drawn from a distance field
+// sheet hinged at shoulder and wrist; outline from a polygon SDF minus scallop circles
 const poly = WING.POLY.map(v2).join(", ");
 const cuts = scallops();
 const cutsGlsl = cuts.map((c) => `vec3(${f(c[0])}, ${f(c[1])}, ${f(c[2])})`).join(", ");

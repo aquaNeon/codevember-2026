@@ -26,8 +26,7 @@
     <meta name="theme-color" content="#b49d82" />
     <style>
       /* WALL */
-      /* this day only: the page is the clay wall the nest hangs in front of. doubled selector
-         wins over the shared sheet */
+      /* page matches the clay wall; doubled :root beats the shared sheet */
       :root:root {
         --bone: #b49d82;
         --bone-hi: #b49d82;
@@ -82,7 +81,7 @@
         visibility: visible;
       }
       /* STILL */
-      /* the finished nest, rendered, for no webgl */
+      /* fallback render when WebGL2 is unavailable */
       .still {
         position: absolute;
         inset: 0;

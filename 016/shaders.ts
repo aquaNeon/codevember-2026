@@ -1,6 +1,7 @@
 export const SLOTS = 3;
 
-// ashima 3d simplex noise
+// NOISE
+// ashima 3d simplex
 export const NOISE = /* glsl */ `
 vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
 vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
@@ -51,25 +52,25 @@ float snoise(vec3 v) {
 `;
 
 // PROFILE
-// Lycoperdon perlatum: a head broad and a little flat on top, a nipple of a pore, narrowing gradually into a
-// stem often as long as the head, pleated and pinched at the foot; body units, foot at y = 0
-export const HEAD_A = 2.3; // how far round the head goes before the stem takes over, radians from the top
-export const HEAD_T = 0.62; // share of the sphere's latitude given to the head
-export const STEM_IN = 0.34; // how much the stem narrows to the foot
+// Lycoperdon perlatum; body units, foot at y = 0
+export const HEAD_A = 2.3; // change head-to-stem angle here
+export const HEAD_T = 0.62;
+export const STEM_IN = 0.34; // change stem taper here
 
-// per specimen: stem length, crown flattening, foot pinch, age (0 young, 1 old and open)
+// FORM
+// stem length, crown flattening, foot pinch, age (0 young, 1 old)
 export type Form = readonly [number, number, number, number];
 
 export function headY(f: Form) {
   return f[0] - Math.cos(HEAD_A);
 }
 
-// the pore sits on a small nipple when young, in an open dip when old
 export function poreY(f: Form) {
   return headY(f) + (1 - f[1]) + 0.06 - 0.12 * f[3];
 }
 
-// the same outline the vertex shader builds, without the pleats; out = [radius, height]
+// OUTLINE
+// vertex shader outline without pleats; out = [radius, height]
 export function profile(th: number, f: Form, out: Float32Array) {
   const H = headY(f);
   if (th < HEAD_T) {
@@ -102,7 +103,8 @@ const float STEM_IN = ${STEM_IN.toFixed(4)};
 #define AGE uForm.w
 `;
 
-// shared bits for the plate look: hashes, cells, screen stipple and form-following lines
+// INK
+// plate look helpers: hashes, cells, screen stipple, form lines
 const INK = /* glsl */ `
 uniform float uDpr;
 uniform float uInkScale;
@@ -117,7 +119,8 @@ vec3 hash3(vec3 p) {
   return fract(sin(p) * 43758.5453);
 }
 
-// distance to the nearest cell point; 2x2x2 search with the jitter held to the middle half of each cell
+// CELLS
+// nearest point distance; 2x2x2 search, jitter held to the middle half of each cell
 float cells(vec3 p) {
   vec3 i = floor(p - 0.5);
   vec3 f = p - i;
@@ -133,9 +136,8 @@ float cells(vec3 p) {
 }
 
 // STIPPLE
-// one dot per screen cell, inked when its random value falls under the tone
+// dot per screen cell under the tone; two rotated lattices hide the grid
 float stipple(float tone, float cellPx) {
-  // two jittered lattices, the second turned and scaled, so no grid shows in the dark areas
   float d = 0.0;
   for (int k = 0; k < 2; k++) {
     float fk = float(k);
@@ -151,7 +153,8 @@ float stipple(float tone, float cellPx) {
   return d;
 }
 
-// one jittered lattice, half the cost; enough on the bodies, where hatching breaks up the dots anyway
+// SINGLE LATTICE
+// half the cost; hatching hides the grid on the bodies
 float stipple1(float tone, float cellPx) {
   vec2 q = gl_FragCoord.xy / (uDpr * uInkScale * cellPx);
   vec2 i = floor(q);
@@ -161,7 +164,8 @@ float stipple1(float tone, float cellPx) {
   return step(h.x, tone) * (1.0 - smoothstep(r, r + 0.1, length(f)));
 }
 
-// an engraved line at every whole x, width as a share of the spacing
+// LINES
+// engraved line at every whole x, width as a share of the spacing
 float lines(float x, float width) {
   float w = fwidth(x);
   float f = abs(fract(x) - 0.5);
@@ -182,7 +186,8 @@ varying float vSag;
 ${NOISE}
 ${CONSTS}
 
-// unit sphere direction in, body point out; rest is the undented point, for the skin pattern
+// BODY
+// unit sphere direction in, body point out; rest is the undented point
 vec3 body(vec3 n, out float dent, out vec3 rest, out float fold) {
   float th = acos(clamp(n.y, -1.0, 1.0)) / PI;
   float lxz = length(n.xz);
@@ -195,31 +200,28 @@ vec3 body(vec3 n, out float dent, out vec3 rest, out float fold) {
     float c = cos(a);
     r = sin(a);
     y = H + (c > 0.0 ? c * (1.0 - FLAT) : c);
-    // the nipple round the pore, sunk into an open dip with age
     y += (0.06 - 0.12 * AGE) * exp(-a * a * 50.0);
   } else {
-    // stem: starts on the head's own tangent and tapers, so head and stem read as one club
+    // STEM
+    // starts on the head's tangent so head and stem join smoothly
     float s = (th - TH) / (1.0 - TH);
     y = mix(NECK, 0.0, s);
     r = sin(A) - STEM_IN * (2.0 * s - s * s);
-    // pinched just above the foot, pleats deepening toward it
     r *= 1.0 - PINCH * exp(-pow((s - 0.8) / 0.12, 2.0));
     float wr = sin(phi * 11.0 + s * 3.0 + 0.6 * snoise(vec3(dir * 3.0, s * 2.0)));
     wr += 0.5 * sin(phi * 23.0 - s * 5.0);
     r *= 1.0 + 0.022 * wr * (smoothstep(0.1, 0.5, s) + smoothstep(0.55, 0.95, s));
-    // a rounded heel instead of a cut base
     float heel = smoothstep(0.88, 1.0, s);
     r *= sqrt(max(0.0, 1.0 - heel * heel));
   }
   vec3 p = vec3(dir.x * r, y, dir.y * r);
   rest = p;
 
-  // radial from the head centre up top, flat outward on the stem
   vec3 out3 = normalize(p - vec3(0.0, min(p.y, H), 0.0) + vec3(0.0, 1e-4, 0.0));
   float head = smoothstep(NECK - 0.1, NECK + 0.3, p.y);
 
   // DIMPLES
-  // a pit with creases fanning out from it, like a squeezed paper bag
+  // pit with radial creases
   dent = 0.0;
   float push = 0.0;
   for (int i = 0; i < ${SLOTS}; i++) {
@@ -231,18 +233,16 @@ vec3 body(vec3 n, out float dent, out vec3 rest, out float fold) {
     vec3 b = cross(d, t);
     float ang = atan(dot(out3, b), dot(out3, t));
     float ring = exp(-c * 2.6) - pit;
-    // soft creases: a smooth wave, not a sharp ridge, so the mesh can follow it
     float crease = 0.5 + 0.5 * sin(ang * 9.0);
     push += a * (pit + 0.14 * ring * crease * crease);
     dent += a * pit;
   }
 
   // SAG
-  // an empty head slumps, and its skin folds in toward the pore
-  // old ones stay a little slumped and folded
   float sag = max(uDeflate, 0.75 * AGE);
   float upper = smoothstep(NECK, H + 0.9, p.y);
-  // squared, not a root of |sin|: the folds round over instead of meeting in a hard seam
+  // FOLDS
+  // squared sin, not a root of |sin|, so folds round over without a seam
   float sf = sin(phi * 6.0 + 0.8 * snoise(p * 1.5));
   float f = sf * sf;
   push += sag * 0.06 * f * upper * (1.0 - upper * 0.6);
@@ -266,7 +266,8 @@ void main() {
   vec3 p1 = body(normalize(n + t1 * 0.01), skip, junk, skip);
   vec3 p2 = body(normalize(n + t2 * 0.01), skip, junk, skip);
   vec3 nrm = cross(p1 - p, p2 - p);
-  // the poles collapse a neighbour, fall back to straight up or down
+  // POLES
+  // degenerate neighbour at the poles, fall back to straight up or down
   nrm = dot(nrm, nrm) > 1e-12 ? normalize(nrm) : vec3(0.0, sign(n.y), 0.0);
   vNormal = normalize(normalMatrix * nrm);
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
@@ -309,7 +310,8 @@ vec3 bump(vec3 pos, vec3 N, float h) {
 
 void main() {
 #ifdef SECTION
-  // the cutaway: the near half is gone, the cut face is drawn by its own mesh
+  // CUTAWAY
+  // near half discarded; the cut face is its own mesh
   if (vPos.z > 0.0) discard;
 #endif
   vec3 Ng = normalize(vNormal);
@@ -318,7 +320,6 @@ void main() {
   float crown = smoothstep(H - 0.2, H + 0.85, vPos.y);
 
   // WARTS
-  // fine granules all over the head, bigger spines crowding toward the top
   float sd = cells(vPos * 8.0);
   float spine = 1.0 - smoothstep(0.0, 0.34, sd);
   float grain = 1.0 - smoothstep(0.0, 0.3, cells(vPos * 24.0 + 7.0));
@@ -336,7 +337,7 @@ void main() {
 
 #ifdef PLATE
   // PLATE
-  // a hand-coloured lithograph: watercolour wash under ink stipple, hatching and a contour
+  // watercolour wash under ink stipple, hatching and a contour
   float edge = 1.0 - abs(dot(Ng, V));
   float tone = 1.0 - diff;
   tone += 0.4 * vSag + 0.35 * smoothstep(0.0, 0.25, vDent) + 0.3 * foot;
@@ -344,28 +345,27 @@ void main() {
   vec3 wash = mix(uTop, uFoot, smoothstep(0.2, 0.8, tone));
   wash = mix(wash, uShade, smoothstep(0.65, 1.0, tone) * 0.5);
   wash *= 0.95 + 0.08 * snoise(vPos * 1.8 + 3.0);
-  // pigment pools along the outline, as a wash does when it dries
   wash = mix(wash, uFoot * 0.92, smoothstep(0.55, 0.95, edge) * 0.35);
   float ink = stipple1(pow(tone, 1.7) * 0.55, 3.0);
-  // hatching follows the form: rings round the body in shade, meridians across them in the deepest shade
+  // HATCHING
+  // rings round the body in shade, meridians across them in the deepest
   float phi = atan(vPos.z, vPos.x);
   ink = max(ink, lines(vPos.y * 30.0, 0.16 * smoothstep(0.6, 1.0, tone)) * 0.7);
   ink = max(ink, lines(phi * 9.5493, 0.14 * smoothstep(0.85, 1.0, tone)) * 0.55);
-  // each spine a fleck of ink, the granules a finer one
-  // fleck size held in screen pixels, so it stays a fine point at any size or density
+  // FLECKS
+  // size held in screen px via fwidth, so it stays fine at any scale
   vec3 fw = fwidth(vPos * 8.0);
   float px = max(fw.x, max(fw.y, fw.z));
   float fr = min(px * 0.6 * uDpr * uInkScale, 0.1);
   ink = max(ink, (1.0 - smoothstep(fr, fr + px * 0.8, sd)) * crown * 0.85);
   ink = max(ink, smoothstep(0.85, 0.98, grain) * 0.3 * crown);
   ink = max(ink, pore);
-  // contour, heavier on the shadow side
+  // CONTOUR
   float thr = 0.86 - 0.12 * tone;
   ink = max(ink, smoothstep(thr, thr + 0.05, edge));
   gl_FragColor = vec4(mix(wash, uInk, ink * 0.92), 1.0);
 #else
   // GOUACHE
-  // matte, one soft gradient; the stem shares the head's colour so they read as one body
   vec3 base = mix(uFoot, uTop, smoothstep(0.0, H + 0.5, vPos.y));
   base *= 0.96 + 0.04 * snoise(vPos * 3.0) + 0.025 * snoise(vPos * 40.0);
   base = mix(base, uWart, spine * 0.75 + grain * 0.35);
@@ -375,7 +375,6 @@ void main() {
   lit *= 1.0 - 0.28 * smoothstep(0.0, 0.25, vDent) - 0.3 * foot;
   vec3 col = mix(uShade, base, lit);
   col = mix(col, uShade * 0.95, 0.4 * vSag);
-  // warm bounce off the ground and a cool sky from above keep the underside open
   col += vec3(0.85, 0.62, 0.42) * max(-N.y, 0.0) * 0.18;
   col += vec3(1.0, 0.95, 0.86) * rim * 0.14;
   gl_FragColor = vec4(col, 1.0);
@@ -383,7 +382,8 @@ void main() {
 }
 `;
 
-// the cut face of the cutaway, a flat shape in the body's xy plane
+// SECTION
+// cut face, a flat shape in the body's xy plane
 export const SECTION_VS = /* glsl */ `
 varying vec2 vLocal;
 
@@ -421,8 +421,7 @@ void main() {
   float edge = R - x;
 
   // REGIONS
-  // gleba: the ripe spore mass filling the head, cottony toward the top;
-  // subgleba: the sterile spongy chambers below it, filling the stem
+  // gleba: spore mass in the head; subgleba: sterile chambers in the stem
   float wob = 0.035 * snoise(vec3(vLocal * 4.0, 0.0));
   float g = length(vec2(x, hy));
   float gleba = 1.0 - smoothstep(0.83 + wob, 0.85 + wob, g);
@@ -431,7 +430,6 @@ void main() {
   float cotton = gleba * smoothstep(0.1, 0.75, hy);
 
   // GLEBA
-  // olive-brown powder: clumped stipple over a mottled wash, fine threads in the cottony top
   float clump = 0.5 + 0.5 * snoise(vec3(vLocal * 9.0, 3.0));
   float mott = 0.5 + 0.5 * snoise(vec3(vLocal * 3.0, 1.0));
   vec3 glebaCol = mix(uGleba, uGleba * vec3(1.12, 1.1, 0.92), mott);
@@ -441,7 +439,6 @@ void main() {
   float threads = lines(w.x + w.y * 0.3, 0.035) * cotton * 0.35;
 
   // SUBGLEBA
-  // pale sponge with chamber walls drawn as small rings
   float cham = cells(vec3(vLocal * 15.0, 0.5));
   float ring = 1.0 - smoothstep(0.0, 0.07, abs(cham - 0.34));
   vec3 sub = mix(uTop, uFoot, 0.3 + 0.25 * (1.0 - smoothstep(0.0, NECK, y)));
@@ -455,19 +452,19 @@ void main() {
   ink = max(ink, ring * (1.0 - gleba) * 0.55 * smoothstep(0.08, 0.14, edge));
 
   // RIND
-  // a clear pale skin: an outer line, the band, a firm inner line
   float rind = 1.0 - smoothstep(0.05, 0.06, edge);
   col = mix(col, uTop, rind);
   ink = max(ink, 1.0 - smoothstep(0.006, 0.016, edge));
   ink = max(ink, (1.0 - smoothstep(0.003, 0.011, abs(edge - 0.058))) * 0.95);
-  // where the spore mass meets the sponge, a broken line
+  // SEAM
   float seam = (1.0 - smoothstep(0.0, 0.15, abs(gleba - 0.5))) * step(0.07, edge);
   ink = max(ink, seam * (0.4 + 0.4 * step(0.4, clump)));
   gl_FragColor = vec4(mix(col, uInk, ink * 0.92), 1.0);
 }
 `;
 
-// curl of three noise potentials, by central differences; neighbours move together, so the haze billows
+// CURL NOISE
+// curl of three noise potentials by central differences
 const CURL = /* glsl */ `
 vec3 curl(vec3 p) {
   const float e = 0.1;
@@ -507,10 +504,8 @@ void main() {
   float age = uTime - aBirth.x;
   float seed = aBirth.y;
 #ifdef PLATE
-  // nearly all of it is fine ink dust; a few big soft washes sit behind
   float grain = step(0.06, fract(seed * 13.7));
 #else
-  // a few fine grains at the edge of the cloud, the rest is haze
   float grain = step(0.88, fract(seed * 13.7));
 #endif
   float life = mix(5.0, 3.5, grain) + 2.5 * fract(seed * 7.13);
@@ -524,7 +519,7 @@ void main() {
     return;
   }
   // DRIFT
-  // a jet out of the pore that drags to a stop, opens out, then rises and curls in still air
+  // pore jet with drag, then a slow rise advected by curl noise
   float tau = 0.18 + 0.3 * fract(seed * 5.31);
   vec3 p = aOrigin + aVel * tau * (1.0 - exp(-age / tau));
   float open = 1.0 - exp(-age / 1.2);
@@ -565,13 +560,12 @@ void main() {
   if (d2 > 1.0) discard;
   float fresh = exp(-vAge * 1.1);
 #ifdef PLATE
-  // ink dots, a little ragged; the washes are barely there
   float dotA = 1.0 - smoothstep(0.55, 1.0, d2);
   float washA = exp(-d2 * 3.0) * 0.035;
   vec3 col = mix(uDustHi, uInk, vGrain);
   float a = vAlpha * mix(washA, dotA * (0.55 + 0.35 * fresh), vGrain);
 #else
-  // gaussian haze; fresh dust is denser and warmer, it thins and pales as it spreads
+  // GAUSSIAN HAZE
   float soft = max(exp(-d2 * 3.2) - 0.04, 0.0);
   vec3 col = mix(uDustHi, uDust, 0.1 + 0.35 * fresh);
   col *= 0.95 + 0.1 * fract(vSeed * 11.0);

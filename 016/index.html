@@ -40,7 +40,8 @@
         outline: 1px solid var(--ink);
         outline-offset: -8px;
       }
-      /* the descender of the p would sit on the line below; doubled class wins over the shared sheet */
+      /* TITLE */
+      /* doubled class beats the shared sheet; room for the p descender */
       .cv-title.cv-title h1 {
         margin-bottom: 0.2em;
       }
@@ -74,7 +75,7 @@
         box-shadow: 0 34px 40px -26px rgb(40 28 16 / 0.45);
       }
       /* PLATE */
-      /* ?v=b: a hand-coloured botanical plate, ruled frame and figure numbers */
+      /* ?v=b: ruled frame and figure numbers */
       .plate-only,
       .plate-labels {
         display: none;
@@ -100,7 +101,8 @@
         color: var(--muted);
         white-space: nowrap;
       }
-      /* the plate is its own panel between the title and the hud, so no rule ever crosses text */
+      /* PANEL */
+      /* own box between title and hud, so no rule crosses text */
       .panel {
         display: none;
         position: absolute;
@@ -126,7 +128,6 @@
         color: var(--muted);
         text-align: right;
       }
-      /* the plate frame fades in when it appears, its caption a beat later */
       [data-cv-plate] .panel {
         animation: cv-fade-in 0.8s cubic-bezier(0.2, 0.7, 0.1, 1) backwards;
       }

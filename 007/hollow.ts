@@ -1,31 +1,28 @@
 // HOLLOW
-// a fall through the slices of a hollow trunk. each slice is a plane with a hole in it;
-// one fullscreen pass walks the planes front to back, so the tunnel costs no geometry.
-// a lamp just above the eye lights the end grain and lets each lip shadow the next
+// fullscreen pass walks holed slice planes front to back; no geometry
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
-export const SLICE_M = 0.3; // gap between slices, change for a denser stack
-const THICK_M = 0.07; // how thick each slice is
-const STEPS = 44; // slices one pixel may look through
-const EASE_S = 0.22; // how softly the speed follows the input
-const COAST_S = 1.1; // how long a push keeps carrying you, change for more inertia
-const WHEEL_GAIN = 0.006; // metres per second per wheel pixel
-const DRAG_GAIN = 0.012; // metres per second per dragged pixel
+export const SLICE_M = 0.3; // change slice gap here
+const THICK_M = 0.07;
+const STEPS = 44;
+const EASE_S = 0.22;
+const COAST_S = 1.1; // change inertia here
+const WHEEL_GAIN = 0.006; // change wheel gain here
+const DRAG_GAIN = 0.012; // change drag gain here
 const KEY_PUSH = 1.4;
 const MAX_SPEED = 12;
-const INTRO_SPEED = 2.6; // the page opens already falling, then comes to rest
+const INTRO_SPEED = 2.6;
 const REST_SPEED = 0.002;
 const PAPER = new URLSearchParams(location.search).get("v") === "b";
 // THE JOURNEY
-// depth in metres where each layer starts to take over; it is fully there TRANSITION_M later
-const LAYER_AT = [15, 32, 48, 70]; // roots, soil, stone, geode
+// layer start depth in m; fully in TRANSITION_M later
+const LAYER_AT = [15, 32, 48, 70];
 const TRANSITION_M = 8;
-const MOTE_GAP_M = 0.5; // planes of dust ahead of the lamp
-const MOTES = 7; // dust planes the lamp looks through
+const MOTE_GAP_M = 0.5;
+const MOTES = 7;
 export const LAYERS = ["Heartwood", "Roots", "Soil", "Stone", "Geode"];
 
-// the layer the hud names at a depth: whichever is more than half in
 export function layerAt(z: number) {
   let n = 0;
   for (const at of LAYER_AT) if (z > at + TRANSITION_M / 2) n++;
@@ -45,11 +42,11 @@ uniform vec2  uRes;
 uniform float uZ;
 uniform float uRoll;
 uniform float uSpeed;
-// loop counts come in as uniforms so the driver keeps them as loops instead of unrolling,
-// which made the first compile take seconds
+// LOOP COUNTS
+// uniform loop bounds stop the driver unrolling; unrolled, first compile took seconds
 uniform int   uSteps;
 uniform int   uMotes;
-uniform int   uOne; // always 1; multiplying a loop count by it keeps the loop a loop
+uniform int   uOne;
 out vec4 outColor;
 
 const float S = ${SLICE_M.toFixed(3)};
@@ -74,27 +71,25 @@ float fbm(vec2 p) {
   return 0.5 * noise(p) + 0.3 * noise(p * 2.1 + 3.7) + 0.2 * noise(p * 4.3 + 9.1);
 }
 
-// how far each deeper layer has taken over at a slice: roots, soil, stone, geode.
-// each slice jitters its own depth a little so the change comes in ragged, not as a line
+// ZONES
+// roots, soil, stone, geode weights at slice k; per-slice depth jitter
 vec4 zones(float k) {
   float z = k * S + (hash(k * 1.31) - 0.5) * 3.0;
   return smoothstep(LAYER_AT, LAYER_AT + SPAN, vec4(z));
 }
 
-// the hollow wanders, so the far end drifts off the axis
 vec2 path(float z) {
   return vec2(0.55 * sin(z * 0.071) + 0.35 * sin(z * 0.023 + 1.0), 0.45 * cos(z * 0.057));
 }
 
 // HOLE
-// irregular, rotted out; it narrows and widens slowly down the trunk
+// fbm-perturbed radius, varying slowly down the trunk
 float hole(float k, vec2 dir) {
   float base = 1.0 + 0.08 * sin(k * 0.11) + 0.06 * sin(k * 0.037 + 2.0);
   float edge = fbm(dir * 1.3 + vec2(k * 0.035, k * 0.021)) - 0.5;
   float chip = noise(dir * 6.0 + k * 0.7) - 0.5;
   float R = base * (1.0 + 0.32 * edge + 0.04 * chip);
 #ifndef PAPER
-  // the geode opens wider, its edge lumpy with clusters of crystal
   float g = zones(k).w;
   if (g > 0.0) R *= mix(1.0, 1.32 - 0.12 * noise(dir * 3.0 + k * 0.05), g);
 #endif
@@ -107,18 +102,16 @@ mat2 spin(float a) {
 }
 
 // END GRAIN
-// rings around the pith, wandering a little; fine detail fades with pixel size
+// growth rings; fine detail fades with pixel footprint
 vec3 grain(vec2 q, float k, float fw) {
   float r = length(q);
   vec2 dir = q / max(r, 1e-4);
-  // the pith sits a little off centre, so rings crowd on one side
   vec2 pith = vec2(0.12, -0.05);
   float rr = length(q - pith * smoothstep(0.0, 2.0, r));
   float warp = (fbm(dir * 0.7 + k * 0.004) - 0.5) * 0.12 + (fbm(q * 1.4) - 0.5) * 0.05;
   float u = (rr + warp) * 30.0;
   float ring = fract(u);
   float aa = clamp(fw * 30.0 * 2.0, 0.0, 1.0);
-  // earlywood soft and wide, latewood a thin dark band at the end of each year
   float late = smoothstep(0.62, 0.9, ring) * (1.0 - smoothstep(0.9, 1.0, ring));
   late = mix(late, 0.28, aa);
   float year = hash(floor(u));
@@ -144,7 +137,7 @@ vec3 grain(vec2 q, float k, float fw) {
 }
 
 // CHECKS
-// drying cracks run out from the hole, wide at the lip and closing further out
+// radial drying cracks, tapering away from the lip
 float checks(vec2 q, float k, float R, float fw) {
   float r = length(q);
   float a = atan(q.y, q.x);
@@ -164,13 +157,11 @@ float checks(vec2 q, float k, float R, float fw) {
 }
 
 // LAYERS
-// each returns a surface colour; glow collects light that does not need the lamp
+// each returns albedo; glow collects emissive light
 const vec3 FUNGUS = vec3(0.35, 1.0, 0.72);
 
 // ROOTS
-// roots wrap round the hollow inside each slice: a strand follows the hole at its own
-// distance, wandering in and out, thick at one end and tapering to a hair at the other.
-// the thick ones carry on through many slices; the fine ones change from slice to slice
+// tapered strands at an offset from the hole; thick ones persist across slices
 vec3 roots(vec3 wood, vec2 q, float k, float R, float fw) {
   vec3 c = mix(wood * 0.4, vec3(0.17, 0.11, 0.07), 0.6);
   float r = length(q);
@@ -179,25 +170,21 @@ vec3 roots(vec3 wood, vec2 q, float k, float R, float fw) {
   for (int i = 0; i < 7 * uOne; i++) {
     float fi = float(i);
     bool thick = i < 2;
-    // thick roots only drift slowly with depth; fine ones are new on each slice
     float seed = thick ? fi * 13.0 : k * 3.7 + fi * 1.9;
     if (!thick && hash(seed) > 0.7) continue;
     float th0 = hash(seed + 0.3) * TAU + (thick ? k * 0.012 : 0.0);
     float span = thick ? 3.6 : 1.0 + 1.8 * hash(seed + 0.6);
     float t = mod(th - th0, TAU) / span;
     if (t > 1.0) continue;
-    // distance out from the lip, wandering, and drifting outward like a branch leaving
     float off = (thick ? 0.12 : 0.05 + 0.3 * hash(seed + 0.9))
       + 0.05 * sin(t * span * 3.0 + seed) + 0.025 * sin(t * span * 11.0 + seed * 2.0)
       + (thick ? 0.0 : 0.22 * t * (hash(seed + 1.4) - 0.3));
     float w = (thick ? 0.04 : 0.012 * (0.4 + hash(seed + 2.1))) * mix(1.0, 0.12, t);
     float d = abs(r - (R + off));
     vec3 tone = thick ? vec3(0.5, 0.35, 0.22) : vec3(0.64, 0.5, 0.36);
-    // root hairs: short radial strokes off both sides of the strand
     float hair = step(0.66, noise(vec2(t * span * r * 160.0, seed))) * fine;
     hair *= smoothstep(w + 0.03, w, d) * step(w, d) * 0.5 * (1.0 - t * 0.5);
     c = mix(c, tone * 1.1, hair);
-    // the thick end grows out of the slice rather than starting square
     float body = smoothstep(w + fw, max(w - fw, 0.0), d) * smoothstep(0.0, 0.06, t);
     float rnd = sqrt(max(0.0, 1.0 - (d * d) / (w * w)));
     vec3 rc = tone * (0.5 + 0.6 * rnd) * (0.85 + 0.3 * noise(vec2(t * span * 30.0, seed)));
@@ -213,13 +200,12 @@ vec3 soil(vec2 q, float k, float fw) {
   float pv = noise(q * 13.0 + k * 0.37);
   float peb = smoothstep(0.72, 0.74 + fw * 6.0, pv);
   vec3 pc = vec3(0.42, 0.39, 0.35) * (0.75 + 0.4 * noise(q * 25.0 + k));
-  // a pebble is round, so it darkens toward its rim
   pc *= 0.7 + 0.3 * smoothstep(0.72, 0.8, pv);
   return mix(c, pc, peb);
 }
 
 vec3 stone(vec2 q, float k, float fw) {
-  // strata: a run of slices shares one rock, then the next layer comes
+  // STRATA
   float z = k * S;
   float layer = floor(z / 1.6 + noise(vec2(z * 0.4, 1.0)) * 0.7);
   float h = hash(layer * 3.7);
@@ -229,15 +215,14 @@ vec3 stone(vec2 q, float k, float fw) {
     : vec3(0.58, 0.38, 0.22);
   float fine = 1.0 - clamp(fw * 40.0, 0.0, 1.0);
   vec3 c = pal * (0.82 + 0.3 * fbm(q * 4.0 + layer) + 0.12 * fine * (noise(q * 70.0) - 0.5));
-  // quartz veins in some layers
+  // VEINS
   float vein = abs(fbm(q * 1.7 + layer * 2.3) - 0.5) / (0.006 + fw);
   c = mix(c, vec3(0.86, 0.84, 0.8), (1.0 - smoothstep(0.5, 1.0, vein)) * step(0.55, hash(layer + 0.5)));
   return c;
 }
 
 // GEODE
-// agate bands that follow the cavity, then a druzy lining of crystal points that grow
-// larger toward the open middle. some slices are almost all agate
+// agate bands following the cavity, then a druzy lining of voronoi crystal points
 vec3 druzy(vec2 q, float scale, float k, out float apex, out float h) {
   vec2 g = q * scale;
   vec2 cell = floor(g);
@@ -257,7 +242,6 @@ vec3 druzy(vec2 q, float scale, float k, out float apex, out float h) {
       }
     }
   apex = 1.0 - clamp(sqrt(best) * 1.4, 0.0, 1.0);
-  // two faces lit differently make each point read as a pyramid
   float facet = 0.5 + 0.5 * dot(normalize(to + 1e-4), normalize(vec2(-0.6, 0.8)));
   vec3 deep = vec3(0.16, 0.05, 0.26);
   vec3 tipC = h > 0.8 ? vec3(0.86, 0.86, 0.9) : vec3(0.78, 0.66, 0.95);
@@ -281,7 +265,6 @@ vec3 geode(vec2 q, float k, float R, float fw, inout vec3 glow) {
     : vec3(0.15, 0.15, 0.2);
   float edge = smoothstep(0.0, 0.08, fract(u)) * (1.0 - smoothstep(0.92, 1.0, fract(u)));
   vec3 c = mix(band * mix(0.7, 1.0, edge), vec3(0.42, 0.4, 0.46), aa) * 0.95;
-  // the rough crust outside the bands
   c = mix(c, vec3(0.2, 0.19, 0.19) * (0.8 + 0.4 * noise(q * 20.0)), smoothstep(0.45, 0.6, d));
 
   // DRUZY
@@ -289,7 +272,6 @@ vec3 geode(vec2 q, float k, float R, float fw, inout vec3 glow) {
   float cluster = smoothstep(0.3, 0.5, noise(q * 3.5 + k * 0.7));
   float inside = (1.0 - smoothstep(lining * 0.6, lining, d)) * mix(0.35, 1.0, cluster);
   if (inside > 0.0) {
-    // points grow larger toward the cavity
     float near = 1.0 - smoothstep(0.0, lining, d);
     vec3 cc = vec3(0.0);
     float apex = 0.0;
@@ -304,9 +286,7 @@ vec3 geode(vec2 q, float k, float R, float fw, inout vec3 glow) {
       if ((big > 0.5) == (near > 0.5)) h = hh;
     }
     cc = mix(cc, vec3(0.3, 0.2, 0.42), aa * 0.8);
-    // light comes through the tips
     glow += cc * apex * apex * 0.07 * inside;
-    // a few points flash as you pass them
     float glint = step(0.955, h) * pow(apex, 4.0) * pow(fract(h * 31.7 + uZ * 0.7), 16.0);
     glow += vec3(1.0, 0.95, 1.0) * glint * inside * (1.0 - aa) * 1.6;
     c = mix(c, cc, inside);
@@ -315,7 +295,7 @@ vec3 geode(vec2 q, float k, float R, float fw, inout vec3 glow) {
 }
 
 // LAMP
-// a narrow headlamp: bright ahead, falling away to the sides and with distance
+// headlamp cone times distance falloff
 float falloff(vec3 p, vec3 eye, vec3 fwd) {
   vec3 v = p - eye;
   float dist = length(v);
@@ -324,7 +304,7 @@ float falloff(vec3 p, vec3 eye, vec3 fwd) {
 }
 
 // CAMERA
-// set once per pixel in main, read by the shading below
+// per-pixel globals set in main
 vec3 eye;
 vec3 dir;
 vec3 fwd;
@@ -333,12 +313,10 @@ float spread;
 vec3 fogC;
 
 // SHADE
-// one hit: a slice face, or the inside wall of its hole. the walk below only finds hits;
-// all the material work happens here, for the few that show
+// one hit, slice face or hole wall; the walk only finds hits
 vec3 shade(float k, float t0, float t1, float type) {
   float rot = hash(k) * TAU;
   vec4 w = zones(k);
-  // face and wall both start from the hole edge where the ray meets the slice
   vec3 p0 = eye + dir * t0;
   vec2 q0 = spin(rot) * (p0.xy - path(k * S));
   float r0 = length(q0);
@@ -361,7 +339,7 @@ vec3 shade(float k, float t0, float t1, float type) {
       glow += gg * w.w;
     }
     // FUNGUS
-    // glowing specks in the cracks and along the lip, more of them deeper in the wood
+    // emissive specks in cracks and along the lip, denser with depth
     float life = (1.0 - w.y) * smoothstep(4.0, 14.0, k * S);
     if (life > 0.0) {
       vec2 cell = floor(q0 * 110.0);
@@ -373,7 +351,8 @@ vec3 shade(float k, float t0, float t1, float type) {
       glow += FUNGUS * spk * size * life * 0.7;
     }
 #endif
-    // shadow: does the lamp see this spot past the lip of the slice before
+    // SHADOW
+    // light ray tested against the previous slice's hole
     float sh = 1.0;
     if (k * S - S > uZ) {
       vec3 tl = light - p0;
@@ -385,7 +364,6 @@ vec3 shade(float k, float t0, float t1, float type) {
       float Rs = hole(kp, qs / max(rs, 1e-4));
       sh = 1.0 - 0.8 * smoothstep(-0.03, 0.05, rs - Rs);
     }
-    // a soft bevel along the lip catches the lamp
     float lip = exp(-(r0 - R0) / (0.012 + fw0));
     vec3 l = normalize(light - p0);
     float fall = falloff(p0, eye, fwd);
@@ -401,7 +379,7 @@ vec3 shade(float k, float t0, float t1, float type) {
 #endif
   }
 
-  // the inside of the cut, lit at a graze
+  // WALL
   vec3 p1 = eye + dir * t1;
   vec2 q1 = spin(rot) * (p1.xy - path(k * S));
   float r1 = length(q1);
@@ -422,7 +400,6 @@ vec3 shade(float k, float t0, float t1, float type) {
   c = mix(c, vec3(0.36, 0.33, 0.32) * (0.7 + 0.6 * fib), w.z);
   vec3 wglow = vec3(0.0);
   if (w.w > 0.0) {
-    // the inner wall is all crystal: deep violet, now and then a spark
     float hc = hash(floor(atan(qw.y, qw.x) * 40.0) + k * 0.71);
     vec3 cc = mix(vec3(0.16, 0.05, 0.26), vec3(0.6, 0.5, 0.8), fib * fib) * (0.6 + 0.5 * hc);
     c = mix(c, cc, w.w);
@@ -439,7 +416,6 @@ void main() {
   vec2 frag = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
   float pixel = 1.0 / uRes.y * 1.25;
 
-  // rides the path, looking a little ahead along it
   eye = vec3(path(uZ), uZ);
   vec3 ahead = vec3(path(uZ + 4.0), uZ + 4.0);
   fwd = normalize(ahead - eye);
@@ -451,7 +427,6 @@ void main() {
   vec3 d = dir;
   spread = pixel / focal;
   light = eye + up * 0.18 - side * 0.08;
-  // far away things fade into this; black, except a faint violet down in the geode
   fogC = vec3(0.1, 0.05, 0.17) * zones(floor(uZ / S) + 30.0).w;
 #ifdef PAPER
   fogC = vec3(0.1, 0.085, 0.075);
@@ -459,8 +434,8 @@ void main() {
 
   // WALK
   // front to back through the slices, keeping the first three hits and how much each shows
-  vec4 hits[3]; // k, t0, t1, type
-  float hw[3]; // how much of each shows
+  vec4 hits[3];
+  float hw[3];
   int n = 0;
   float trans = 1.0;
   float tHit = 1e4;
@@ -472,7 +447,6 @@ void main() {
     float t0 = (z0 - eye.z) / d.z;
     float t1 = (z1 - eye.z) / d.z;
     float rot = hash(k) * TAU;
-    // front and back of the slice: how far past the hole edge the ray is at each
     float cov[2];
     for (int e = 0; e < 2 * uOne; e++) {
       float te = e == 0 ? t0 : t1;
@@ -501,7 +475,8 @@ void main() {
     k += 1.0;
   }
 
-  // one call site, so the shading is compiled once
+  // SHADE
+  // single call site so shade() is compiled once
   vec3 col = trans * fogC;
   for (int i = 0; i < n; i++) {
     col += hw[i] * shade(hits[i].x, hits[i].y, hits[i].z, hits[i].w);
@@ -509,8 +484,7 @@ void main() {
 
 #ifndef PAPER
   // MOTES
-  // dust hangs in the hollow; the lamp only finds it near the middle of its beam.
-  // deeper down it is spores, then crystal grit
+  // dust planes, lit only inside the lamp cone
   vec4 here = zones(floor(uZ / S));
   vec3 moteC = mix(vec3(1.0, 0.85, 0.62), vec3(0.75, 1.0, 0.8), here.x * (1.0 - here.z));
   moteC = mix(moteC, vec3(0.9, 0.8, 1.0), here.w);
@@ -636,7 +610,6 @@ export class Hollow {
     );
   }
 
-  // starts the fall from this deep, settled
   jump(z: number) {
     this.z = Math.max(0, z);
     this.target = this.reducedMotion ? 0 : INTRO_SPEED * 0.5;
@@ -673,7 +646,6 @@ export class Hollow {
 
   private key = (e: KeyboardEvent) => {
     const k = e.key;
-    // space still presses a focused link or button
     if (k === " " && e.target instanceof HTMLElement && e.target.closest("a, button")) return;
     if (k === "ArrowDown" || k === "PageDown" || k === " ") this.push(KEY_PUSH);
     else if (k === "ArrowUp" || k === "PageUp") this.push(-KEY_PUSH);
@@ -709,12 +681,10 @@ export class Hollow {
   private step(dt: number) {
     const coast = this.reducedMotion ? 0.25 : COAST_S;
     this.target *= Math.exp(-dt / coast);
-    // never back out above the first slice
     if (this.z < 0.4 && this.target < 0) this.target *= Math.exp(-dt / 0.15);
     this.speed += (this.target - this.speed) * (1 - Math.exp(-dt / EASE_S));
     this.z = Math.max(0, this.z + this.speed * dt);
     if (this.z === 0 && this.speed < 0) this.speed = 0;
-    // a slow lean into the fall, never a snap
     this.lean = this.reducedMotion ? 0 : this.speed * 0.025 + this.z * 0.012;
     this.roll += (this.lean - this.roll) * (1 - Math.exp(-dt / 0.8));
     if (Math.abs(this.speed) < REST_SPEED && Math.abs(this.target) < REST_SPEED) {

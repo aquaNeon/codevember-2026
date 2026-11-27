@@ -27,8 +27,7 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
   else void mount(canvas).catch(still);
 
   // MOUNT
-  // three runs in a worker on an offscreen canvas when it can, so its start-up never
-  // blocks the page; otherwise the same host runs here
+  // three in a worker on an offscreen canvas when possible, else the same host here
   async function mount(canvas: HTMLCanvasElement) {
     const receive = (m: Out) => {
       if (m.t === "state") {
@@ -85,7 +84,6 @@ if (root && !root.hasAttribute("data-cv-mounted")) {
     document.addEventListener("visibilitychange", show);
 
     // INPUT
-    // forwarded as css px from the canvas corner
     const fwd = (t: "down" | "move") => (e: PointerEvent) =>
       send({
         t,

@@ -3,32 +3,33 @@ import { AUX_FS, FULL_VS, HEIGHT_FS, MAP_FS, MAP_VS, SHADE_FS, STONES } from "./
 
 const MAX_DPR = 2;
 const MAX_DT_S = 1 / 20;
-const FRESH_N = 4096; // freshness samples along the path
-const HOLD_S = 5; // grooves stay crisp this long
-const SETTLE_S = 9; // then soften back over this long
+const FRESH_N = 4096;
+const HOLD_S = 5; // change groove hold here
+const SETTLE_S = 9; // change settle time here
 const FOLLOW_TAU_S = 0.07;
-const MAX_UPS = 14; // fastest the rake runs along a straight, lanes per second
-const BEND_SLOW = 1.0; // how much a turn slows it; the tightest run at about a third
-const LOOK_UNITS = 0.4; // heading looks this far ahead and behind, so turns are swept
-const TURN_HZ = 1.1; // critically damped heading
-const CENTRE_S = 2.6; // the moment at the centre before the way out opens
-const REST_S = 0.6; // where the rake rests by the gate
-const ARRIVE_UNITS = 0.3; // this close to the end of the path counts as at the middle
+const MAX_UPS = 14; // change rake speed here
+const BEND_SLOW = 1.0;
+const LOOK_UNITS = 0.4;
+const TURN_HZ = 1.1;
+const CENTRE_S = 2.6; // change centre pause here
+const REST_S = 0.6;
+const ARRIVE_UNITS = 0.3;
 const GLIDE_S = 0.5;
-const LIFT_UNITS = 0.45; // how high the rake floats while it moves to a new spot
-const GRAB_UNITS = 1.1; // press this close to the rake to pick it up where it lies
-const REACH_UNITS = 1.3; // presses farther than this from any lane are ignored
-const WINDOW_UNITS = 2.4; // how far along the path one move may travel
-const WALK_UPS = 5; // lanes per second when it walks itself
+const LIFT_UNITS = 0.45;
+const GRAB_UNITS = 1.1;
+const REACH_UNITS = 1.3;
+const WINDOW_UNITS = 2.4;
+const WALK_UPS = 5; // change self-walk speed here
 const KEY_UNITS = 0.6;
 const METRES_PER_UNIT = 0.6;
-const SUN_AZ_RAD = 2.3; // from the upper left
+const SUN_AZ_RAD = 2.3;
 const SUN_EL_RAD = 0.34;
 const AO_UNITS = 0.35;
 
 export type Phase = "rest" | "raking" | "walking" | "centre" | "back";
 
 type Stone = [fx: number, fy: number, r: number, stretch: number, angle: number, height: number];
+// STONES
 // viewport fractions from the top left, radius in lanes
 const STONES_WIDE: Stone[] = [
   [0.15, 0.3, 1.7, 1.25, 0.4, 0.62],
@@ -89,9 +90,9 @@ export class Garden {
   private dpr = 1;
   private cssW = 1;
   private cssH = 1;
-  private cx = 0; // labyrinth centre, css px from the top left
+  private cx = 0;
   private cy = 0;
-  private unit = 1; // css px per lane
+  private unit = 1;
 
   // RAKE
   private head = 0.6;
@@ -109,12 +110,12 @@ export class Garden {
   private cursor = "";
   private px = 0;
   private py = 0;
-  private walking = 0; // direction while walking itself
-  private spin = 0; // heading velocity
+  private walking = 0;
+  private spin = 0;
   private outward = false;
-  private back = false; // came out again
-  private pause = 0; // seconds left of the moment at the centre
-  private resume = false; // walk out once the moment ends
+  private back = false;
+  private pause = 0;
+  private resume = false;
   private scratch = new Float32Array(4);
   private speed = 0;
   private raked = 0;
@@ -124,7 +125,6 @@ export class Garden {
   onCursor: (cursor: string) => void = () => {};
   onShown: () => void = () => {};
 
-  // no dom in here, so the whole scene can live in a worker
   constructor(
     private canvas: HTMLCanvasElement | OffscreenCanvas,
     opts: { reducedMotion: boolean; forceGl: boolean },
@@ -221,7 +221,7 @@ export class Garden {
   }
 
   // PUBLIC
-  // walks in, pauses at the centre, walks back out; pressed again it stops
+  // walks in, pauses at the centre, walks out; pressed again it stops
   walk() {
     if (this.walking || this.resume) {
       this.walking = 0;
@@ -242,7 +242,6 @@ export class Garden {
     this.reducedMotion = reduced;
   }
 
-  // css size of the canvas and the pixel ratio to draw at
   size(w: number, h: number, dpr: number) {
     this.cssW = Math.max(1, w);
     this.cssH = Math.max(1, h);
@@ -251,7 +250,6 @@ export class Garden {
     this.wake();
   }
 
-  // on screen and the tab in front
   show(visible: boolean) {
     this.visible = visible;
     this.last = 0;
@@ -280,7 +278,7 @@ export class Garden {
     this.walking = 0;
     this.grab(id);
     // GLIDE
-    // the rake lifts off and floats to where you pressed
+    // lifts and floats to the pressed spot
     this.gliding = !this.reducedMotion;
     this.glideT = 0;
     this.glideFrom[0] = this.rx;
@@ -314,21 +312,23 @@ export class Garden {
     this.follow();
   }
 
-  // the rake slides along the lane toward the pointer, never across a wall; on the closing
-  // circle it can keep going round, and pulling back leads it out along the spiral
+  // FOLLOW
+  // slides along the lane toward the pointer, never across a wall; can circle the loop
   private follow() {
     const p = this.path;
     this.fold();
     const c = at(p, this.target);
     const w = Math.ceil(WINDOW_UNITS / STEP);
     let i = nearest(p, this.px, this.py, c - w, c + w);
-    // across the circle's seam the window runs out; look at the whole circle too
+    // SEAM
+    // the window runs out across the circle's seam; check the whole circle too
     if (this.target >= p.loop - WINDOW_UNITS) {
       const j = nearest(p, this.px, this.py, at(p, p.loop), p.n - 1);
       if (dist(p, j, this.px, this.py) < dist(p, i, this.px, this.py) - 1e-4) i = j;
     }
     let to = p.s[i];
-    // on the circle, take the copy of that spot nearest the rake, so it goes round, not back
+    // LOOP COPY
+    // on the circle, take the copy nearest the rake so it goes round, not back
     if (to >= p.loop && this.target >= p.loop - WINDOW_UNITS) {
       const k = Math.round((this.target - to) / p.loopLen);
       to += Math.max(0, k) * p.loopLen;
@@ -339,7 +339,8 @@ export class Garden {
     this.wake();
   }
 
-  // laps already gone round are dropped from both ends together, so the numbers stay small
+  // FOLD
+  // drop completed laps from both ends so the numbers stay small
   private fold() {
     const p = this.path;
     const lap = p.loopLen;
@@ -366,7 +367,6 @@ export class Garden {
     this.wake();
   }
 
-  // arrow keys step the rake along the path
   key(name: string) {
     const d = KEYS[name];
     if (!d || this.pause > 0) return;
@@ -380,7 +380,7 @@ export class Garden {
     this.wake();
   }
 
-  private keyed = 0; // seconds the keyboard keeps carving after a press
+  private keyed = 0;
 
   // LOOP
   private wake() {
@@ -399,7 +399,8 @@ export class Garden {
     else this.last = 0;
   };
 
-  // advances the rake and the settling grooves; true while anything still moves
+  // STEP
+  // true while anything still moves
   private step(dt: number) {
     const p = this.path;
     let busy = false;
@@ -449,7 +450,7 @@ export class Garden {
     if (this.head !== prev || this.head !== this.target) busy = true;
 
     // CENTRE
-    // a pause at the very middle while the rake turns round; then the way out
+    // pause at the middle while the rake turns; then the way out
     if (
       this.walking > 0 &&
       !this.outward &&
@@ -479,7 +480,6 @@ export class Garden {
         this.report();
       }
     }
-    // back at the gate the walk is complete
     if (this.outward && this.head <= REST_S + 0.1 && !this.walking) {
       this.outward = false;
       this.back = true;
@@ -488,7 +488,7 @@ export class Garden {
     if (this.back && this.head > 2) this.back = false;
 
     // HEADING
-    // looks ahead and behind along the path, then a critically damped spring turns the rake
+    // look ahead and behind along the path, then a critically damped spring
     const want = this.heading(this.head) + (this.outward ? Math.PI : 0);
     const err = wrap(want - this.angle);
     const w = TURN_HZ * Math.PI * 2;
@@ -550,7 +550,6 @@ export class Garden {
     return busy;
   }
 
-  // direction of the path around s, from a point behind to a point ahead
   private freshen(s0: number, s1: number) {
     const L = this.path.length;
     const a = Math.round((s0 / L) * (FRESH_N - 1));
@@ -576,7 +575,6 @@ export class Garden {
     out[k + 1] = p.y[i] + (p.y[j] - p.y[i]) * t;
   }
 
-  // rake position from its arc length, between samples
   private place() {
     this.pointAt(this.head, this.scratch, 0);
     this.rx = this.scratch[0];
@@ -637,7 +635,8 @@ export class Garden {
     for (let i = 0; i < STONES; i++) {
       const gate = i >= set.length;
       const [fx, fy, sr, stretch, angle, height] = gate ? GATE[i - set.length] : set[i];
-      // gate stones: fx along the entrance, fy across it
+      // GATE FRAME
+      // fx along the entrance, fy across it
       this.stoneData[i * 4] = gate ? gx + ex * fx - ey * fy : (fx * w - this.cx) / this.unit;
       this.stoneData[i * 4 + 1] = gate ? gy + ey * fx + ex * fy : -(fy * h - this.cy) / this.unit;
       this.stoneData[i * 4 + 2] = sr;
@@ -706,7 +705,8 @@ export class Garden {
     gl.drawElements(gl.TRIANGLES, this.indexCount, gl.UNSIGNED_SHORT, 0);
     gl.bindVertexArray(null);
     gl.disable(gl.DEPTH_TEST);
-    // depth only sorts the lanes once; free it until the next resize
+    // DEPTH
+    // only sorts the lanes once; freed until the next resize
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, null);
     gl.deleteRenderbuffer(this.depth);
     this.depth = null;
@@ -819,6 +819,7 @@ const KEYS: Record<string, number> = {
   ArrowLeft: -KEY_UNITS,
   ArrowDown: -KEY_UNITS,
 };
+// RAF
 // workers without rAF fall back to a timer
 const raf = (fn: (now: number) => void) =>
   typeof requestAnimationFrame === "function"
@@ -854,7 +855,6 @@ function texture(
   return t;
 }
 
-// uniform locations by name, looked up once at link time
 function uniforms(gl: WebGL2RenderingContext, p: WebGLProgram, names: readonly string[]) {
   const out: Record<string, WebGLUniformLocation | null> = {};
   for (const n of names) out[n] = gl.getUniformLocation(p, n);

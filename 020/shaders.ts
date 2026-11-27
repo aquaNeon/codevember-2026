@@ -4,9 +4,7 @@ const f = (n: number) => n.toFixed(4);
 const N = MAX_COCOONS;
 
 // COMMON
-// world: y up, z toward you. each cocoon has its own frame (y along its axis): placed at
-// uCo (x, y, depth, scale), turned by uCr (cos and sin of its tilt, yaw, how dim it is).
-// they are sorted far to near. everything works in one cocoon's frame at a time
+// world y up, z toward the viewer; uCo x, y, depth, scale; uCr cos, sin of tilt, yaw, dim
 const COMMON = `
 const float PI = 3.14159265;
 const float SR = ${f(SHELL.r)};
@@ -18,8 +16,8 @@ uniform vec4  uView;
 uniform int   uN;
 uniform vec4  uCo[${N}];
 uniform vec4  uCr[${N}];
-// which cocoon sits in each depth slot, and the slot each cocoon sits in: strands are seeded by
-// the cocoon, never by the slot, so turning the cluster never reshuffles them
+// SLOTS
+// strands seeded by cocoon id, not depth slot, so turning never reshuffles them
 uniform int   uId[${N}];
 uniform int   uSlot[${N}];
 uniform vec3  uKeyW;
@@ -50,7 +48,8 @@ float vnoise(vec3 p) {
     mix(mix(h3(i + ivec3(0, 0, 1)), h3(i + ivec3(1, 0, 1)), u.x),
         mix(h3(i + ivec3(0, 1, 1)), h3(i + ivec3(1, 1, 1)), u.x), u.y), u.z);
 }
-// felt density: billowed, so it reads as clumps rather than smooth noise
+// CLUMP
+// billowed noise for felt density
 float clump(vec3 q) {
   float a = abs(vnoise(q * 11.0) * 2.0 - 1.0);
   float b = abs(vnoise(q * 27.0 + 7.1) * 2.0 - 1.0);
@@ -71,7 +70,8 @@ vec3 surfN(float phi, float y) {
   float dr = (shellR(y + 0.002) - shellR(y - 0.002)) / 0.004;
   return normalize(vec3(sin(phi), -dr, cos(phi)));
 }
-// a path that runs past a tip carries on over it and down the far side
+// POLE
+// wraps a path past a tip over onto the far side
 vec2 pole(float phi, float y) {
   if (y > SH) return vec2(phi + PI, 2.0 * SH - y);
   if (y < -SH) return vec2(phi + PI, -2.0 * SH - y);
@@ -109,7 +109,6 @@ void useCocoon(int i) {
   gTorch = vec4(unrot(uTorchW.xy - gC, gTilt) / gS, (uTorchW.z - gZ) / gS, uTorchW.w);
   gTorchD = vec4(unrot(uTorchDW.xy, gTilt), uTorchDW.z, uTorchDW.w);
 }
-// the room itself, for strands that belong to no one cocoon
 void useWorld() {
   gI = -1;
   gC = vec2(0.0);
@@ -125,7 +124,6 @@ void useWorld() {
 vec2 toWorld(vec2 o) { return gC + rot(o, gTilt) * gS; }
 vec2 toObj(vec2 w) { return unrot(w - gC, gTilt) / gS; }
 
-// how much a point in the world is hidden behind the nearer cocoons
 float hiddenBy(vec2 w, float z, int after) {
   float h = 0.0;
   for (int j = 0; j < MAXC; j++) {
@@ -143,9 +141,8 @@ float hiddenBy(vec2 w, float z, int after) {
 `;
 
 // LIGHT
-// a soft key high on the left, a dim fill from the room, and your torch when you hover
+// key high left, dim fill, hover torch as a cone
 const LIGHT = `
-// a torch aimed at your pointer, or swung round behind: a cone
 float spot(vec3 p, out vec3 l) {
   vec3 dl = gTorch.xyz - p;
   l = normalize(dl);
@@ -153,8 +150,7 @@ float spot(vec3 p, out vec3 l) {
 }
 
 // SILK FIBRE
-// lit by how square it lies to the light, a thin glint where its tangent sits halfway
-// between light and eye (kajiya-kay), and a forward scatter when lit from behind
+// kajiya-kay glint plus forward scatter when backlit
 float glint(vec3 t, vec3 l) {
   vec3 h = normalize(l + vec3(0.0, 0.0, 1.0));
   float th = dot(t, h);
@@ -169,7 +165,8 @@ float hairLit(vec3 p, vec3 t) {
   float sp = spot(p, l);
   float tt = dot(t, l);
   float fwd = pow(max(-l.z, 0.0), 1.5);
-  // from behind, a shell shadows the strands lying over its face; only the outline lights
+  // BACKLIT
+  // shell shadows strands over its face; only the outline transmits
   if (gI >= 0) {
     float back = smoothstep(0.0, 0.6, gTorchD.z);
     float open = smoothstep(-0.012, 0.006, abs(p.x) - shellR(p.y)) + step(SH, abs(p.y));
@@ -181,9 +178,7 @@ float hairLit(vec3 p, vec3 t) {
 `;
 
 // STRANDS
-// one triangle strip for every fibre, joined by repeated end vertices; no buffers,
-// everything comes from gl_VertexID. the fibres of every cocoon go in one draw: uStart
-// holds where each cocoon's run begins, so far ones get far fewer
+// one strip per fibre from gl_VertexID, degenerate joins; uStart offsets each cocoon run
 const STRAND = `
 uniform int   uSeg;
 uniform float uPx;
@@ -232,7 +227,8 @@ void cull() {
   vW = 0.0;
 }
 
-// a hair wide strip through two world points, in device pixels so it stays a fibre
+// HAIR STRIP
+// sized in device px so it stays one fibre wide
 void placeW(vec2 wa, vec2 wb) {
   vec2 d = wb - wa;
   float l = length(d);
@@ -242,13 +238,11 @@ void placeW(vec2 wa, vec2 wb) {
   vAcross = side;
 }
 void place(vec3 a, vec3 b) { placeW(toWorld(a.xy), toWorld(b.xy)); }
-// hidden behind nearer cocoons, for a point in the current cocoon's frame
 float occluded(vec3 p) { return hiddenBy(toWorld(p.xy), gZ + p.z * gS, gI); }
 `;
 
 // FELT
-// filaments laid on the shell in wide figure eights, as the silkworm lays them; they only
-// tint the felt: near the face they catch light, deeper ones shade it
+// figure-eight filaments on the shell; tint only: lit near the face, shade deeper
 export const FELT_VS = `#version 300 es
 precision highp float;
 precision highp int;
@@ -301,7 +295,8 @@ void main() {
   float dense = mix(0.5, 1.5, clump(anchor));
   float area = clamp(q.r0 / SR * 1.3, 0.45, 1.0);
   float face = p.z / max(shellR(p.y), 0.02);
-  // fade the strands that would converge in a star at either tip
+  // TIPS
+  // fade strands that would converge into a star
   float tip = 1.0 - smoothstep(SH * 0.8, SH * 0.98, abs(p.y));
   vW = weight * dense * area * tip * smoothstep(-0.02, 0.15, face) * mix(0.5, 1.0, rnd(s));
   vW *= 1.0 - occluded(p);
@@ -309,9 +304,7 @@ void main() {
 `;
 
 // FLOSS AND FUZZ
-// floss: soft fibres that flow along the contour, close to the shell, a couple of long
-// strays on the nearest cocoon. fuzz: a mat of tiny curls just off the wall. most of both
-// are a faint haze; only a few read as strands of their own
+// floss: contour fibres near the shell; fuzz: curl mat off the wall; mostly faint haze
 const HAIR = (fuzz: boolean) => `#version 300 es
 precision highp float;
 precision highp int;
@@ -332,7 +325,6 @@ void main() {
   float lift = ${fuzz ? "mix(0.001, 0.007, far * far)" : "stray ? mix(0.03, 0.05, far) : mix(0.003, 0.022, far * far)"};
   float len = ${fuzz ? "mix(0.006, 0.02, rnd(s))" : "stray ? mix(0.16, 0.22, rnd(s)) : mix(0.04, 0.11, rnd(s))"};
   float turns = ${fuzz ? "mix(0.6, 2.0, rnd(s))" : "stray ? mix(0.8, 1.2, rnd(s)) : mix(0.2, 0.7, rnd(s))"};
-  // floss runs along the length, so at the outline it follows the contour
   float th = ${fuzz ? "rnd(s) * 2.0 * PI" : "PI * 0.5 + (rnd(s) - 0.5) * 0.9"};
   float ph = rnd(s) * 2.0 * PI;
   float tw = rnd(s) * 2.0 * PI;
@@ -341,7 +333,8 @@ void main() {
   float du = 0.35 / float(uSeg);
   thick = mix(0.5, 1.0, rnd(s)) * (stray ? 1.3 : 1.0);
   bool lone = stray || rnd(s) < ${fuzz ? "0.05" : "0.1"};
-  // further off the shell, out of the focal plane: wider and softer, same light
+  // DEFOCUS
+  // further off the shell: wider and softer, same energy
   float soft = 1.0 + 2.0 * smoothstep(0.004, 0.03, lift);
   thick *= soft;
 
@@ -380,8 +373,7 @@ export const FLOSS_VS = HAIR(false);
 export const FUZZ_VS = HAIR(true);
 
 // WEB
-// the cluster hangs in a sparse web: long faint strands from each cocoon up to where it
-// all gathers, a few slung between neighbours, and one thread on up out of frame
+// to the gather point, a few between neighbours, one thread up out of frame
 export const WEB_VS = `#version 300 es
 precision highp float;
 precision highp int;
@@ -408,7 +400,6 @@ void main() {
   vec3 a, z;
   float sag;
   if (g < 2) {
-    // the thread it all hangs from
     a = gather;
     z = vec3(uGather.x + 0.02 + (rnd(s) - 0.5) * 0.01, 3.2, -0.5);
     sag = 0.0;
@@ -417,7 +408,6 @@ void main() {
     int id = int(rnd(s) * float(uN)) % uN;
     a = onCocoon(uSlot[id], s, -0.2, 0.9);
     if (rnd(s) < 0.3) {
-      // slung across to a neighbour
       int other = (id + 1 + int(rnd(s) * float(uN - 1))) % uN;
       z = onCocoon(uSlot[other], s, -0.6, 0.6);
       sag = 0.04;
@@ -436,14 +426,12 @@ void main() {
     float u = i == 0 ? t : t + 0.4 / float(uSeg);
     float e = g < 2 ? u * u : u;
     vec3 q = mix(a, z, e);
-    // slack: it bellies out and down, with small kinks and a slow sway
     q.y -= sag * sin(PI * e);
     q.x += 0.004 * sin(uTime * f1 + f2 + e * 3.0) * sin(PI * e) + 0.0015 * sin(e * 37.0 + w1);
     q.z += 0.002 * sin(e * 29.0 + f2);
     if (i == 0) p = q; else b = q;
   }
   placeW(p.xy, b.xy);
-  // only the cocoons nearer than the strand can hide it
   float h = 0.0;
   for (int j = 0; j < MAXC; j++) {
     if (j >= uN) break;
@@ -484,12 +472,11 @@ uniform float uSpark;
 uniform float uTime;
 out vec4 o;
 void main() {
-  // soft across, faded at the ends, thicker and thinner along its length
   float x = exp(-vAcross * vAcross * 3.0);
   float along = smoothstep(0.0, 0.12, vT) * (1.0 - smoothstep(0.85, 1.0, vT));
   along *= 0.45 + 0.55 * (0.5 + 0.5 * sin(vT * (7.0 + 9.0 * vR) + vR * 40.0));
   float c = x * along * vW * uOut;
-  // silk sparkles: tiny bright points along a thread, moving as it turns
+  // SPARKLE
   float sp = pow(max(sin(vT * 900.0 + vR * 60.0 + uTime * 0.7) * sin(vT * 370.0 - uTime * 0.4), 0.0), 24.0);
   o = vec4(0.0, c * vLit * (1.0 + uSpark * 7.0 * sp), c, 0.0);
 }
@@ -503,9 +490,7 @@ void main() {
 `;
 
 // SILK
-// matte felt with a satin sheen: soft clumps and crinkles, wrapped light that warms where it
-// turns away, crevices that hold shadow, light through the thin outer felt from behind.
-// drawn far to near; the further back, the dimmer, sinking into the dark
+// matte felt, satin sheen, wrap light, crevice shadow, backlit transmission
 export const SILK_FS = `#version 300 es
 precision highp float;
 precision highp int;
@@ -524,15 +509,14 @@ uniform vec3 uBg;
 uniform vec2 uSweep;
 const vec3 SILK = vec3(0.9, 0.89, 0.86);
 const vec3 WARM = vec3(1.0, 0.9, 0.76);
-const vec3 KEY_C = vec3(1.0, 0.93, 0.82); // late afternoon
+const vec3 KEY_C = vec3(1.0, 0.93, 0.82);
 const vec3 TORCH_C = vec3(1.0, 0.92, 0.8);
-const vec3 FILL_C = vec3(0.7, 0.76, 0.86); // cool from the room
+const vec3 FILL_C = vec3(0.7, 0.76, 0.86);
 const vec3 WALL_KEY = vec3(1.0, 0.9, 0.76);
 const vec3 WALL_FILL = vec3(0.42, 0.44, 0.48);
 
 // CLUMPS
-// a soft blob on each jittered grid point, sized at random; summed, so they swell into one
-// another like cauliflower instead of meeting at hard creases. height and slope together
+// summed blobs on a jittered grid, merging like cauliflower; returns height and slope
 vec3 dome(vec2 p, float freq, float amp, float sharp) {
   p *= freq;
   vec2 i = floor(p);
@@ -554,7 +538,8 @@ vec3 dome(vec2 p, float freq, float amp, float sharp) {
 }
 
 float ridge(vec2 p) {
-  // turned off the noise grid so its cells never line up into blocks
+  // ROTATE
+  // off the noise grid so cells never align into blocks
   vec2 q = mat2(0.8, -0.6, 0.6, 0.8) * p;
   float a = 1.0 - abs(vnoise(vec3(q, 0.37 * q.x)) * 2.0 - 1.0);
   float b = 1.0 - abs(vnoise(vec3(mat2(0.6, 0.8, -0.8, 0.6) * p * 2.1, 2.0 + 0.29 * p.y)) * 2.0 - 1.0);
@@ -562,11 +547,13 @@ float ridge(vec2 p) {
 }
 
 vec3 shoulder(vec3 x) {
-  // a long soft roll-off: the brightest felt keeps its texture and never reaches white
+  // TONEMAP
+  // soft shoulder above 0.45 so the brightest felt never clips
   return mix(x, 0.45 + 0.47 * (1.0 - exp(-(x - 0.45) / 0.47)), step(0.45, x));
 }
 
-// one cocoon at this pixel: its colour, and how much of the pixel it covers
+// SHELL
+// one cocoon's colour and pixel coverage
 vec4 shell(vec2 w, vec4 dens) {
   vec2 ob = toObj(w);
   if (abs(ob.y) > SH + 0.02 || abs(ob.x) > SR + 0.02) return vec4(0.0);
@@ -582,7 +569,6 @@ vec4 shell(vec2 w, vec4 dens) {
   vec3 huge = dome(uv - 1.7, 11.0, 0.0035, 3.0);
   vec3 big = dome(uv, 36.0, 0.0018 * (0.7 + 0.6 * cl), 3.2);
 
-  // a softly uneven outline, broken where strands lie across it
   float edge = 0.004 * (cl - 0.5) + huge.x + 1.6 * big.x - 0.004;
   float inside = abs(ob.y) < SH ? r - abs(ob.x) + edge : -1.0;
   float fray = 0.004 * (1.0 - exp(-dens.r * 0.9)) - 0.003;
@@ -592,8 +578,8 @@ vec4 shell(vec2 w, vec4 dens) {
   float dr = (shellR(ob.y + 0.002) - shellR(ob.y - 0.002)) / 0.004;
   vec3 n = normalize(vec3(ob.x, -r * dr, max(zf, 1e-4)));
 
-  // crinkles: ridged, warped noise like crumpled paper, faded out as they get too fine to
-  // hold on screen, so they never sparkle
+  // CRINKLES
+  // ridged warped noise, faded before it is fine enough to alias
   vec2 rw = uv * 52.0 + 0.6 * vec2(vnoise(vec3(uv * 18.0, 1.3)), vnoise(vec3(uv * 18.0, 4.1)));
   float r0 = ridge(rw);
   float e = 0.04;
@@ -608,7 +594,7 @@ vec4 shell(vec2 w, vec4 dens) {
   ao *= mix(0.9, 1.0, cl);
 
   // KEY
-  // it dims while the torch is on: scale the whole lobe, wrap included
+  // dims while the torch is on: whole lobe, wrap included
   float kn = length(gKey);
   float nk = dot(nb, gKey / max(kn, 1e-4));
   float wrap = max((nk + 0.75) / 1.75, 0.0) * kn;
@@ -627,7 +613,7 @@ vec4 shell(vec2 w, vec4 dens) {
   vec3 torch = TORCH_C * fall * (max(nt, 0.0) + WARM * (max((nt + 0.35) / 1.35, 0.0) - max(nt, 0.0)) * 0.5);
 
   // SHEEN
-  // a little velvet brightening toward the edge, faded before the outline itself
+  // velvet rim, faded before the outline
   float rim = pow(1.0 - max(nb.z, 0.0), 3.0) * smoothstep(0.08, 0.35, n.z);
   vec3 sheen = KEY_C * rim * 0.18 * max(nk + 0.3, 0.0) * kn;
 
@@ -639,7 +625,7 @@ vec4 shell(vec2 w, vec4 dens) {
   vec3 albedo = SILK * mix(vec3(1.0), WARM, 0.12 * (1.0 - ao));
 
   // THROUGH
-  // from behind only the thin outer felt passes light, warm, fading inward, broken by clumps
+  // backlit: only the thin outer felt transmits, fading inward
   float back = smoothstep(0.0, 0.6, gTorchD.z);
   float thick = 0.2 + 3.2 * n.z + 2.2 * cl * cl + 0.8 * (1.0 - ao) + 0.5 * deep;
   float lip = smoothstep(0.0, 0.12, n.z);
@@ -650,26 +636,23 @@ vec4 shell(vec2 w, vec4 dens) {
   float satin = pow(max(dot(nb, hk), 0.0), 8.0) * 0.06 * kn;
 
   vec3 lit = albedo * (key + fill + torch) * ao * strands + (sheen + KEY_C * satin) * ao + through;
-  // further back: dimmer and lower in contrast, sinking toward the dark
   lit = mix(uBg * 0.8, lit, gDim);
   return vec4(lit, a);
 }
 
 // WALL
-// a plaster wall a little behind the cluster: the key lays a broad warm pool on it and the
-// torch a smaller one, and both cast the cluster's shadow, softer the further it falls
+// plaster wall behind the cluster: key and torch pools, soft cast shadows
 const float WALL_Z = -0.85;
 
-// a shadow is soft, so a smooth egg stands in for the shell's outline: one continuous
-// distance everywhere, with no seam across the tips and no spike at them
+// SHADOW SHAPE
+// smooth egg proxy for the shell: continuous distance, no seam at the tips
 float shadowDist(vec2 o) {
   float rx = SR * (1.0 - ${f(SHELL.egg)} * o.y / SH);
   return (1.0 - length(vec2(o.x / rx, o.y / SH))) * SR;
 }
 
-// how much of the light toward dir is blocked by a cocoon, from a wall point. only a cocoon
-// between the wall and the light can shade it: one beyond a lamp held behind the cluster
-// would otherwise be projected back through the lamp onto the wall
+// CAST
+// only cocoons between wall and light shade it, never through the lamp
 float castBy(vec3 W, vec3 dir, float soft, float lightZ) {
   float s = 0.0;
   for (int j = 0; j < MAXC; j++) {
@@ -683,13 +666,13 @@ float castBy(vec3 W, vec3 dir, float soft, float lightZ) {
     float pen = max(0.006 + soft * d, 0.006) / co.w;
     s = max(s, smoothstep(-pen, pen * 0.6, sd));
   }
-  // light nearly along the wall throws shadows so long they would cover everything: let
-  // them thin out smoothly instead of ending on an edge
+  // GRAZING
+  // fade very long shadows instead of a hard edge
   return s * smoothstep(0.04, 0.35, dir.z);
 }
 
-// the fine strands' shadow: their own coverage, looked up toward the light from the wall
-// point (where the strands that shade it hang) and smudged
+// STRAND SHADOW
+// strand coverage sampled toward the light from the wall point, blurred
 float strandShade(vec2 w, vec3 dir) {
   vec2 off = dir.xy * (-0.42 - WALL_Z) / max(dir.z, 0.05);
   vec2 px = (w + off - uView.xy) / uView.zw * 0.5 + 0.5;
@@ -720,10 +703,11 @@ void main() {
   float tw = spot(W, l) * max(l.z, 0.0);
   float torchShade = castBy(W, l, 0.05, uTorchW.z) * 0.7;
   vec3 torchWall = TORCH_C * tw * 1.2 * (1.0 - torchShade);
-  // held behind the cluster, the torch grazes the wall: a pool round it, the cocoons dark
-  // against it
+  // BACKLIGHT
+  // torch held behind grazes the wall; cocoons silhouette against it
   float behind = smoothstep(0.0, 0.6, uTorchDW.z);
-  // a light this close to the wall: soft inverse square, eased so there is no edge anywhere
+  // FALLOFF
+  // soft inverse square
   vec3 tv = uTorchW.xyz - W;
   float r2 = dot(tv.xy, tv.xy) / 0.16;
   float glowB = 1.0 / (1.0 + r2 * (1.0 + 0.4 * r2));
@@ -734,7 +718,8 @@ void main() {
   for (int i = 0; i < MAXC; i++) {
     if (i >= uN) break;
     useCocoon(i);
-    // a soft shadow from this cocoon onto the ones already drawn behind it
+    // CONTACT SHADOW
+    // onto the cocoons already drawn behind this one
     vec2 so = toObj(w - kd.xy * 0.06);
     float sr = shadowDist(so);
     float shade = smoothstep(-0.05, 0.03, sr) * under;
@@ -745,8 +730,7 @@ void main() {
   }
 
   // FLOSS AND WEB
-  // strands veil what is behind and add their own light: darker than the wall where they
-  // are in shade, brighter where lit
+  // strands veil what is behind: darker than the wall in shade, brighter where lit
   float cov = 1.0 - exp(-dens.b * 0.35);
   col = col * (1.0 - cov * 0.55) + SILK * KEY_C * (dens.g * 0.45);
 

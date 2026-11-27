@@ -1,7 +1,7 @@
 import { HIST_N } from "./fall";
 
 // CAMERA
-// a pinhole with a vertical lens shift, so the subject can sit above the title and hud
+// pinhole with a vertical lens shift, subject framed above the type
 const CAMERA = `
 uniform vec3 uEye;
 uniform vec3 uRight;
@@ -73,10 +73,7 @@ void main() {
 }`;
 
 // SKY
-// everything that is not the meteor, per pixel from the camera ray, as a printed page: the dusk
-// dome as a dot gradation, cut-out stars and moon, two cloud decks on the curve of the earth
-// with inked contours, ridges round the town, the land below. each layer gives its tone and
-// its screened ink; the meteor layer is laid in at its own depth, then speed lines go on top
+// per-pixel camera ray; each layer returns tone and screened ink, meteor layer at its depth
 export const SKY_FS = `#version 300 es
 precision highp float;
 ${CAMERA}
@@ -88,16 +85,16 @@ uniform vec3 uMoon;
 uniform vec4 uHead;
 uniform vec4 uBurst;
 uniform float uFlash;
-uniform vec2 uShock; // ring radius km, strength
+uniform vec2 uShock;
 uniform float uTime;
-uniform float uCell; // halftone cell, device px
-uniform float uLine; // one css px in device px
-uniform vec4 uFocus; // focus point in ndc, radial lines, parallel lines
-uniform vec2 uFlow; // screen direction of travel, aspect corrected
-uniform float uBoil; // stepped seed, the lines are redrawn a few times a second
-uniform float uImpact; // 0 off, 1 inverted frame, 2 flat accent frame
-uniform vec4 uBox[2]; // where the type sits, css px from the bottom left: x0 y0 x1 y1
-uniform vec4 uBand; // bands along the edges where the type sits, uv y: bottom clear, bottom start, top start, top clear
+uniform float uCell;
+uniform float uLine;
+uniform vec4 uFocus;
+uniform vec2 uFlow;
+uniform float uBoil;
+uniform float uImpact;
+uniform vec4 uBox[2];
+uniform vec4 uBand;
 out vec4 o;
 
 const float R = 6371.0;
@@ -115,16 +112,15 @@ float h3(vec3 p) {
 }
 
 // SCREENS
-// made once per pixel in main: a 45 degree dot screen for tone, a line screen for hatching,
-// a 15 degree dot screen for the accent plate. a tone goes in, ink coverage comes out
+// 45 deg dots for tone, line screen for hatching, 15 deg dots for the accent plate
 float gDot;
 float gDotW;
 float gLine;
 float gLineW;
 float gAcc;
 float gAccW;
-float gFade; // the page thins out under the type
-float gLift; // the flash burns tone off the page
+float gFade;
+float gLift;
 
 float dots(float v) {
   v = v * (1.0 - gFade) - gLift;
@@ -138,22 +134,24 @@ float accDots(float v) {
   v = clamp(v, 0.0, 1.0) * (1.0 - gFade * 0.5);
   return v <= 0.02 ? 0.0 : v >= 0.98 ? 1.0 : smoothstep(-gAccW, gAccW, gAcc - 1.0 + v);
 }
-// an inked line round an edge: e px from it, w px half width
+// STROKE
+// e px from the edge, w px half width
 float stroke(float e, float w) {
   w *= 1.0 - gFade;
   return clamp(w + 0.5 - abs(e), 0.0, 1.0) * min(1.0, w * 2.0);
 }
 
-// the tone falls away round a block of type, over a soft margin
+// TYPE CLEARANCE
+// rounded-box sdf with a wide soft margin round each type block
 float clear(vec4 b, vec2 p) {
   if (b.z <= b.x) return 0.0;
-  // a rounded block with a wide margin, so it reads as the tone giving way, not a box
   vec2 d = max(b.xy - p, p - b.zw) + 90.0;
   float dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - 90.0;
   return smoothstep(200.0, 0.0, dist);
 }
 
-// nearest hit of the eye ray with the shell at altitude k, or -1
+// SHELL
+// nearest eye-ray hit with the sphere shell at altitude k, or -1
 float shell(vec3 d, float k) {
   vec3 e = uEye;
   float b = e.x * d.x + (e.y + R) * d.y + e.z * d.z;
@@ -167,8 +165,7 @@ float shell(vec3 d, float k) {
 }
 
 // DOME
-// the dusk as a gradation: paper low toward the sunset, rising through the dots to near
-// solid ink overhead; from high up the black of space comes down to the limb
+// paper toward the sunset to near-solid ink overhead; space darkens it with altitude
 float dome(vec3 d, float alt) {
   float dip = sqrt(2.0 * max(alt, 0.0) / R);
   float up = smoothstep(4.0, 45.0, alt);
@@ -185,7 +182,8 @@ float dome(vec3 d, float alt) {
   return clamp(v, 0.0, 1.0);
 }
 
-// cut out of the tone: paper specks, the brightest with a small cross
+// STARS
+// paper specks cut from the tone, brightest with a cross
 float stars(vec3 d, float n, float px) {
   vec3 p = d * n;
   vec3 cell = floor(p);
@@ -207,7 +205,7 @@ float stars(vec3 d, float n, float px) {
 }
 
 // MOON
-// a paper crescent, its dark side in tone, inked round; x ink, y tone, z cover
+// paper crescent, dark side in tone; x ink, y tone, z cover
 vec3 moon(vec3 d, float px) {
   const float MR = 0.034;
   float c = dot(d, uMoon);
@@ -227,7 +225,7 @@ vec3 moon(vec3 d, float px) {
 }
 
 // RIDGES
-// two rings of mountains round the town, heights by bearing
+// two rings round the town, height by bearing
 float ridge(float a, float k) {
   float h = 0.9 + 0.5 * sin(a * 3.0 + k);
   h += 1.1 * pow(1.0 - abs(sin(a * 7.0 + k * 2.3)), 2.0);
@@ -248,8 +246,8 @@ vec2 cyl(vec3 d, float r) {
   return vec2((-b - h) / a, (-b + h) / a);
 }
 
-// near ridge near-solid ink with hatched sunward slopes; far ridge a light tone; both inked
-// along the crest, heavier where the slope turns to shadow
+// HILL
+// near ridge ink with hatched sunward slopes, far ridge light tone, crest inked
 void hill(vec3 d, float r, float k, float px, float fogT, inout float tHit, inout vec4 c) {
   vec2 ts = cyl(d, r);
   for (int i = 0; i < 2; i++) {
@@ -280,14 +278,15 @@ void hill(vec3 d, float r, float k, float px, float fogT, inout float tHit, inou
   }
 }
 
-// a light on clouds and ground: the meteor, the airburst
+// GLOW
+// inverse-square falloff from the meteor or airburst
 float glow(vec3 p, vec4 l, float reach) {
   vec3 q = p - l.xyz;
   return l.w / (1.0 + dot(q, q) / (reach * reach));
 }
 
 // HAZE
-// far things go toward the tone of the horizon behind them
+// distance fog toward the horizon tone
 float haze(float v, float t, float fogT, float near) {
   float high = smoothstep(4.0, 30.0, uEye.y);
   float f = 1.0 - exp(-t / mix(near + uEye.y * 3.0, 70.0 + uEye.y * 4.5, high));
@@ -295,9 +294,7 @@ float haze(float v, float t, float fogT, float near) {
 }
 
 // CLOUD DECK
-// crisp shapes cut at a density level, inked round with a line that thins with distance and
-// thickens on the shadow side; tops in paper, shade in two steps of dots. x ink, y tone,
-// z cover, w accent
+// density threshold, contour thins with distance; x ink, y tone, z cover, w accent
 vec4 sea(vec3 d, float t, float fogT, float px) {
   vec3 p = uEye + d * t;
   vec2 q = p.xz;
@@ -317,7 +314,6 @@ vec4 sea(vec3 d, float t, float fogT, float px) {
   float ew = max(fwidth(e), 1e-5);
   float epx = e / ew;
   float fp = t * px;
-  // far off the contours crowd together, so they thin and fade into the tone
   float lw = uLine * mix(1.3, 0.45, smoothstep(0.03, 0.3, fp));
   float body = clamp(epx + 0.5, 0.0, 1.0);
   float a = max(body, clamp(lw + 1.0 + epx, 0.0, 1.0));
@@ -336,13 +332,11 @@ vec4 sea(vec3 d, float t, float fogT, float px) {
     float top = smoothstep(th, th + 0.25, dens);
     light = lam * (1.0 - sh * 0.55) * (0.62 + 0.5 * top);
   } else light = clamp((r1 - dS) * 9.0 + 0.42, 0.0, 1.0);
-  // three steps: paper, light dots, shade
   float tone;
   if (above > 0.5) {
     tone = mix(0.45, 0.2, smoothstep(0.34, 0.38, light));
     tone = mix(tone, 0.0, smoothstep(0.5, 0.54, light + sw * 0.08));
   } else {
-    // undersides in shade, the rims toward the sunset in paper
     tone = mix(0.62, 0.32, smoothstep(0.3, 0.36, light));
     tone = mix(tone, 0.0, smoothstep(0.5, 0.56, light + sw * 0.3));
   }
@@ -350,10 +344,8 @@ vec4 sea(vec3 d, float t, float fogT, float px) {
   float ink = dots(tone);
   float w = lw * (1.25 - 0.6 * smoothstep(0.3, 0.6, light));
   ink = max(ink, stroke(epx + w, w));
-  // an inner contour: the billows, drawn only where they turn into shade
   float inner = stroke((e - 0.1) / ew, lw * 0.45) * (1.0 - smoothstep(0.4, 0.5, light));
   ink = max(ink, inner * (1.0 - smoothstep(0.02, 0.2, fp)));
-  // the meteor and the airburst catch the tops facing them in the accent plate
   float lm = glow(p, uHead, 30.0) + glow(p, uBurst, 60.0) * 2.0;
   float acc = 0.0;
   if (lm > 0.004) {
@@ -370,7 +362,7 @@ vec4 sea(vec3 d, float t, float fogT, float px) {
 }
 
 // CIRRUS
-// long paper streaks across the tone, cut crisp, with a hairline along the shadowed edge
+// paper streaks cut from the tone, hairline on the shadow edge
 vec4 cirrus(vec3 d, float t, float fogT, float px) {
   vec3 p = uEye + d * t;
   vec2 uv = vec2(p.x * 0.8 + p.z * 0.3, p.z - p.x * 0.3) / vec2(60.0, 16.0);
@@ -395,8 +387,7 @@ vec4 cirrus(vec3 d, float t, float fogT, float px) {
 }
 
 // LAND
-// seen from high: the sea in near-solid ink, land in dots with the relief hatched on its
-// shadowed slopes, an inked coast, paper rivers and town lights cut out of it
+// sea in ink, land in dots with hatched shadow slopes, inked coast, paper rivers and lights
 vec4 ground(vec3 d, float t, float fogT, float px) {
   vec3 p = uEye + d * t;
   float fp = t * px;
@@ -441,7 +432,6 @@ vec4 ground(vec3 d, float t, float fogT, float px) {
       cut = clamp(0.9 * uLine + 0.5 - dpx, 0.0, 1.0) * smoothstep(1.4, 0.4, fp);
     }
   }
-  // the town below the hill: lights on a grid of streets round the origin
   float r = length(p.xz);
   if (r < 3.2) {
     vec2 g = p.xz / 0.06;
@@ -466,9 +456,7 @@ void over(inout vec4 c, vec4 l) {
 }
 
 // METEOR
-// the layer comes in as heat, ink tone, white and cover. one level of it is the inked
-// silhouette; inside, the rock and smoke in tone, the fire flat in the accent, white at the
-// core; outside, the glow in accent dots. z of the result is the fire, kept clear of lines
+// silhouette at a cover level; fire flat accent, white core, glow dots; z is the fire
 vec4 gMet;
 float gHue;
 void meteor(inout vec4 c, vec2 uv) {
@@ -481,7 +469,7 @@ void meteor(inout vec4 c, vec2 uv) {
   vec4 one = vec4(1.0, 0.0, 1.0, 1.0);
   float F = dot(m, one);
   if (F + dot(mx0 + mx1 + my0 + my1, one) < 0.01) return;
-  float lpx = uRes.x * tx.x; // device px per layer texel
+  float lpx = uRes.x * tx.x;
   vec2 gF = vec2(dot(mx1 - mx0, one), dot(my1 - my0, one)) * 0.5 / lpx;
   float sd = (F - 0.5) / max(length(gF), 1e-4);
   float fill = clamp(sd + 0.5, 0.0, 1.0);
@@ -491,7 +479,6 @@ void meteor(inout vec4 c, vec2 uv) {
   float solid = clamp((m.a / max(F, 1e-4) - 0.5) * 8.0 + 0.5, 0.0, 1.0);
   float tone = m.g / max(m.a, 1e-4);
   gHue = clamp(0.5 - (E - 1.2) / max(length(gF), 1e-4), 0.0, 1.0);
-  // glow: accent dots outside the silhouette
   c.w = max(c.w * (1.0 - fill), accDots(E * 0.9) * (1.0 - fill));
   float ink = mix(c.x, dots(tone) * solid, fill);
   float acc = max(c.w, fill * (1.0 - solid));
@@ -507,8 +494,7 @@ void meteor(inout vec4 c, vec2 uv) {
 }
 
 // SPEED LINES
-// focus lines from a point, thin at the clear ring round it and swelling outward, and long
-// parallel streaks along the flight; redrawn a few times a second like a hand-inked frame
+// radial focus lines and parallel streaks, reseeded a few times a second (boil)
 float hs(float a, float b) {
   return fract(sin(a * 12.9898 + b * 78.233) * 43758.5453);
 }
@@ -567,7 +553,6 @@ void main() {
   vec2 qa = mat2(0.966, 0.259, -0.259, 0.966) * fc / (uCell * 0.85);
   gAcc = 0.5 + 0.25 * (cos(6.2832 * qa.x) + cos(6.2832 * qa.y));
   gAccW = max(fwidth(gAcc) * 0.6, 1e-3);
-  // the type bands: the tone thins out under the title and hud, and a little under the bar
   vec2 css = fc / uLine;
   float band = max(smoothstep(uBand.y, uBand.x, uv.y) * 0.9, smoothstep(uBand.z, uBand.w, uv.y) * 0.85);
   gFade = max(max(clear(uBox[0], css), clear(uBox[1], css)) * 0.97, band);
@@ -599,7 +584,7 @@ void main() {
   }
 
   // LAYERS
-  // far to near: the cloud decks and the meteor at its depth between them
+  // far to near: cloud decks, meteor at its depth between them
   float tc = shell(d, CIRRUS_KM);
   float ts = shell(d, SEA_KM);
   vec4 near = tc > 0.0 && tc < tHit ? cirrus(d, tc, fogT, px) : vec4(0.0);
@@ -645,15 +630,14 @@ void main() {
   col = mix(col, vec3(1.0, 0.985, 0.95), gMet.y);
   col = mix(col, INK, c.x);
   // IMPACT
-  // a beat of inverted page, then a beat of flat accent with the ink alone
+  // one inverted frame, then one flat accent frame
   if (uImpact > 1.5) col = mix(PAPER * HOT, INK, step(0.5, c.x) * (1.0 - gMet.y));
   else if (uImpact > 0.5) col = mix(INK, PAPER, max(c.x, gMet.x * (1.0 - gMet.z)));
   o = vec4(col, 1.0);
 }`;
 
 // TRAIL
-// each strand is a strip along a body's history, widened on screen. strands twist round the
-// path and spread as the gas cools: white heat, then the accent, then a train of smoke
+// aStrand: phase, spread, width, hue; aMeta: row, head, count, kind
 export const TRAIL_VS = `#version 300 es
 precision highp float;
 precision highp sampler2D;
@@ -661,8 +645,8 @@ ${CAMERA}
 uniform sampler2D uHist;
 uniform float uTime;
 uniform vec3 uWind;
-layout(location = 0) in vec4 aStrand; // phase, spread, width, hue
-layout(location = 1) in vec4 aMeta; // row, head, count, kind: 0 main, 1 fragment, 2 guide
+layout(location = 0) in vec4 aStrand;
+layout(location = 1) in vec4 aMeta;
 out float vAcross;
 out float vT;
 out float vBright;
@@ -695,10 +679,8 @@ void main() {
   float th = aStrand.x * 6.2832 + age * (aStrand.x > 0.5 ? 0.9 : -0.7) + float(ic) * 0.04;
   vec3 c = P.xyz + (n1 * cos(th) + n2 * sin(th)) * sp;
   c += n2 * sin(float(ic) * 0.09 + aStrand.x * 4.0 + uTime * 0.35) * 0.02 * age * aStrand.y;
-  // the lingering train drifts and curls in the high wind
   c += uWind * age * age;
   c += (n1 * sin(float(ic) * 0.05 + aStrand.x * 2.0 + age * 0.4) + n2 * 0.6 * cos(float(ic) * 0.037 + age * 0.3)) * 0.05 * age * age;
-  // fresh plasma flickers
   c += n2 * sin(age * 90.0 + aStrand.x * 17.0 + uTime * 23.0) * 0.0015 * aStrand.y * smoothstep(0.0, 0.05, age);
   vec4 a = project(c);
   vec4 b = project(c + T * max(0.002, abs(a.w) * 0.01));
@@ -715,9 +697,7 @@ void main() {
   gl_Position = a;
   vAcross = side;
   vT = guide ? 0.0 : pow(age / life, 0.5);
-  // both ends ease: the oldest points taper away, so a fresh trail grows in from its head
   float tail = smoothstep(float(last), float(last) - 40.0, float(i)) * smoothstep(0.0, 2.0, float(count));
-  // once the body is gone its end of the trail tapers too
   if (fract(aMeta.w) > 0.2) tail *= smoothstep(0.0, 14.0, float(i));
   vBright = i > last || count == 0 ? 0.0 : max(sqrt(lum) * 1.3, 0.08) * max(0.75, sqrt(px / wpx)) * tail;
   vHue = aStrand.w;
@@ -725,8 +705,7 @@ void main() {
 }`;
 
 // METEOR LAYER
-// every pass below writes the same four channels, premultiplied: r heat for the accent plate,
-// g ink tone times cover, b white heat, a cover of what is solid (rock, smoke, the shock ring)
+// premultiplied: r accent heat, g ink tone x cover, b white heat, a solid cover
 
 export const TRAIL_FS = `#version 300 es
 precision highp float;
@@ -742,14 +721,12 @@ void main() {
   float t = clamp(vT + vHue * 0.6, 0.0, 1.0);
   float fade = (1.0 - smoothstep(0.45, 1.0, vT)) * exp(-vT * 0.9);
   float b = vBright / (1.0 + vBright * 0.6);
-  // fresh: a white core in the fire; cooling: the fire thins; old: a train of smoke in tone
   float young = 1.0 - smoothstep(0.02, 0.2, t);
   float smoke = smoothstep(0.3, 0.55, vT);
   float heat = b * prof * fade * (1.0 - smoke) * 1.6;
   float white = heat * young * smoothstep(0.6, 0.1, a) * 1.4;
   float cover = b * (1.0 - a) * smoke * (1.0 - smoothstep(0.75, 1.0, vT)) * 1.1;
   if (vKind > 3.5) {
-    // the soft glow round it all: fire only, never solid
     heat = b * (1.0 - a) * (1.0 - a) * fade * 0.55 * (1.0 - smoke);
     white = 0.0;
     cover = 0.0;
@@ -758,7 +735,7 @@ void main() {
 }`;
 
 // SPARKS
-// burning grains and molten drops, streaked by their motion against the camera
+// aL: age, life, size, kind; streaked by motion relative to the camera
 export const SPARK_VS = `#version 300 es
 precision highp float;
 ${CAMERA}
@@ -766,7 +743,7 @@ ${CORNER}
 uniform vec3 uCamVel;
 layout(location = 0) in vec3 aP;
 layout(location = 1) in vec3 aV;
-layout(location = 2) in vec4 aL; // age, life, size, kind
+layout(location = 2) in vec4 aL;
 out vec2 vQ;
 out float vT;
 out float vKind;
@@ -786,7 +763,7 @@ void main() {
   vec2 sa = a.xy / a.w;
   vec2 sb = b.xy / b.w;
   vec2 d = (sa - sb) * vec2(uAspect, 1.0) * uRes.y * 0.5;
-  float len = length(d) * (aL.w > 3.5 ? 0.2 : 1.0); // chunks read as tumbling bits, not streaks
+  float len = length(d) * (aL.w > 3.5 ? 0.2 : 1.0);
   vec2 dir = len > 1e-4 ? normalize(d) : vec2(1.0, 0.0);
   float spx = aL.z * 0.00035 / kmPerPx(a.w);
   float s = max(spx * 0.6, 0.9);
@@ -808,7 +785,6 @@ void main() {
   float k = smoothstep(1.0, 0.3, length(vQ * vec2(0.6, 1.0)));
   float fade = (1.0 - vT) * (1.0 - vT) * smoothstep(0.0, 0.08, vT);
   float heat = k * fade * vB * 1.9;
-  // chunks cool to dark bits of rock in tone
   if (vKind > 3.5) {
     float cold = smoothstep(0.3, 0.7, vT);
     o = vec4(heat * (1.0 - cold), k * cold * fade * 0.8, 0.0, k * cold * fade);
@@ -818,14 +794,14 @@ void main() {
 }`;
 
 // SPRITES
-// the head, the airburst fireball, its shock ring and the debris cloud
+// head, fireball, shock ring, debris cloud; aS: radius km, light, kind, seed
 export const SPRITE_VS = `#version 300 es
 precision highp float;
 ${CAMERA}
 ${CORNER}
 layout(location = 0) in vec3 aP;
 layout(location = 1) in vec3 aD;
-layout(location = 2) in vec4 aS; // radius km, light, kind, seed
+layout(location = 2) in vec4 aS;
 out vec2 vPx;
 out float vR;
 out vec2 vDir;
@@ -860,8 +836,8 @@ precision highp float;
 uniform vec3 uRight;
 uniform vec3 uUp;
 uniform vec3 uFwd;
-uniform vec4 uBite; // where a piece came off the main body, and how fresh the bite is
-uniform vec4 uCrack; // a seam opening on the main body, and how far
+uniform vec4 uBite;
+uniform vec4 uCrack;
 in vec2 vPx;
 in float vR;
 in vec2 vDir;
@@ -893,7 +869,6 @@ void main() {
     float R = max(vR, 0.6);
     float Lc = min(L, 2.5);
     float win = 1.0 - smoothstep(0.6, 1.0, d / vExt);
-    // the flame: a teardrop round the head, swept back along the trail, white at its nose
     float ub = u < 0.0 ? u * 0.45 : u * 1.4;
     float fl = length(vec2(ub, v)) / (R * 1.4 + 4.5 + 3.5 * Lc);
     float heat = Lc * (1.3 * exp(-fl * 1.3) + 0.35 * exp(-d / (6.0 + 10.0 * Lc))) * win;
@@ -905,7 +880,7 @@ void main() {
     float cap = exp(-max(0.0, r - 1.05) / 0.5) * smoothstep(-0.2, 0.9, fr) * smoothstep(1.5, 5.0, R);
     white += cap * Lc * 0.8;
     // ROCK
-    // a lumpy body in ink: facets in its own frame, shade in tone, the face into the air hot
+    // lumpy ink body, facets in its own frame, leading face hot
     float worn = floor(wv) / 15.0;
     float ang = atan(g.y, g.x);
     float lump = 0.13 * sin(ang * 3.0 + seed * 20.0) + 0.08 * sin(ang * 5.0 - seed * 13.0);
@@ -934,7 +909,6 @@ void main() {
     vec3 fc = fract(cp) - 0.5;
     float pit = smoothstep(1.0 - worn * 0.7, 1.0, h3(cell + 5.1)) * smoothstep(0.3, 0.1, length(fc));
     float hd = dot(N, U);
-    // facets in three tones, lit by the plasma in front
     float tone = mix(0.95, 0.6, step(-0.1, hd));
     tone = mix(tone, 0.3, step(0.35, hd));
     float molten = smoothstep(0.5 - 0.25 * worn, 0.65 - 0.25 * worn, hd);
@@ -948,14 +922,13 @@ void main() {
       tone = mix(tone, 0.95, step(0.8, cd) * uCrack.w * 0.6);
       rh += seamOpen * 3.0;
     }
-    // solid where it is not burning
     float sol = rock * (1.0 - smoothstep(0.4, 0.9, rh + rw));
     o = vec4(heat * (1.0 - rock) + rh * rock, tone * sol, white * (1.0 - rock) + rw * rock, sol);
     return;
   }
   if (kind < 1.5) {
     // FIREBALL
-    // a flat bloom of the accent, white while young, a ragged rim; vTint.x is its age 0 to 1
+    // accent bloom, white while young, ragged rim; vTint.x is age 0-1
     float a2 = atan(p.y, p.x);
     float spike = pow(0.5 + 0.5 * sin(a2 * 9.0 + seed * 7.0), 6.0) * (1.0 - vTint.x);
     float x = d / max(vR, 1.0);
@@ -970,14 +943,12 @@ void main() {
   }
   if (kind < 2.5) {
     // SHOCK RING
-    // an ink ring running out
     float w = 1.2 + vR * 0.012;
     float a = L * smoothstep(w + 0.8, w - 0.8, abs(d - vR)) * 1.2;
     o = vec4(0.0, a, 0.0, a);
     return;
   }
   // DEBRIS CLOUD
-  // the smoke left behind, billowing, in two tones with the heat still in its middle
   float x = d / max(vR, 1.0);
   float a2 = atan(p.y, p.x);
   float edge = 1.0 + 0.12 * sin(a2 * 5.0 + seed * 9.0) + 0.07 * sin(a2 * 11.0 - seed * 4.0);

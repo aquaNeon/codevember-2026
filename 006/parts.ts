@@ -16,21 +16,20 @@ import {
 } from "three";
 
 // TRAIN
-// every sleeve gear meshes a pinion on one countershaft; teeth always add up to the same
-// count, so the centre distance is shared and each planet turns at pinion / gear
-const TOTAL_TEETH = 40; // few, big teeth read better at this size
+// gears mesh pinions on one countershaft; fixed tooth sum, shared centre distance
+const TOTAL_TEETH = 40;
 const CENTER_M = 0.55;
 const MODULE_M = (2 * CENTER_M) / TOTAL_TEETH;
-const SHAFT_RAD = -0.55; // where the countershaft sits around the column
+const SHAFT_RAD = -0.55;
 const GEAR_T = 0.03;
 const GEAR_Y0 = 0.63;
 const GEAR_STEP = 0.072;
-const DRUM_R = 0.995; // clears the biggest pinion's teeth (0.976)
-const DRUM_Y = 0.895; // top of the drum, between the fourth and fifth gear
+const DRUM_R = 0.995;
+const DRUM_Y = 0.895;
 const HUB_Y0 = 1.12;
 const HUB_STEP = 0.07;
-const LIFT = 0.48; // height of the stem under the movement
-const PY = 1.78; // planets, over the movement
+const LIFT = 0.48;
+const PY = 1.78;
 export const PLANET_Y = LIFT + PY;
 export const BAND_IN = 1.0;
 export const BAND_OUT = 1.36;
@@ -59,9 +58,9 @@ export const PLANETS: Spec[] = [
 
 const EARTH = PLANETS[2];
 const pinion = (s: Spec) => TOTAL_TEETH - s.teeth;
-// sleeve turns per turn of the earth's sleeve
+// RATIOS
+// turns per turn of the earth's sleeve; countershaft runs opposite
 export const RATIO = PLANETS.map((s) => pinion(s) / s.teeth / (pinion(EARTH) / EARTH.teeth));
-// countershaft turns per turn of the earth's sleeve (opposite way)
 export const SHAFT_RATIO = -EARTH.teeth / pinion(EARTH);
 const MOON_RATE = [5, 3.2, 2.1];
 const SPIN_RATE = 2.5;
@@ -121,10 +120,9 @@ export function build(mat: (k: Kind) => Material): Rig {
   root.add(top);
 
   // MOVEMENT
-  // two plates on pillars, the gear cone between them; the upper one is the degree ring
+  // two plates on pillars, gear cone between; the upper plate is the degree ring
   add(top, new CylinderGeometry(1.08, 1.08, 0.045, 96), "plate", 0, 0.555);
   add(top, new TorusGeometry(1.08, 0.022, 10, 96).rotateX(Math.PI / 2), "brass", 0, 0.555);
-  // the inner four pairs run inside a closed drum; the two big wheels turn in the open on top
   const drumH = DRUM_Y - 0.578;
   add(top, new CylinderGeometry(DRUM_R, DRUM_R, drumH, 96, 1, true), "drum", 0, 0.578 + drumH / 2);
   add(top, new CylinderGeometry(DRUM_R + 0.012, DRUM_R + 0.012, 0.016, 96), "brass", 0, DRUM_Y);
@@ -159,13 +157,11 @@ export function build(mat: (k: Kind) => Material): Rig {
   PLANETS.forEach((s, i) => {
     const n = pinion(s);
     const g = add(shaft, extrude(gear(n, 0.016), GEAR_T, 6), "gear", 0, GEAR_Y0 + i * GEAR_STEP);
-    // a gap faces the column when the shaft is at rest
     g.rotation.y = Math.PI - Math.PI / n;
   });
   shaft.rotation.y = SHAFT_RAD;
 
   // SLEEVES
-  // innermost arbor reaches highest; each carries its gear low and its arm high
   const sleeves: Group[] = [];
   const globes: Mesh[] = [];
   const moons: Group[] = [];
@@ -212,7 +208,6 @@ export function build(mat: (k: Kind) => Material): Rig {
   });
 
   // SUN
-  // on the fixed central arbor, above every hub
   const col = HUB_Y0 + HUB_STEP * PLANETS.length;
   add(top, new CylinderGeometry(0.014, 0.014, PY - col, 10), "rod", 0, (PY + col) / 2);
   add(top, new SphereGeometry(0.2, 56, 40), "sun", 0, PY);
@@ -222,7 +217,7 @@ export function build(mat: (k: Kind) => Material): Rig {
 }
 
 // POSE
-// the whole machine from one number: turns of the earth's sleeve, in radians
+// whole machine from theta: turns of the earth's sleeve, radians
 export function pose(rig: Rig, theta: number) {
   for (let i = 0; i < rig.sleeves.length; i++) {
     const g = theta * RATIO[i];
@@ -243,7 +238,6 @@ function lathe(pts: [number, number][], segments: number) {
   );
 }
 
-// shape in xy, extruded up along +y
 function extrude(shape: Shape, depth: number, curveSegments: number) {
   return new ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments }).rotateX(
     -Math.PI / 2,
@@ -256,6 +250,7 @@ function rod(length: number, radius: number) {
     .translate(length / 2, 0, 0);
 }
 
+// GEAR
 // trapezoid teeth centred on 2πj/n, crossed spokes once there is room
 function gear(teeth: number, bore: number) {
   const r = (MODULE_M * teeth) / 2;
@@ -297,7 +292,8 @@ function gear(teeth: number, bore: number) {
   return s;
 }
 
-// flat flames around the sun, turned to face the camera every frame
+// RAYS
+// flat flames, billboarded each frame
 function raysGeometry(n: number, r0: number, long: number, short: number) {
   const pos: number[] = [];
   const half = Math.PI / n / 1.6;

@@ -24,10 +24,12 @@ const POL_TAU_S = 0.35;
 const SEED = 11;
 // SNAP
 // only the thin tail snaps; bulb and neck shrug off a blow
-const SNAP_X = TIP_X + 3.0; // change default snap point here
+const SNAP_X = TIP_X + 0.08; // change default snap point here
 const SNAP_MAX_X = DROP.JOIN_X - 0.45 * DROP.TAIL_U;
 const TIP_ZONE_U = 0.7;
 const YAW = (DROP.YAW_DEG * Math.PI) / 180;
+
+const snapPoint = (lx: number) => (lx < TIP_X + TIP_ZONE_U ? SNAP_X : lx);
 
 export type Phase = "whole" | "breaking" | "held" | "mending";
 const PHASES: Phase[] = ["whole", "breaking", "held", "mending"];
@@ -92,6 +94,7 @@ export class Shatter {
   // TIME
   private broken = false;
   private snap = SNAP_X;
+  private grabSnap = SNAP_X;
   private t = 0;
   private rate = 0;
   private held = false;
@@ -232,6 +235,13 @@ export class Shatter {
     this.wake();
   }
 
+  // GRAB
+  // a drag that breaks the drop snaps where it was grabbed, like a tap
+  grab(x: number, y: number) {
+    const onTail = this.phase() === "whole" && this.pick(x, y) === 2 && v3[0] <= SNAP_MAX_X;
+    this.grabSnap = onTail ? snapPoint(v3[0]) : SNAP_X;
+  }
+
   nudge(s: number) {
     this.seek(this.t + s, s > 0);
   }
@@ -240,8 +250,9 @@ export class Shatter {
     if (!this.broken) {
       if (!snaps) return;
       this.broken = true;
-      this.snap = SNAP_X;
+      this.snap = this.grabSnap;
     }
+    this.grabSnap = SNAP_X;
     this.t = Math.min(Math.max(s, 0), END_S);
     if (this.t <= 0) this.broken = false;
     this.rate = 0;
@@ -262,7 +273,7 @@ export class Shatter {
   }
 
   private snapAt(lx: number) {
-    this.snap = lx < TIP_X + TIP_ZONE_U ? TIP_X + 0.08 : lx;
+    this.snap = snapPoint(lx);
     this.broken = true;
     this.t = 0;
     this.play(1);

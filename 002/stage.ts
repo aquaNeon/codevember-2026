@@ -10,6 +10,7 @@ export type ToScene =
   | { t: "motion"; v: boolean }
   | { t: "tap"; x: number; y: number }
   | { t: "hover"; x: number; y: number }
+  | { t: "grab"; x: number; y: number }
   | { t: "nudge"; s: number }
   | { t: "seek"; s: number }
   | { t: "go" }
@@ -41,6 +42,7 @@ export function apply(c: Shatter, m: ToScene) {
   else if (m.t === "motion") c.motion(m.v);
   else if (m.t === "tap") c.tap(m.x, m.y);
   else if (m.t === "hover") c.hover(m.x, m.y);
+  else if (m.t === "grab") c.grab(m.x, m.y);
   else if (m.t === "nudge") c.nudge(m.s);
   else if (m.t === "seek") c.seek(m.s);
   else if (m.t === "go") c.go();
@@ -168,8 +170,10 @@ export class Stage {
         this.post({ t: "hover", x: e.clientX - this.left, y: e.clientY - this.top });
       return;
     }
-    if (!this.dragging && Math.hypot(e.clientX - this.downX, e.clientY - this.downY) > TAP_PX)
+    if (!this.dragging && Math.hypot(e.clientX - this.downX, e.clientY - this.downY) > TAP_PX) {
       this.dragging = true;
+      this.post({ t: "grab", x: this.downX - this.left, y: this.downY - this.top });
+    }
     if (this.dragging) this.post({ t: "nudge", s: (this.lastY - e.clientY) * DRAG_S_PER_PX });
     this.lastY = e.clientY;
   };
